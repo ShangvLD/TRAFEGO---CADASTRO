@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TRÁFEGO — Cadastro</title>
+
+    <!-- Tipografia moderna (Inter) e ícones (Material Symbols) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
+
+    <!-- Folha de estilo central do sistema -->
+    <link rel="stylesheet" href="PAG.CSS">
+</head>
+<body>
+
+    <!-- ============================================================= -->
+    <!-- HEADER INSTITUCIONAL (fixo)                                   -->
+    <!-- ============================================================= -->
+    <header class="app-header">
+        <div class="app-header__inner">
+            <div class="brand">
+                <div class="brand-mark">JM</div>
+                <div class="brand-text">
+                    <h1>Tráfego</h1>
+                    <span>Jomed Log</span>
+                </div>
+            </div>
+
+            <nav class="main-nav" aria-label="Menu principal">
+                <a href="#">Início</a>
+                <a href="#" class="active">Cadastro</a>
+                <a href="#">Meus envios</a>
+            </nav>
+
+            <div class="header-actions">
+                <button class="icon-btn" type="button" title="Notificações" aria-label="Notificações">
+                    <span class="material-symbols-rounded">notifications</span>
+                    <span class="badge-dot"></span>
+                </button>
+                <button class="icon-btn" type="button" title="Configurações" aria-label="Configurações">
+                    <span class="material-symbols-rounded">settings</span>
+                </button>
+                <div class="user-chip" title="Usuário logado">
+                    <div class="user-avatar">VD</div>
+                    <span class="user-name">Victor Diniz</span>
+                    <span class="material-symbols-rounded" style="font-size:18px;color:rgba(255,255,255,0.75)">expand_more</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="page-container">
+
+        <!-- ========================================================= -->
+        <!-- HERO / apresentação do formulário                          -->
+        <!-- ========================================================= -->
+        <section class="card card--hero">
+            <h2>Solicitação de cadastro</h2>
+            <p>Preencha o formulário abaixo para enviar sua solicitação. As respostas são registradas com segurança pelo Microsoft Forms e encaminhadas ao time responsável.</p>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- FORMULÁRIO (Microsoft Forms) + orientações                 -->
+        <!-- ========================================================= -->
+        <div class="form-grid">
+            <section class="card">
+                <div class="card-header">
+                    <h3><span class="material-symbols-rounded" style="color:var(--primary);vertical-align:-5px">description</span> Formulário de cadastro</h3>
+                    <span class="badge is-success">Online</span>
+                </div>
+                <!-- Embed do Microsoft Forms: largura fluida e altura confortável.
+                     O próprio Forms rola internamente quando o conteúdo é maior. -->
+                <iframe
+                    class="form-embed"
+                    title="Formulário de solicitação de cadastro"
+                    src="https://forms.office.com/Pages/ResponsePage.aspx?id=z_poj1JyW0GalC493GVRouflQdUrEZlCiS-rd-JqZcxUN0tOUkRDNEhIRUwxTE9UNTZZTUtURjVIQi4u&embed=true"
+                    frameborder="0"
+                    marginwidth="0"
+                    marginheight="0"
+                    allowfullscreen
+                    webkitallowfullscreen
+                    mozallowfullscreen
+                    msallowfullscreen>
+                </iframe>
+            </section>
+
+            <aside class="card summary-card">
+                <div class="card-header">
+                    <h3>Orientações</h3>
+                    <span class="badge is-info">Ativo</span>
+                </div>
+                <div class="alert">
+                    <span class="material-symbols-rounded">info</span>
+                    <span>Todos os campos marcados como obrigatórios precisam ser preenchidos antes de enviar.</span>
+                </div>
+                <div class="stat">
+                    <strong>Tempo estimado</strong>
+                    <span>3–5 minutos</span>
+                </div>
+                <div class="stat">
+                    <strong>Campos obrigatórios</strong>
+                    <span>marcados com *</span>
+                </div>
+                <div class="stat">
+                    <strong>Armazenamento</strong>
+                    <span>Microsoft 365</span>
+                </div>
+                <p class="footer-note">O envio é processado diretamente pelo Microsoft Forms. Ao concluir, a confirmação aparece na própria tela do formulário.</p>
+            </aside>
+        </div>
+    </main>
+</body>
+</html>

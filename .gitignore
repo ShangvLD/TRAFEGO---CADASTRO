@@ -1,0 +1,22 @@
+# === Sistema operacional ===
+Thumbs.db
+Thumbs.db:encryptable
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# === Editores / IDEs ===
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.code-workspace
+
+# === Dependências / build (caso o projeto cresça) ===
+node_modules/
+dist/
+build/
+
+# === Logs e temporários ===
+*.log
+*.tmp
+*.bak
