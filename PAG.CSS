@@ -181,18 +181,20 @@ h1, h2, h3, h4 {
     flex-shrink: 0;
 }
 
-.brand-mark {
-    width: 42px;
-    height: 42px;
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.16);
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    display: grid;
-    place-items: center;
-    color: #fff;
-    font-weight: 800;
-    font-size: 1.2rem;
-    letter-spacing: 0.5px;
+/* Selo branco que abriga o logo institucional sobre o header azul */
+.brand-logo {
+    background: #fff;
+    border-radius: 10px;
+    padding: 6px 12px;
+    display: flex;
+    align-items: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.brand-logo img {
+    height: 30px;
+    width: auto;
+    display: block;
 }
 
 .brand-text h1 {
