@@ -232,6 +232,12 @@ function importar({ solicitante_nome, solicitante_email, assunto, detalhes, anex
   return { solicitacao: buscarPorId(info.lastInsertRowid), duplicada: false };
 }
 
+/** Exclui uma solicitação pelo id. Retorna true se removeu algo. */
+function excluir(id) {
+  const info = db.prepare('DELETE FROM solicitacoes WHERE id = ?').run(id);
+  return info.changes > 0;
+}
+
 /** Conta quantas solicitações há em cada status (para os indicadores/KPIs). */
 function contarPorStatus() {
   const linhas = db
@@ -255,6 +261,7 @@ module.exports = {
   criar,
   registrarDoForms,
   importar,
+  excluir,
   normalizarAnexos,
   contarPorStatus,
 };

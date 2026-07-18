@@ -135,9 +135,23 @@ app.get('/responsavel', exigirLogin, exigirPapel('responsavel', 'admin'), (req, 
 app.get('/api/solicitacoes', exigirLogin, exigirPapel('responsavel', 'admin'), (req, res) => {
   res.json({
     ok: true,
+    papel: req.session.usuario.papel, // o front usa para mostrar o botão de excluir só ao admin
     resumo: solicitacoes.contarPorStatus(),
     solicitacoes: solicitacoes.listar(),
   });
+});
+
+// Exclui uma solicitação — SOMENTE admin.
+app.delete('/api/solicitacoes/:id', exigirLogin, exigirPapel('admin'), (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ ok: false, erro: 'Id inválido.' });
+  }
+  const removido = solicitacoes.excluir(id);
+  if (!removido) {
+    return res.status(404).json({ ok: false, erro: 'Solicitação não encontrada.' });
+  }
+  res.json({ ok: true });
 });
 
 // Solicitações do próprio solicitante logado ("Minhas solicitações").

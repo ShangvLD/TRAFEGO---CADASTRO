@@ -158,6 +158,10 @@
 .btn-acao.ver { color: var(--primary); }
 .btn-acao.ver:hover { background: var(--primary-soft); border-color: var(--primary); }
 
+/* Botão de excluir (admin) */
+.btn-acao.excluir { color: var(--danger); }
+.btn-acao.excluir:hover { background: var(--danger-soft); border-color: var(--danger); }
+
 /* ---- Modal de detalhes --------------------------------------------- */
 .modal-overlay {
     position: fixed;
@@ -341,6 +345,10 @@ a.anexo-card:hover {
 
 .btn-modal.reprovar { color: var(--danger); border-color: var(--danger-soft); }
 .btn-modal.reprovar:hover { background: var(--danger-soft); border-color: var(--danger); }
+
+/* Excluir fica à esquerda (separado das ações de decisão) */
+.btn-modal.excluir { color: var(--danger); border-color: var(--danger-soft); margin-right: auto; }
+.btn-modal.excluir:hover { background: var(--danger-soft); border-color: var(--danger); }
 
 @media (max-width: 1024px) {
     .form-grid { grid-template-columns: 1fr; }

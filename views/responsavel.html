@@ -140,6 +140,7 @@
 
         // Guarda as solicitações carregadas para abrir o detalhe sem novo fetch.
         let solicitacoesCache = [];
+        let ehAdmin = false; // controla a exibição do botão de excluir
 
         // Formata "2026-07-13 15:40:12" -> "13/07/2026"
         function formatarData(iso) {
@@ -238,15 +239,21 @@
         }
 
         function footerHtml(s) {
-            if (s.status !== 'pendente') return '';
-            return `
-                <button class="btn-modal reprovar" data-id="${s.id}" type="button">
+            const botoes = [];
+            if (ehAdmin) {
+                botoes.push(`<button class="btn-modal excluir" data-id="${s.id}" type="button">
+                    <span class="material-symbols-rounded">delete</span> Excluir
+                </button>`);
+            }
+            if (s.status === 'pendente') {
+                botoes.push(`<button class="btn-modal reprovar" data-id="${s.id}" type="button">
                     <span class="material-symbols-rounded">close</span> Reprovar
-                </button>
-                <button class="btn-modal aprovar" data-id="${s.id}" type="button">
+                </button>`);
+                botoes.push(`<button class="btn-modal aprovar" data-id="${s.id}" type="button">
                     <span class="material-symbols-rounded">check</span> Aprovar
-                </button>
-            `;
+                </button>`);
+            }
+            return botoes.join('');
         }
 
         function abrirModal(id) {
@@ -276,13 +283,20 @@
                    </button>`
                 : `<span style="color:var(--text-secondary);font-size:0.82rem">por ${esc(s.revisado_por || '—')}</span>`;
 
+            // Excluir: só aparece para o admin.
+            const excluirBtn = ehAdmin
+                ? `<button class="btn-acao excluir" data-id="${s.id}" title="Excluir">
+                       <span class="material-symbols-rounded">delete</span>
+                   </button>`
+                : '';
+
             return `<tr data-id="${s.id}" class="linha-clic">
                 <td>${formatarData(s.criado_em)}</td>
                 <td>${esc(s.solicitante_nome)}<br><small style="color:var(--text-secondary)">${esc(s.solicitante_email)}</small></td>
                 <td>${esc(s.assunto)}</td>
                 <td>${anexosResumo(s.anexos)}</td>
                 <td>${BADGE[s.status] || esc(s.status)}</td>
-                <td><div style="display:flex;gap:6px;align-items:center">${verBtn}${decisao}</div></td>
+                <td><div style="display:flex;gap:6px;align-items:center">${verBtn}${decisao}${excluirBtn}</div></td>
             </tr>`;
         }
 
@@ -300,6 +314,7 @@
                 const dados = await resp.json();
 
                 atualizarKpis(dados.resumo || {});
+                ehAdmin = dados.papel === 'admin';
                 solicitacoesCache = dados.solicitacoes || [];
 
                 if (!solicitacoesCache.length) {
@@ -345,12 +360,29 @@
             }
         }
 
+        async function excluir(id) {
+            if (!confirm('Excluir esta solicitação? Esta ação não pode ser desfeita.')) return;
+            try {
+                const resp = await fetch(`/api/solicitacoes/${id}`, { method: 'DELETE' });
+                const dados = await resp.json();
+                if (dados.ok) {
+                    fecharModal();
+                    carregar();
+                } else {
+                    alert(dados.erro || 'Não foi possível excluir.');
+                }
+            } catch (e) {
+                alert('Erro de conexão com o servidor.');
+            }
+        }
+
         // Clique na tabela: botões de ação ou abrir o detalhe da linha.
         corpo.addEventListener('click', (e) => {
             const btn = e.target.closest('.btn-acao');
             if (btn) {
                 const id = btn.dataset.id;
                 if (btn.classList.contains('ver')) { abrirModal(id); return; }
+                if (btn.classList.contains('excluir')) { excluir(id); return; }
                 decidir(id, btn.classList.contains('aprovar') ? 'aprovado' : 'reprovado');
                 return;
             }
@@ -358,11 +390,12 @@
             if (tr) abrirModal(tr.dataset.id);
         });
 
-        // Ações dentro do modal (aprovar / reprovar).
+        // Ações dentro do modal (excluir / aprovar / reprovar).
         modalFooter.addEventListener('click', (e) => {
             const btn = e.target.closest('.btn-modal');
             if (!btn) return;
             const id = btn.dataset.id;
+            if (btn.classList.contains('excluir')) { excluir(id); return; }
             const status = btn.classList.contains('aprovar') ? 'aprovado' : 'reprovado';
             fecharModal();
             decidir(id, status);
