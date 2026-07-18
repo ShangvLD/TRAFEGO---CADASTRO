@@ -192,7 +192,9 @@ app.post(
 // "anexo placa 1") é reunido na lista de documentos. O valor de cada um pode
 // ser um link, texto, ou o JSON do campo de upload do Microsoft Forms.
 // --------------------------------------------------------------------------
-app.post('/api/forms/webhook', (req, res) => {
+app.post('/api/forms/webhook', express.json({ type: () => true }), (req, res) => {
+  // O express.json acima (type: () => true) garante que o corpo seja lido como
+  // JSON mesmo que o Power Automate não envie o cabeçalho Content-Type.
   const segredoEsperado = process.env.FORMS_WEBHOOK_SECRET;
 
   if (!segredoEsperado) {
@@ -243,6 +245,17 @@ app.post('/api/forms/webhook', (req, res) => {
 
   // 200 mesmo quando duplicada: o Power Automate considera sucesso e não reenvia.
   res.json({ ok: true, duplicada, id: solicitacao.id });
+});
+
+// --------------------------------------------------------------------------
+// Tratamento de corpo JSON malformado (ex.: Power Automate quebrando o JSON
+// ao injetar o campo de upload do Forms). Devolve mensagem clara em vez de erro.
+// --------------------------------------------------------------------------
+app.use((err, req, res, next) => {
+  if (err && (err.type === 'entity.parse.failed' || err instanceof SyntaxError)) {
+    return res.status(400).json({ ok: false, erro: 'Corpo JSON inválido (verifique o campo de anexo no fluxo).' });
+  }
+  next(err);
 });
 
 // --------------------------------------------------------------------------
