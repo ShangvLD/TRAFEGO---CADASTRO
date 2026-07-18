@@ -28,7 +28,7 @@ const PORT = process.env.PORT || 3000;
 // Middlewares base
 // --------------------------------------------------------------------------
 app.use(express.urlencoded({ extended: true })); // formulários HTML
-app.use(express.json()); // requisições fetch (login via JS)
+app.use(express.json({ strict: false })); // requisições fetch (login via JS) — strict:false aceita corpo em string
 
 app.use(
   session({
@@ -192,7 +192,7 @@ app.post(
 // "anexo placa 1") é reunido na lista de documentos. O valor de cada um pode
 // ser um link, texto, ou o JSON do campo de upload do Microsoft Forms.
 // --------------------------------------------------------------------------
-app.post('/api/forms/webhook', express.json({ type: () => true }), (req, res) => {
+app.post('/api/forms/webhook', express.json({ type: () => true, strict: false }), (req, res) => {
   // O express.json acima (type: () => true) garante que o corpo seja lido como
   // JSON mesmo que o Power Automate não envie o cabeçalho Content-Type.
   const segredoEsperado = process.env.FORMS_WEBHOOK_SECRET;
@@ -230,6 +230,12 @@ app.post('/api/forms/webhook', express.json({ type: () => true }), (req, res) =>
     return res.status(400).json({
       ok: false,
       erro: 'Campos obrigatórios ausentes: solicitante_email e assunto.',
+      // Diagnóstico: mostra o que realmente chegou, para ajustar o fluxo.
+      _debug: {
+        tipo_corpo: typeof req.body,
+        chaves_recebidas: b && typeof b === 'object' ? Object.keys(b) : null,
+        amostra: typeof req.body === 'string' ? String(req.body).slice(0, 300) : undefined,
+      },
     });
   }
   if (!solicitante_nome) {
