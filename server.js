@@ -27,8 +27,13 @@ const PORT = process.env.PORT || 3000;
 // --------------------------------------------------------------------------
 // Middlewares base
 // --------------------------------------------------------------------------
+// Guarda o corpo cru (para diagnóstico do webhook).
+function capturarRaw(req, res, buf) {
+  req.rawBody = buf && buf.length ? buf.toString('utf8') : '';
+}
+
 app.use(express.urlencoded({ extended: true })); // formulários HTML
-app.use(express.json({ strict: false })); // requisições fetch (login via JS) — strict:false aceita corpo em string
+app.use(express.json({ strict: false, verify: capturarRaw })); // requisições fetch (login via JS) — strict:false aceita corpo em string
 
 app.use(
   session({
@@ -192,7 +197,7 @@ app.post(
 // "anexo placa 1") é reunido na lista de documentos. O valor de cada um pode
 // ser um link, texto, ou o JSON do campo de upload do Microsoft Forms.
 // --------------------------------------------------------------------------
-app.post('/api/forms/webhook', express.json({ type: () => true, strict: false }), (req, res) => {
+app.post('/api/forms/webhook', express.json({ type: () => true, strict: false, verify: capturarRaw }), (req, res) => {
   // O express.json acima (type: () => true) garante que o corpo seja lido como
   // JSON mesmo que o Power Automate não envie o cabeçalho Content-Type.
   const segredoEsperado = process.env.FORMS_WEBHOOK_SECRET;
@@ -234,7 +239,9 @@ app.post('/api/forms/webhook', express.json({ type: () => true, strict: false })
       _debug: {
         tipo_corpo: typeof req.body,
         chaves_recebidas: b && typeof b === 'object' ? Object.keys(b) : null,
-        amostra: typeof req.body === 'string' ? String(req.body).slice(0, 300) : undefined,
+        raw_tamanho: req.rawBody ? req.rawBody.length : 0,
+        raw_amostra: (req.rawBody || '').slice(0, 400),
+        content_type: req.get('content-type') || null,
       },
     });
   }
