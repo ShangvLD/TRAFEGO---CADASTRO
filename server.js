@@ -181,13 +181,16 @@ app.post(
 //
 // Corpo esperado (JSON):
 //   {
-//     "solicitante_nome":  "Fulano de Tal",        (obrigatório)
 //     "solicitante_email": "fulano@jomedlog...",   (obrigatório)
 //     "assunto":           "Cadastro de ...",       (obrigatório)
+//     "solicitante_nome":  "Fulano de Tal",        (opcional — cai p/ o e-mail)
 //     "detalhes":          "texto livre",           (opcional)
 //     "anexo":             "https://.../arquivo",   (opcional — link na nuvem)
 //     "origem_id":         "id-da-resposta-forms"   (opcional, evita duplicar)
 //   }
+// Qualquer campo cujo nome comece com "anexo" (ex.: "anexo cnh",
+// "anexo placa 1") é reunido na lista de documentos. O valor de cada um pode
+// ser um link, texto, ou o JSON do campo de upload do Microsoft Forms.
 // --------------------------------------------------------------------------
 app.post('/api/forms/webhook', (req, res) => {
   const segredoEsperado = process.env.FORMS_WEBHOOK_SECRET;
@@ -203,15 +206,30 @@ app.post('/api/forms/webhook', (req, res) => {
   }
 
   const b = req.body || {};
-  const solicitante_nome = String(b.solicitante_nome || '').trim();
   const solicitante_email = String(b.solicitante_email || '').trim();
   const assunto = String(b.assunto || '').trim();
+  let solicitante_nome = String(b.solicitante_nome || '').trim();
 
-  if (!solicitante_nome || !solicitante_email || !assunto) {
+  // Obrigatórios: e-mail e assunto. O nome é opcional — se não vier, usamos a
+  // parte antes do "@" do e-mail (o Forms nem sempre coleta o nome de quem responde).
+  if (!solicitante_email || !assunto) {
     return res.status(400).json({
       ok: false,
-      erro: 'Campos obrigatórios ausentes: solicitante_nome, solicitante_email e assunto.',
+      erro: 'Campos obrigatórios ausentes: solicitante_email e assunto.',
     });
+  }
+  if (!solicitante_nome) {
+    solicitante_nome = solicitante_email.split('@')[0] || solicitante_email;
+  }
+
+  // Reúne anexos de QUALQUER campo cujo nome comece com "anexo" — assim o fluxo
+  // pode ter um campo por upload ("anexo cnh", "anexo placa 1", ...), além de
+  // "anexo"/"anexos". Cada valor pode ser link, texto ou o JSON do Forms.
+  let anexos = [];
+  for (const [chave, valor] of Object.entries(b)) {
+    if (/^anexo/i.test(chave)) {
+      anexos = anexos.concat(solicitacoes.normalizarAnexos(valor));
+    }
   }
 
   const { solicitacao, duplicada } = solicitacoes.registrarDoForms({
@@ -219,8 +237,7 @@ app.post('/api/forms/webhook', (req, res) => {
     solicitante_email,
     assunto,
     detalhes: b.detalhes,
-    anexo: b.anexo, // link único, texto, ou o JSON do campo de upload do Forms
-    anexos: b.anexos, // (opcional) lista já estruturada [{ nome, url }]
+    anexos,
     origem_id: b.origem_id,
   });
 

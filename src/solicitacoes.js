@@ -218,5 +218,6 @@ module.exports = {
   registrarDecisao,
   criar,
   registrarDoForms,
+  normalizarAnexos,
   contarPorStatus,
 };
