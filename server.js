@@ -207,7 +207,19 @@ app.post('/api/forms/webhook', express.json({ type: () => true }), (req, res) =>
     return res.status(401).json({ ok: false, erro: 'Segredo inválido.' });
   }
 
-  const b = req.body || {};
+  // Normaliza o corpo: alguns fluxos do Power Automate enviam o JSON como
+  // TEXTO (string) em vez de objeto. Nesse caso, o req.body vem como string —
+  // então reinterpretamos como JSON aqui para não "perder" os campos.
+  let b = req.body || {};
+  if (typeof b === 'string') {
+    try {
+      b = JSON.parse(b);
+    } catch {
+      b = {};
+    }
+  }
+  if (typeof b !== 'object' || b === null) b = {};
+
   const solicitante_email = String(b.solicitante_email || '').trim();
   const assunto = String(b.assunto || '').trim();
   let solicitante_nome = String(b.solicitante_nome || '').trim();
