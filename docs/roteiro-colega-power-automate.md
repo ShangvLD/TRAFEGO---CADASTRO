@@ -22,8 +22,8 @@ Preencha aqui (peça ao responsável pelo sistema):
 
 | Informação | Valor |
 |---|---|
-| **URL do webhook** | `https://__________________/api/forms/webhook` |
-| **Segredo (x-webhook-secret)** | `__________________________________` *(enviado à parte)* |
+| **URL do webhook** | `https://trafego-cadastro-production.up.railway.app/api/forms/webhook` |
+| **Segredo (x-webhook-secret)** | *(enviado à parte — pedir ao Victor)* |
 | **Qual formulário** | Formulário de cadastro do Tráfego |
 
 Requisitos:

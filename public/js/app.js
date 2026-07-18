@@ -37,6 +37,14 @@
       if (nomeEl) nomeEl.textContent = u.nome;
       if (menuNome) menuNome.textContent = u.nome;
       if (menuEmail) menuEmail.textContent = u.email;
+
+      // Admin enxerga as duas áreas (envio + aprovação): revela os links
+      // de navegação marcados como exclusivos de admin.
+      if (u.papel === 'admin') {
+        document.querySelectorAll('[data-admin-only]').forEach((el) => {
+          el.hidden = false;
+        });
+      }
     }
   } catch (e) {
     // Sem conexão: não trava a página, apenas não popula o header.
