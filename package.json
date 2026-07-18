@@ -10,7 +10,8 @@
     "seed": "node --disable-warning=ExperimentalWarning src/seed.js",
     "criar-usuario": "node --disable-warning=ExperimentalWarning src/criar-usuario.js",
     "consultar": "node --disable-warning=ExperimentalWarning src/consultar.js",
-    "testar-webhook": "node --disable-warning=ExperimentalWarning src/testar-webhook.js"
+    "testar-webhook": "node --disable-warning=ExperimentalWarning src/testar-webhook.js",
+    "importar": "node --disable-warning=ExperimentalWarning src/importar-csv.js"
   },
   "keywords": ["jomed", "cadastro", "trafego"],
   "author": "Jomed",

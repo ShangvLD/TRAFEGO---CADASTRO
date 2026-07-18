@@ -196,6 +196,42 @@ function registrarDoForms(dados) {
   return { solicitacao, duplicada: false };
 }
 
+/**
+ * Importa uma solicitação histórica (backfill de planilha do Forms), preservando
+ * a data original e o status. Deduplica por origem_id (para poder rodar de novo
+ * sem duplicar). Retorna { solicitacao, duplicada }.
+ */
+function importar({ solicitante_nome, solicitante_email, assunto, detalhes, anexos, status, criado_em, origem_id }) {
+  if (origem_id) {
+    const existente = buscarPorOrigemId(origem_id);
+    if (existente) return { solicitacao: existente, duplicada: true };
+  }
+
+  const lista = normalizarAnexos(anexos);
+  const anexosJson = lista.length ? JSON.stringify(lista) : null;
+  const anexoLegado = lista.length ? lista[0].url || lista[0].nome : null;
+  const st = ['pendente', 'aprovado', 'reprovado'].includes(status) ? status : 'pendente';
+
+  const info = db
+    .prepare(
+      `INSERT INTO solicitacoes
+         (solicitante_nome, solicitante_email, assunto, detalhes, anexo, anexos, status, origem, origem_id, criado_em)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'importado', ?, COALESCE(?, datetime('now', 'localtime')))`
+    )
+    .run(
+      solicitante_nome,
+      solicitante_email,
+      assunto,
+      detalhes || null,
+      anexoLegado,
+      anexosJson,
+      st,
+      origem_id || null,
+      criado_em || null
+    );
+  return { solicitacao: buscarPorId(info.lastInsertRowid), duplicada: false };
+}
+
 /** Conta quantas solicitações há em cada status (para os indicadores/KPIs). */
 function contarPorStatus() {
   const linhas = db
@@ -218,6 +254,7 @@ module.exports = {
   registrarDecisao,
   criar,
   registrarDoForms,
+  importar,
   normalizarAnexos,
   contarPorStatus,
 };
