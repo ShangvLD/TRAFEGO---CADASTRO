@@ -1,0 +1,163 @@
+/* ============================================================================
+   Estilos das páginas internas (solicitante e responsável).
+   Complementa base.css.
+   ========================================================================== */
+
+/* ---- Grid formulário + orientações (solicitante) -------------------- */
+.form-grid {
+    display: grid;
+    gap: var(--space-6);
+    grid-template-columns: 1fr 340px;
+    align-items: start;
+}
+
+.form-embed {
+    width: 100%;
+    min-height: 680px;
+    border: none;
+    border-radius: var(--radius);
+    background: var(--surface-muted);
+    display: block;
+}
+
+/* Coluna lateral de orientações / resumo */
+.summary-card .stat {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    background: var(--surface-muted);
+    border-radius: var(--radius);
+    margin-bottom: var(--space-3);
+}
+
+.summary-card .stat strong { color: var(--text); font-weight: 600; }
+.summary-card .stat span { color: var(--text-secondary); text-align: right; }
+
+.footer-note {
+    margin: var(--space-4) 0 0;
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+    line-height: 1.6;
+}
+
+/* ---- Estado vazio (placeholder de dados) ---------------------------- */
+.empty-state {
+    text-align: center;
+    padding: var(--space-8) var(--space-6);
+    color: var(--text-secondary);
+}
+
+.empty-state .material-symbols-rounded {
+    font-size: 48px;
+    color: var(--border);
+    margin-bottom: var(--space-3);
+}
+
+.empty-state h4 {
+    margin: 0 0 var(--space-2);
+    color: var(--text);
+    font-size: 1.05rem;
+}
+
+.empty-state p {
+    margin: 0 auto;
+    max-width: 420px;
+    font-size: 0.92rem;
+    line-height: 1.6;
+}
+
+/* ---- Tabela de solicitações (responsável) --------------------------- */
+.table-wrap {
+    overflow-x: auto;
+    border-radius: var(--radius);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.92rem;
+}
+
+.data-table th,
+.data-table td {
+    text-align: left;
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+}
+
+.data-table th {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary);
+    font-weight: 600;
+    background: var(--surface-muted);
+}
+
+.data-table tbody tr:hover {
+    background: var(--surface-muted);
+}
+
+/* ---- Botões de ação (aprovar / reprovar) ---------------------------- */
+.btn-acao {
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+
+.btn-acao .material-symbols-rounded { font-size: 20px; }
+
+.btn-acao.aprovar { color: var(--success); }
+.btn-acao.aprovar:hover { background: var(--success-soft); border-color: var(--success); }
+
+.btn-acao.reprovar { color: var(--danger); }
+.btn-acao.reprovar:hover { background: var(--danger-soft); border-color: var(--danger); }
+
+/* ---- KPIs do painel ------------------------------------------------- */
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--space-4);
+    margin-bottom: var(--space-6);
+}
+
+.kpi {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5);
+    box-shadow: var(--shadow-sm);
+}
+
+.kpi .kpi-label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.kpi .kpi-value {
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: var(--text);
+    margin-top: var(--space-2);
+}
+
+@media (max-width: 1024px) {
+    .form-grid { grid-template-columns: 1fr; }
+    .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 560px) {
+    .kpi-grid { grid-template-columns: 1fr; }
+}

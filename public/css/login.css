@@ -1,0 +1,263 @@
+/* ============================================================================
+   Tela de login — identidade Jomed
+
+   Layout dividido: painel institucional (azul) à esquerda e o formulário
+   à direita. Em telas pequenas vira uma coluna só.
+   ========================================================================== */
+
+.login-page {
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: 1.05fr 1fr;
+}
+
+/* ---- Painel institucional (lado esquerdo) ---------------------------- */
+.login-aside {
+    position: relative;
+    background: linear-gradient(150deg, var(--primary-darker), var(--primary));
+    color: #fff;
+    padding: var(--space-8);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    overflow: hidden;
+}
+
+/* Brilho decorativo suave */
+.login-aside::after {
+    content: "";
+    position: absolute;
+    width: 480px;
+    height: 480px;
+    right: -160px;
+    bottom: -160px;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.12), transparent 70%);
+    pointer-events: none;
+}
+
+.login-aside .brand-logo {
+    align-self: flex-start;
+}
+
+.login-aside__content {
+    position: relative;
+    z-index: 1;
+    max-width: 440px;
+}
+
+.login-aside__content h2 {
+    color: #fff;
+    font-size: 2rem;
+    line-height: 1.2;
+    margin: 0 0 var(--space-4);
+}
+
+.login-aside__content p {
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 1.02rem;
+    line-height: 1.7;
+    margin: 0;
+}
+
+.login-aside__features {
+    list-style: none;
+    padding: 0;
+    margin: var(--space-6) 0 0;
+    display: grid;
+    gap: var(--space-3);
+}
+
+.login-aside__features li {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    color: rgba(255, 255, 255, 0.92);
+    font-size: 0.95rem;
+}
+
+.login-aside__features .material-symbols-rounded {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 50%;
+    padding: 6px;
+    font-size: 20px;
+}
+
+.login-aside__footer {
+    position: relative;
+    z-index: 1;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.82rem;
+}
+
+/* ---- Formulário (lado direito) -------------------------------------- */
+.login-main {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-8);
+    background: var(--surface);
+}
+
+.login-form {
+    width: 100%;
+    max-width: 380px;
+    animation: fade-in 0.4s ease both;
+}
+
+.login-form__title {
+    font-size: 1.6rem;
+    margin: 0 0 var(--space-2);
+}
+
+.login-form__subtitle {
+    color: var(--text-secondary);
+    margin: 0 0 var(--space-6);
+}
+
+.field {
+    margin-bottom: var(--space-4);
+}
+
+.field label {
+    display: block;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: var(--space-2);
+}
+
+.field .input-wrap {
+    position: relative;
+}
+
+.field .input-wrap .material-symbols-rounded {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-secondary);
+    font-size: 20px;
+    pointer-events: none;
+}
+
+.field input {
+    width: 100%;
+    padding: 12px 14px 12px 42px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font: inherit;
+    font-size: 0.95rem;
+    color: var(--text);
+    background: var(--surface-muted);
+    transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
+}
+
+.field input:focus {
+    outline: none;
+    border-color: var(--primary);
+    background: var(--surface);
+    box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+/* Botão de mostrar/ocultar senha */
+.field .toggle-senha {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+}
+
+.field .toggle-senha:hover {
+    background: var(--surface-muted);
+    color: var(--text);
+}
+
+.login-form__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-5);
+    font-size: 0.88rem;
+}
+
+.login-form__row label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.btn-primary {
+    width: 100%;
+    padding: 13px;
+    border: none;
+    border-radius: var(--radius);
+    background: var(--primary);
+    color: #fff;
+    font: inherit;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background var(--transition), transform var(--transition), box-shadow var(--transition);
+    box-shadow: 0 6px 16px rgba(0, 90, 158, 0.25);
+}
+
+.btn-primary:hover {
+    background: var(--primary-dark);
+    transform: translateY(-1px);
+}
+
+.btn-primary:active {
+    transform: translateY(0);
+}
+
+.btn-primary:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Mensagem de erro */
+.login-error {
+    display: none;
+    align-items: center;
+    gap: var(--space-2);
+    background: var(--danger-soft);
+    color: var(--danger);
+    border: 1px solid rgba(209, 52, 56, 0.25);
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+    margin-bottom: var(--space-4);
+}
+
+.login-error.show {
+    display: flex;
+    animation: fade-in 0.2s ease both;
+}
+
+.login-error .material-symbols-rounded {
+    font-size: 20px;
+}
+
+/* ---- Responsividade -------------------------------------------------- */
+@media (max-width: 860px) {
+    .login-page {
+        grid-template-columns: 1fr;
+    }
+    .login-aside {
+        display: none; /* em telas pequenas, foca no formulário */
+    }
+    .login-main {
+        min-height: 100vh;
+    }
+}

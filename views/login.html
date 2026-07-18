@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Entrar — Tráfego | Jomed</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
+
+    <link rel="stylesheet" href="/css/base.css">
+    <link rel="stylesheet" href="/css/login.css">
+</head>
+<body>
+    <div class="login-page">
+
+        <!-- Lado institucional -->
+        <aside class="login-aside">
+            <div class="brand-logo">
+                <img src="/img/logo-jomed.png" alt="Jomed Transportes e Logística">
+            </div>
+
+            <div class="login-aside__content">
+                <h2>Sistema de Cadastro<br>de Tráfego</h2>
+                <p>Portal interno da Jomed para solicitação e aprovação de cadastros. Acesse com suas credenciais para continuar.</p>
+
+                <ul class="login-aside__features">
+                    <li><span class="material-symbols-rounded">description</span> Solicite cadastros pelo formulário oficial</li>
+                    <li><span class="material-symbols-rounded">fact_check</span> Acompanhe o status das suas solicitações</li>
+                    <li><span class="material-symbols-rounded">verified_user</span> Aprovação centralizada e segura</li>
+                </ul>
+            </div>
+
+            <div class="login-aside__footer">
+                © Jomed Transportes e Logística — uso interno.
+            </div>
+        </aside>
+
+        <!-- Lado do formulário -->
+        <main class="login-main">
+            <form class="login-form" id="login-form" novalidate>
+                <h1 class="login-form__title">Bem-vindo</h1>
+                <p class="login-form__subtitle">Entre para acessar o sistema.</p>
+
+                <div class="login-error" id="login-error">
+                    <span class="material-symbols-rounded">error</span>
+                    <span id="login-error-text">E-mail ou senha inválidos.</span>
+                </div>
+
+                <div class="field">
+                    <label for="email">E-mail</label>
+                    <div class="input-wrap">
+                        <span class="material-symbols-rounded">mail</span>
+                        <input type="email" id="email" name="email" placeholder="seu.nome@jomedlog.com.br"
+                               autocomplete="username" required autofocus>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label for="senha">Senha</label>
+                    <div class="input-wrap">
+                        <span class="material-symbols-rounded">lock</span>
+                        <input type="password" id="senha" name="senha" placeholder="Sua senha"
+                               autocomplete="current-password" required>
+                        <button type="button" class="toggle-senha" id="toggle-senha"
+                                aria-label="Mostrar senha" title="Mostrar senha">
+                            <span class="material-symbols-rounded">visibility</span>
+                        </button>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-primary" id="btn-entrar">Entrar</button>
+            </form>
+        </main>
+    </div>
+
+    <script>
+        const form = document.getElementById('login-form');
+        const erroBox = document.getElementById('login-error');
+        const erroText = document.getElementById('login-error-text');
+        const btn = document.getElementById('btn-entrar');
+        const inputSenha = document.getElementById('senha');
+        const toggle = document.getElementById('toggle-senha');
+
+        // Mostrar / ocultar senha
+        toggle.addEventListener('click', () => {
+            const escondida = inputSenha.type === 'password';
+            inputSenha.type = escondida ? 'text' : 'password';
+            toggle.querySelector('.material-symbols-rounded').textContent =
+                escondida ? 'visibility_off' : 'visibility';
+            toggle.setAttribute('aria-label', escondida ? 'Ocultar senha' : 'Mostrar senha');
+        });
+
+        function mostrarErro(msg) {
+            erroText.textContent = msg;
+            erroBox.classList.add('show');
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            erroBox.classList.remove('show');
+
+            const email = document.getElementById('email').value.trim();
+            const senha = inputSenha.value;
+
+            if (!email || !senha) {
+                mostrarErro('Preencha e-mail e senha.');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = 'Entrando...';
+
+            try {
+                const resp = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, senha }),
+                });
+                const dados = await resp.json();
+
+                if (dados.ok) {
+                    window.location.href = dados.redirect;
+                } else {
+                    mostrarErro(dados.erro || 'Não foi possível entrar.');
+                    btn.disabled = false;
+                    btn.textContent = 'Entrar';
+                }
+            } catch (err) {
+                mostrarErro('Erro de conexão com o servidor. Tente novamente.');
+                btn.disabled = false;
+                btn.textContent = 'Entrar';
+            }
+        });
+    </script>
+</body>
+</html>

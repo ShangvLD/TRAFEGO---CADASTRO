@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solicitar cadastro — Tráfego | Jomed</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
+
+    <link rel="stylesheet" href="/css/base.css">
+    <link rel="stylesheet" href="/css/paginas.css">
+</head>
+<body class="has-header">
+
+    <!-- ============================= HEADER ============================= -->
+    <header class="app-header">
+        <div class="app-header__inner">
+            <div class="brand">
+                <div class="brand-logo">
+                    <img src="/img/logo-jomed.png" alt="Jomed Transportes e Logística">
+                </div>
+                <div class="brand-text">
+                    <h1>Tráfego</h1>
+                    <span>Cadastro</span>
+                </div>
+            </div>
+
+            <nav class="main-nav" aria-label="Menu principal">
+                <a href="/solicitante" class="active">Solicitar</a>
+                <a href="#minhas-solicitacoes">Minhas solicitações</a>
+            </nav>
+
+            <div class="header-actions">
+                <button class="user-chip" id="user-chip" type="button" title="Conta">
+                    <div class="user-avatar" id="user-avatar">··</div>
+                    <span class="user-name" id="user-name">Carregando...</span>
+                    <span class="material-symbols-rounded" style="font-size:18px;color:rgba(255,255,255,0.75)">expand_more</span>
+                </button>
+
+                <div class="user-menu" id="user-menu">
+                    <div class="user-menu__info">
+                        <strong id="menu-nome">—</strong>
+                        <small id="menu-email">—</small>
+                    </div>
+                    <button type="button" class="danger" id="btn-sair">
+                        <span class="material-symbols-rounded">logout</span> Sair
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="page-container">
+
+        <!-- Hero -->
+        <section class="card card--hero">
+            <h2>Solicitação de cadastro</h2>
+            <p>Preencha o formulário abaixo para enviar sua solicitação. As respostas são registradas com segurança pelo Microsoft Forms e encaminhadas ao time responsável.</p>
+        </section>
+
+        <!-- Formulário + orientações -->
+        <div class="form-grid">
+            <section class="card">
+                <div class="card-header">
+                    <h3><span class="material-symbols-rounded" style="color:var(--primary);vertical-align:-5px">description</span> Formulário de cadastro</h3>
+                    <span class="badge is-success">Online</span>
+                </div>
+                <iframe
+                    class="form-embed"
+                    title="Formulário de solicitação de cadastro"
+                    src="https://forms.office.com/Pages/ResponsePage.aspx?id=z_poj1JyW0GalC493GVRouflQdUrEZlCiS-rd-JqZcxUN0tOUkRDNEhIRUwxTE9UNTZZTUtURjVIQi4u&embed=true"
+                    allow="fullscreen"
+                    allowfullscreen>
+                </iframe>
+            </section>
+
+            <aside class="card summary-card">
+                <div class="card-header">
+                    <h3>Orientações</h3>
+                    <span class="badge is-info">Ativo</span>
+                </div>
+                <div class="alert">
+                    <span class="material-symbols-rounded">info</span>
+                    <span>Todos os campos marcados como obrigatórios precisam ser preenchidos antes de enviar.</span>
+                </div>
+                <div class="stat">
+                    <strong>Tempo estimado</strong>
+                    <span>3–5 minutos</span>
+                </div>
+                <div class="stat">
+                    <strong>Campos obrigatórios</strong>
+                    <span>marcados com *</span>
+                </div>
+                <div class="stat">
+                    <strong>Armazenamento</strong>
+                    <span>Microsoft 365</span>
+                </div>
+                <p class="footer-note">O envio é processado diretamente pelo Microsoft Forms. Ao concluir, a confirmação aparece na própria tela do formulário.</p>
+            </aside>
+        </div>
+
+        <!-- Minhas solicitações — populado a partir das respostas registradas -->
+        <section class="card" id="minhas-solicitacoes" style="margin-top: var(--space-8)">
+            <div class="card-header">
+                <h3><span class="material-symbols-rounded" style="color:var(--primary);vertical-align:-5px">fact_check</span> Minhas solicitações</h3>
+                <button class="badge is-info" id="btn-atualizar" type="button" style="border:none;cursor:pointer">
+                    <span class="material-symbols-rounded" style="font-size:16px">refresh</span> Atualizar
+                </button>
+            </div>
+
+            <div class="table-wrap">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Data</th>
+                            <th>Assunto</th>
+                            <th>Anexo</th>
+                            <th>Status</th>
+                            <th>Observação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="minhas-corpo">
+                        <tr>
+                            <td colspan="5">
+                                <div class="empty-state">
+                                    <span class="material-symbols-rounded">hourglass_empty</span>
+                                    <h4>Carregando...</h4>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <script src="/js/app.js"></script>
+    <script>
+        const minhasCorpo = document.getElementById('minhas-corpo');
+
+        // Formata "2026-07-13 15:40:12" -> "13/07/2026"
+        function formatarData(iso) {
+            if (!iso) return '—';
+            const d = iso.slice(0, 10).split('-');
+            return d.length === 3 ? `${d[2]}/${d[1]}/${d[0]}` : iso;
+        }
+
+        // Escapa texto para evitar quebra de HTML.
+        function esc(txt) {
+            const div = document.createElement('div');
+            div.textContent = txt == null ? '' : String(txt);
+            return div.innerHTML;
+        }
+
+        const BADGE = {
+            pendente:  '<span class="badge is-warning">Pendente</span>',
+            aprovado:  '<span class="badge is-success">Aprovado</span>',
+            reprovado: '<span class="badge is-danger">Reprovado</span>',
+        };
+
+        // O anexo pode vir como link (na nuvem) ou como texto simples.
+        function anexoHtml(anexo) {
+            if (!anexo) return '—';
+            const ehLink = /^https?:\/\//i.test(anexo);
+            const icone = '<span class="material-symbols-rounded" style="font-size:18px;color:var(--primary);vertical-align:-4px">attach_file</span>';
+            if (ehLink) {
+                return `${icone} <a href="${esc(anexo)}" target="_blank" rel="noopener">Abrir arquivo</a>`;
+            }
+            return `${icone} ${esc(anexo)}`;
+        }
+
+        function linhaHtml(s) {
+            return `<tr>
+                <td>${formatarData(s.criado_em)}</td>
+                <td>${esc(s.assunto)}</td>
+                <td>${anexoHtml(s.anexo)}</td>
+                <td>${BADGE[s.status] || esc(s.status)}</td>
+                <td>${esc(s.observacao) || '—'}</td>
+            </tr>`;
+        }
+
+        async function carregarMinhas() {
+            try {
+                const resp = await fetch('/api/minhas-solicitacoes');
+                if (resp.status === 401) { window.location.href = '/login'; return; }
+                const dados = await resp.json();
+
+                if (!dados.solicitacoes || dados.solicitacoes.length === 0) {
+                    minhasCorpo.innerHTML = `<tr><td colspan="5">
+                        <div class="empty-state">
+                            <span class="material-symbols-rounded">inbox</span>
+                            <h4>Você ainda não tem solicitações</h4>
+                            <p>Assim que você enviar o formulário acima, a solicitação aparece aqui com o status de cada etapa.</p>
+                        </div></td></tr>`;
+                    return;
+                }
+
+                minhasCorpo.innerHTML = dados.solicitacoes.map(linhaHtml).join('');
+            } catch (e) {
+                minhasCorpo.innerHTML = `<tr><td colspan="5">
+                    <div class="empty-state">
+                        <span class="material-symbols-rounded">wifi_off</span>
+                        <h4>Erro ao carregar</h4>
+                        <p>Não foi possível falar com o servidor.</p>
+                    </div></td></tr>`;
+            }
+        }
+
+        document.getElementById('btn-atualizar').addEventListener('click', carregarMinhas);
+        carregarMinhas();
+    </script>
+</body>
+</html>

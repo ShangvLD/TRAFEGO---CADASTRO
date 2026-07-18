@@ -20,3 +20,12 @@ build/
 *.log
 *.tmp
 *.bak
+
+# === Segredos e ambiente ===
+.env
+
+# === Banco de dados (contém logins reais — nunca versionar) ===
+data/
+*.db
+*.db-shm
+*.db-wal

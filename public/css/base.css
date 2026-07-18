@@ -1,0 +1,440 @@
+/* ============================================================================
+   TRÁFEGO — Cadastro
+   Folha de estilo base (identidade visual Jomed)
+
+   Tokens + reset + header institucional + cards/badges compartilhados por
+   todas as telas logadas. As telas específicas trazem seus próprios arquivos
+   (login.css, etc.).
+   ========================================================================== */
+
+/* ------------------------------------------------------------------ */
+/* 1. TOKENS                                                          */
+/* ------------------------------------------------------------------ */
+:root {
+    /* Cores institucionais — azul da Jomed como base */
+    --primary: #005a9e;
+    --primary-dark: #00447a;
+    --primary-darker: #003257;
+    --primary-soft: #dbeafc;
+
+    /* Superfícies e fundo */
+    --background: #f1f4f8;
+    --surface: #ffffff;
+    --surface-muted: #f7f9fb;
+
+    /* Texto */
+    --text: #16202b;
+    --text-secondary: #51606f;
+
+    /* Bordas */
+    --border: #e2e8f0;
+
+    /* Cores de status */
+    --success: #1f8a4c;
+    --success-soft: #e5f5ec;
+    --danger: #d13438;
+    --danger-soft: #fdecec;
+    --warning: #b7791f;
+    --warning-soft: #fbf1dc;
+
+    /* Tipografia */
+    --font-base: "Inter", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+
+    /* Escala de espaçamento (múltiplos de 4px) */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+
+    /* Raios de borda */
+    --radius-sm: 10px;
+    --radius: 14px;
+    --radius-lg: 20px;
+    --radius-pill: 999px;
+
+    /* Sombras suaves */
+    --shadow-sm: 0 2px 6px rgba(15, 23, 42, 0.05);
+    --shadow: 0 12px 30px rgba(15, 23, 42, 0.07);
+    --shadow-header: 0 4px 18px rgba(0, 68, 122, 0.12);
+
+    /* Transição padrão */
+    --transition: 0.2s ease;
+
+    font-family: var(--font-base);
+}
+
+/* ------------------------------------------------------------------ */
+/* 2. BASE / RESET                                                    */
+/* ------------------------------------------------------------------ */
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--background);
+    color: var(--text);
+    font-family: var(--font-base);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+}
+
+a {
+    color: var(--primary);
+    text-decoration: none;
+}
+
+h1, h2, h3, h4 {
+    line-height: 1.25;
+    color: var(--text);
+}
+
+.material-symbols-rounded {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    vertical-align: middle;
+    user-select: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* 3. LAYOUT (páginas logadas)                                        */
+/* ------------------------------------------------------------------ */
+.has-header {
+    padding-top: 72px; /* compensa o header fixo */
+}
+
+.page-container {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: var(--space-8) var(--space-6);
+    animation: fade-in 0.4s ease both;
+}
+
+/* ------------------------------------------------------------------ */
+/* 4. HEADER INSTITUCIONAL (fixo, sombra suave)                       */
+/* ------------------------------------------------------------------ */
+.app-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    height: 72px;
+    background: linear-gradient(100deg, var(--primary-dark), var(--primary));
+    box-shadow: var(--shadow-header);
+    color: #fff;
+}
+
+.app-header__inner {
+    max-width: 1180px;
+    height: 100%;
+    margin: 0 auto;
+    padding: 0 var(--space-6);
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+}
+
+/* Marca / logo */
+.brand {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-shrink: 0;
+}
+
+.brand-logo {
+    background: #fff;
+    border-radius: 10px;
+    padding: 6px 12px;
+    display: flex;
+    align-items: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.brand-logo img {
+    height: 30px;
+    width: auto;
+    display: block;
+}
+
+.brand-text h1 {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1.1;
+}
+
+.brand-text span {
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+/* Menu horizontal */
+.main-nav {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin-left: var(--space-4);
+}
+
+.main-nav a {
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 0.92rem;
+    font-weight: 500;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    transition: background var(--transition), color var(--transition);
+}
+
+.main-nav a:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+}
+
+.main-nav a.active {
+    background: rgba(255, 255, 255, 0.18);
+    color: #fff;
+}
+
+/* Área do usuário / ações do header */
+.header-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    position: relative;
+}
+
+.icon-btn {
+    position: relative;
+    width: 40px;
+    height: 40px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.10);
+    color: #fff;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    transition: background var(--transition), transform var(--transition);
+}
+
+.icon-btn:hover {
+    background: rgba(255, 255, 255, 0.22);
+    transform: translateY(-1px);
+}
+
+/* Usuário logado */
+.user-chip {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-3) var(--space-1) var(--space-1);
+    background: rgba(255, 255, 255, 0.12);
+    border: none;
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    color: #fff;
+    transition: background var(--transition);
+}
+
+.user-chip:hover {
+    background: rgba(255, 255, 255, 0.20);
+}
+
+.user-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #fff;
+    color: var(--primary-dark);
+    display: grid;
+    place-items: center;
+    font-weight: 700;
+    font-size: 0.85rem;
+}
+
+.user-chip .user-name {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: #fff;
+}
+
+/* Menu suspenso do usuário (logout) */
+.user-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 200px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: var(--space-2);
+    display: none;
+}
+
+.user-menu.open {
+    display: block;
+    animation: fade-in 0.15s ease both;
+}
+
+.user-menu .user-menu__info {
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--border);
+    margin-bottom: var(--space-2);
+}
+
+.user-menu .user-menu__info strong {
+    display: block;
+    color: var(--text);
+    font-size: 0.9rem;
+}
+
+.user-menu .user-menu__info small {
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+}
+
+.user-menu button {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border: none;
+    background: transparent;
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.9rem;
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--transition);
+}
+
+.user-menu button:hover {
+    background: var(--surface-muted);
+}
+
+.user-menu button.danger {
+    color: var(--danger);
+}
+
+/* ------------------------------------------------------------------ */
+/* 5. CARDS / SEÇÕES                                                  */
+/* ------------------------------------------------------------------ */
+.card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-6);
+    box-shadow: var(--shadow-sm);
+}
+
+.card--hero {
+    background: linear-gradient(120deg, var(--primary-darker), var(--primary));
+    color: #fff;
+    border: none;
+    margin-bottom: var(--space-8);
+    box-shadow: var(--shadow);
+}
+
+.card--hero h2 {
+    color: #fff;
+    margin: 0 0 var(--space-3);
+    font-size: 1.6rem;
+}
+
+.card--hero p {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.85);
+    line-height: 1.7;
+    max-width: 680px;
+}
+
+.card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    margin-bottom: var(--space-5);
+    flex-wrap: wrap;
+}
+
+.card-header h3 {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 700;
+}
+
+/* ------------------------------------------------------------------ */
+/* 6. BADGES / ALERTA                                                 */
+/* ------------------------------------------------------------------ */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 12px;
+    border-radius: var(--radius-pill);
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.badge.is-success { background: var(--success-soft); color: var(--success); }
+.badge.is-warning { background: var(--warning-soft); color: var(--warning); }
+.badge.is-danger  { background: var(--danger-soft);  color: var(--danger); }
+.badge.is-info    { background: var(--primary-soft); color: var(--primary); }
+
+.alert {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    border-radius: var(--radius);
+    background: var(--warning-soft);
+    color: var(--warning);
+    border: 1px solid rgba(183, 121, 31, 0.25);
+    font-size: 0.92rem;
+    margin-bottom: var(--space-4);
+}
+
+.alert .material-symbols-rounded { font-size: 22px; }
+
+/* ------------------------------------------------------------------ */
+/* 7. ANIMAÇÕES                                                       */
+/* ------------------------------------------------------------------ */
+@keyframes fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+}
+
+/* ------------------------------------------------------------------ */
+/* 8. RESPONSIVIDADE                                                  */
+/* ------------------------------------------------------------------ */
+@media (max-width: 1024px) {
+    .main-nav { display: none; }
+}
+
+@media (max-width: 768px) {
+    .page-container { padding: var(--space-6) var(--space-4); }
+    .app-header__inner { padding: 0 var(--space-4); gap: var(--space-3); }
+    .user-chip .user-name { display: none; }
+    .card--hero h2 { font-size: 1.35rem; }
+}
+
+@media (max-width: 560px) {
+    .brand-text span { display: none; }
+    .card { padding: var(--space-5); }
+}

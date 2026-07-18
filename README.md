@@ -1,25 +1,67 @@
 # TRÁFEGO — Cadastro
 
-Página de solicitação de cadastro com identidade visual institucional da **Jomed**.
-A coleta de respostas é feita por um formulário do **Microsoft Forms** incorporado à página.
+Sistema interno da **Jomed** para solicitação e aprovação de cadastros de tráfego.
+Possui login com dois perfis de acesso e identidade visual institucional.
+
+## Perfis
+
+| Perfil | O que faz |
+| --- | --- |
+| **Solicitante** | Faz login, preenche o formulário (Microsoft Forms) e acompanha suas solicitações. |
+| **Responsável** | Faz login e revisa as solicitações (respostas + anexos), aprovando ou reprovando. |
+| **Admin** | Controla os logins. |
+
+## Stack
+
+- **Node.js + Express** — servidor web e API.
+- **SQLite embutido** (`node:sqlite`, sem dependência nativa) — banco dos logins, em `/data`.
+- **express-session** com store próprio em SQLite — sessão por cookie.
+- **bcryptjs** — senhas criptografadas.
+- Front-end em HTML/CSS puro (pasta `public` + `views`).
 
 ## Estrutura
 
-| Arquivo | Descrição |
+| Caminho | Descrição |
 | --- | --- |
-| `PAGINA.HTML` | Página principal (header, hero, formulário embutido e orientações). |
-| `PAG.CSS` | Folha de estilo central — cores, espaçamentos e componentes em um só lugar. |
-| `ALTERACOES_FRONTEND.md` | Notas de desenvolvimento sobre a reformulação do front-end. |
+| `server.js` | Servidor Express: rotas, sessão e proteção por perfil. |
+| `src/db.js` | Conexão SQLite e criação do schema. |
+| `src/usuarios.js` | Consultas de usuário e validação de senha. |
+| `src/auth.js` | Middlewares de login e autorização por papel. |
+| `src/session-store.js` | Store de sessão sobre o SQLite. |
+| `src/seed.js` | Cria usuários de teste (`npm run seed`). |
+| `src/criar-usuario.js` | Cria um usuário via linha de comando. |
+| `views/` | Páginas: `login.html`, `solicitante.html`, `responsavel.html`. |
+| `public/` | CSS, imagens e JS do front-end. |
 
-## Como usar
+## Como rodar
 
-Basta abrir o `PAGINA.HTML` em um navegador moderno. A fonte (Inter) e os ícones
-(Material Symbols) são carregados via CDN, então é necessário conexão com a internet.
+```bash
+npm install          # instala as dependências
+cp .env.example .env # cria o arquivo de ambiente (ajuste o SESSION_SECRET)
+npm run seed         # cria os usuários de teste (rodar uma vez)
+npm start            # sobe em http://localhost:3000
+```
 
-> O formulário incorporado depende de autenticação no Microsoft 365 conforme as
-> configurações de acesso definidas no próprio Microsoft Forms.
+> Requer **Node.js 22.5+** (SQLite embutido). Não precisa de admin: pode usar a
+> versão portátil do Node.
+
+## Controlando os logins
+
+Enquanto não há tela de administração, os usuários são criados por comando:
+
+```bash
+npm run criar-usuario -- "Nome Completo" email@jomedlog.com.br senha papel
+# papel: solicitante | responsavel | admin
+```
+
+## Status / próximos passos
+
+- **Fase 1 (concluída):** login, banco de usuários, dois perfis e proteção de rotas.
+- **Fase 2/3:** "Minhas solicitações" (solicitante) e painel de aprovação com dados reais.
+- **Fase 4:** integração Microsoft Forms → banco (via Power Automate).
+- **Hospedagem:** a definir (Vercel + Turso, ou Azure para manter o dado na Microsoft).
+  Em serverless (Vercel) o SQLite em arquivo não persiste — trocar por banco hospedado.
 
 ## Identidade visual
 
-Baseada no portal de notícias da Jomed: azul institucional (`#005a9e`), layout
-limpo e espaçado, tipografia moderna e cards bem definidos.
+Azul institucional (`#005a9e`), layout limpo, tipografia Inter e cards bem definidos.

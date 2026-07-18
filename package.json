@@ -1,0 +1,27 @@
+{
+  "name": "trafego-cadastro",
+  "version": "1.0.0",
+  "description": "Sistema de cadastro Tráfego (Jomed) — login, papéis e painel de aprovação",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server.js",
+    "dev": "node --disable-warning=ExperimentalWarning --watch server.js",
+    "seed": "node --disable-warning=ExperimentalWarning src/seed.js",
+    "criar-usuario": "node --disable-warning=ExperimentalWarning src/criar-usuario.js",
+    "consultar": "node --disable-warning=ExperimentalWarning src/consultar.js",
+    "testar-webhook": "node --disable-warning=ExperimentalWarning src/testar-webhook.js"
+  },
+  "keywords": ["jomed", "cadastro", "trafego"],
+  "author": "Jomed",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-session": "^1.18.1"
+  }
+}
