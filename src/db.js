@@ -83,6 +83,11 @@ if (!colunasSolic.includes('origem')) {
 if (!colunasSolic.includes('origem_id')) {
   db.exec('ALTER TABLE solicitacoes ADD COLUMN origem_id TEXT');
 }
+// anexos -> lista de documentos em JSON ([{ nome, url }]). A coluna antiga
+// "anexo" (texto único) continua preenchida com o 1º documento, por compat.
+if (!colunasSolic.includes('anexos')) {
+  db.exec('ALTER TABLE solicitacoes ADD COLUMN anexos TEXT');
+}
 
 // Índice único parcial: garante que cada resposta do Forms entre uma só vez,
 // mas permite vários registros sem origem_id (seed, testes manuais).

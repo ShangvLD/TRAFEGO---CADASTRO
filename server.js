@@ -219,7 +219,8 @@ app.post('/api/forms/webhook', (req, res) => {
     solicitante_email,
     assunto,
     detalhes: b.detalhes,
-    anexo: b.anexo,
+    anexo: b.anexo, // link único, texto, ou o JSON do campo de upload do Forms
+    anexos: b.anexos, // (opcional) lista já estruturada [{ nome, url }]
     origem_id: b.origem_id,
   });
 

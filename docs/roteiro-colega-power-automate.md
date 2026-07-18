@@ -116,9 +116,13 @@ Requisitos:
   `solicitante_email` precisa ser o **mesmo e-mail de login** dela. O ideal é o
   Forms registrar automaticamente o e-mail de quem responde (só para a
   organização).
-- **Anexo:** quando o Forms tem upload de arquivo, o campo dinâmico é uma lista
-  com um **link** para o arquivo no OneDrive/SharePoint. Use esse link — o
-  arquivo continua guardado na nuvem, o sistema só aponta para ele.
+- **Anexo:** quando o Forms tem upload de arquivo, o campo dinâmico já vem como
+  uma **lista com o(s) arquivo(s)** (nome + link no OneDrive/SharePoint). Basta
+  jogar esse campo dinâmico direto no `anexo` — o sistema entende a lista
+  automaticamente e mostra **todos os documentos** (mesmo que a pessoa envie
+  vários). Os arquivos continuam guardados na nuvem; o sistema só aponta para
+  eles. No painel, quem trata abre cada documento em uma nova aba (visualizador
+  do Microsoft 365, já logado).
 
 ---
 

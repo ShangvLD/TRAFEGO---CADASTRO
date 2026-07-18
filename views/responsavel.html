@@ -117,9 +117,29 @@
         </section>
     </main>
 
+    <!-- Modal de detalhes da solicitação -->
+    <div class="modal-overlay" id="modal-detalhe" hidden>
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
+            <div class="modal-header">
+                <h3 id="modal-titulo"><span class="material-symbols-rounded" style="color:var(--primary);vertical-align:-5px">assignment</span> Detalhes da solicitação</h3>
+                <button class="modal-close" id="modal-fechar" type="button" aria-label="Fechar">
+                    <span class="material-symbols-rounded">close</span>
+                </button>
+            </div>
+            <div class="modal-body" id="modal-body"></div>
+            <div class="modal-footer" id="modal-footer"></div>
+        </div>
+    </div>
+
     <script src="/js/app.js"></script>
     <script>
         const corpo = document.getElementById('tabela-corpo');
+        const overlay = document.getElementById('modal-detalhe');
+        const modalBody = document.getElementById('modal-body');
+        const modalFooter = document.getElementById('modal-footer');
+
+        // Guarda as solicitações carregadas para abrir o detalhe sem novo fetch.
+        let solicitacoesCache = [];
 
         // Formata "2026-07-13 15:40:12" -> "13/07/2026"
         function formatarData(iso) {
@@ -141,21 +161,113 @@
             reprovado: '<span class="badge is-danger">Reprovado</span>',
         };
 
-        // O anexo pode vir como link (arquivo na nuvem do Microsoft 365) ou texto.
-        function anexoHtml(anexo) {
-            if (!anexo) return '—';
+        // Ícone do documento conforme a extensão do arquivo.
+        function iconeArquivo(nome, url) {
+            const alvo = String(nome || url || '').toLowerCase();
+            if (/\.pdf(\?|$)/.test(alvo)) return 'picture_as_pdf';
+            if (/\.(docx?|odt|rtf)(\?|$)/.test(alvo)) return 'description';
+            if (/\.(xlsx?|csv|ods)(\?|$)/.test(alvo)) return 'table';
+            if (/\.(pptx?|odp)(\?|$)/.test(alvo)) return 'slideshow';
+            if (/\.(png|jpe?g|gif|webp|bmp|svg|heic)(\?|$)/.test(alvo)) return 'image';
+            if (/\.(zip|rar|7z)(\?|$)/.test(alvo)) return 'folder_zip';
+            return 'attach_file';
+        }
+
+        // Resumo do anexo para a coluna da tabela (só a contagem).
+        function anexosResumo(anexos) {
+            const n = Array.isArray(anexos) ? anexos.length : 0;
+            if (!n) return '<span style="color:var(--text-secondary)">—</span>';
             const icone = '<span class="material-symbols-rounded" style="font-size:18px;color:var(--primary);vertical-align:-4px">attach_file</span>';
-            if (/^https?:\/\//i.test(anexo)) {
-                return `${icone} <a href="${esc(anexo)}" target="_blank" rel="noopener">Abrir arquivo</a>`;
+            return `${icone} ${n} ${n === 1 ? 'arquivo' : 'arquivos'}`;
+        }
+
+        // Card de um documento anexado (dentro do modal).
+        function anexoCard(a) {
+            const icone = iconeArquivo(a.nome, a.url);
+            const nome = esc(a.nome || 'Documento');
+            if (a.url) {
+                return `<a class="anexo-card" href="${esc(a.url)}" target="_blank" rel="noopener">
+                    <span class="anexo-card__icon material-symbols-rounded">${icone}</span>
+                    <span class="anexo-card__info"><strong>${nome}</strong><small>Abrir no Microsoft 365</small></span>
+                    <span class="anexo-card__open material-symbols-rounded">open_in_new</span>
+                </a>`;
             }
-            return `${icone} ${esc(anexo)}`;
+            return `<div class="anexo-card is-plain">
+                <span class="anexo-card__icon material-symbols-rounded">${icone}</span>
+                <span class="anexo-card__info"><strong>${nome}</strong><small>Sem link disponível</small></span>
+            </div>`;
+        }
+
+        function linhaDetalhe(rot, val) {
+            return `<div class="detalhe-linha"><span class="detalhe-rot">${rot}</span><span class="detalhe-val">${val}</span></div>`;
+        }
+
+        // Conteúdo do modal de detalhes.
+        function detalheHtml(s) {
+            const anexos = Array.isArray(s.anexos) ? s.anexos : [];
+            const anexosBloco = anexos.length
+                ? `<div class="anexo-lista">${anexos.map(anexoCard).join('')}</div>`
+                : '<p class="modal-vazio">Nenhum documento anexado nesta solicitação.</p>';
+
+            const observacao = s.observacao ? linhaDetalhe('Observação', esc(s.observacao)) : '';
+            const revisao = s.status === 'pendente'
+                ? ''
+                : linhaDetalhe('Revisado por', `${esc(s.revisado_por || '—')}${s.revisado_em ? ' · ' + formatarData(s.revisado_em) : ''}`);
+
+            return `
+                <div class="detalhe-topo">
+                    <div>
+                        <strong class="detalhe-nome">${esc(s.solicitante_nome)}</strong>
+                        <div class="detalhe-email">${esc(s.solicitante_email)}</div>
+                    </div>
+                    ${BADGE[s.status] || esc(s.status)}
+                </div>
+                <div class="detalhe-grid">
+                    ${linhaDetalhe('Data', formatarData(s.criado_em))}
+                    ${linhaDetalhe('Assunto', esc(s.assunto))}
+                    ${linhaDetalhe('Detalhes', esc(s.detalhes) || '—')}
+                    ${observacao}
+                    ${revisao}
+                </div>
+                <h4 class="detalhe-secao">
+                    <span class="material-symbols-rounded" style="vertical-align:-5px;color:var(--primary)">folder_open</span>
+                    Documentos anexados (${anexos.length})
+                </h4>
+                ${anexosBloco}
+            `;
+        }
+
+        function footerHtml(s) {
+            if (s.status !== 'pendente') return '';
+            return `
+                <button class="btn-modal reprovar" data-id="${s.id}" type="button">
+                    <span class="material-symbols-rounded">close</span> Reprovar
+                </button>
+                <button class="btn-modal aprovar" data-id="${s.id}" type="button">
+                    <span class="material-symbols-rounded">check</span> Aprovar
+                </button>
+            `;
+        }
+
+        function abrirModal(id) {
+            const s = solicitacoesCache.find((x) => String(x.id) === String(id));
+            if (!s) return;
+            modalBody.innerHTML = detalheHtml(s);
+            modalFooter.innerHTML = footerHtml(s);
+            overlay.hidden = false;
+            document.body.style.overflow = 'hidden';
+        }
+
+        function fecharModal() {
+            overlay.hidden = true;
+            document.body.style.overflow = '';
         }
 
         function linhaHtml(s) {
-            const anexo = anexoHtml(s.anexo);
-
-            // Se ainda está pendente, mostra os botões; senão, mostra quem revisou.
-            const acoes = s.status === 'pendente'
+            const verBtn = `<button class="btn-acao ver" data-id="${s.id}" title="Ver detalhes">
+                                <span class="material-symbols-rounded">visibility</span>
+                            </button>`;
+            const decisao = s.status === 'pendente'
                 ? `<button class="btn-acao aprovar" data-id="${s.id}" title="Aprovar">
                        <span class="material-symbols-rounded">check</span>
                    </button>
@@ -164,13 +276,13 @@
                    </button>`
                 : `<span style="color:var(--text-secondary);font-size:0.82rem">por ${esc(s.revisado_por || '—')}</span>`;
 
-            return `<tr>
+            return `<tr data-id="${s.id}" class="linha-clic">
                 <td>${formatarData(s.criado_em)}</td>
                 <td>${esc(s.solicitante_nome)}<br><small style="color:var(--text-secondary)">${esc(s.solicitante_email)}</small></td>
                 <td>${esc(s.assunto)}</td>
-                <td>${anexo}</td>
+                <td>${anexosResumo(s.anexos)}</td>
                 <td>${BADGE[s.status] || esc(s.status)}</td>
-                <td><div style="display:flex;gap:6px">${acoes}</div></td>
+                <td><div style="display:flex;gap:6px;align-items:center">${verBtn}${decisao}</div></td>
             </tr>`;
         }
 
@@ -188,8 +300,9 @@
                 const dados = await resp.json();
 
                 atualizarKpis(dados.resumo || {});
+                solicitacoesCache = dados.solicitacoes || [];
 
-                if (!dados.solicitacoes || dados.solicitacoes.length === 0) {
+                if (!solicitacoesCache.length) {
                     corpo.innerHTML = `<tr><td colspan="6">
                         <div class="empty-state">
                             <span class="material-symbols-rounded">database</span>
@@ -199,7 +312,7 @@
                     return;
                 }
 
-                corpo.innerHTML = dados.solicitacoes.map(linhaHtml).join('');
+                corpo.innerHTML = solicitacoesCache.map(linhaHtml).join('');
             } catch (e) {
                 corpo.innerHTML = `<tr><td colspan="6">
                     <div class="empty-state">
@@ -232,13 +345,33 @@
             }
         }
 
-        // Delegação de eventos para os botões de ação.
+        // Clique na tabela: botões de ação ou abrir o detalhe da linha.
         corpo.addEventListener('click', (e) => {
             const btn = e.target.closest('.btn-acao');
+            if (btn) {
+                const id = btn.dataset.id;
+                if (btn.classList.contains('ver')) { abrirModal(id); return; }
+                decidir(id, btn.classList.contains('aprovar') ? 'aprovado' : 'reprovado');
+                return;
+            }
+            const tr = e.target.closest('tr[data-id]');
+            if (tr) abrirModal(tr.dataset.id);
+        });
+
+        // Ações dentro do modal (aprovar / reprovar).
+        modalFooter.addEventListener('click', (e) => {
+            const btn = e.target.closest('.btn-modal');
             if (!btn) return;
             const id = btn.dataset.id;
-            decidir(id, btn.classList.contains('aprovar') ? 'aprovado' : 'reprovado');
+            const status = btn.classList.contains('aprovar') ? 'aprovado' : 'reprovado';
+            fecharModal();
+            decidir(id, status);
         });
+
+        // Fechar o modal.
+        document.getElementById('modal-fechar').addEventListener('click', fecharModal);
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) fecharModal(); });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !overlay.hidden) fecharModal(); });
 
         document.getElementById('btn-atualizar').addEventListener('click', carregar);
 

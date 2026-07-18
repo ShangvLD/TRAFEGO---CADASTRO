@@ -162,22 +162,24 @@
             reprovado: '<span class="badge is-danger">Reprovado</span>',
         };
 
-        // O anexo pode vir como link (na nuvem) ou como texto simples.
-        function anexoHtml(anexo) {
-            if (!anexo) return '—';
-            const ehLink = /^https?:\/\//i.test(anexo);
+        // Lista os documentos anexados (podem ser vários).
+        function anexosHtml(anexos) {
+            const lista = Array.isArray(anexos) ? anexos : [];
+            if (!lista.length) return '—';
             const icone = '<span class="material-symbols-rounded" style="font-size:18px;color:var(--primary);vertical-align:-4px">attach_file</span>';
-            if (ehLink) {
-                return `${icone} <a href="${esc(anexo)}" target="_blank" rel="noopener">Abrir arquivo</a>`;
-            }
-            return `${icone} ${esc(anexo)}`;
+            return lista.map((a) => {
+                const nome = esc(a.nome || 'Documento');
+                return a.url
+                    ? `${icone} <a href="${esc(a.url)}" target="_blank" rel="noopener">${nome}</a>`
+                    : `${icone} ${nome}`;
+            }).join('<br>');
         }
 
         function linhaHtml(s) {
             return `<tr>
                 <td>${formatarData(s.criado_em)}</td>
                 <td>${esc(s.assunto)}</td>
-                <td>${anexoHtml(s.anexo)}</td>
+                <td>${anexosHtml(s.anexos)}</td>
                 <td>${BADGE[s.status] || esc(s.status)}</td>
                 <td>${esc(s.observacao) || '—'}</td>
             </tr>`;
