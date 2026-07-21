@@ -31,17 +31,18 @@ const usuariosDeTeste = [
   },
 ];
 
-console.log('Criando usuários de teste...\n');
+async function main() {
+  console.log('Criando usuários de teste...\n');
 
-for (const u of usuariosDeTeste) {
-  const existente = usuarios.buscarPorEmail(u.email);
-  if (existente) {
-    console.log(`  • já existe:  ${u.email} (${existente.papel})`);
-    continue;
+  for (const u of usuariosDeTeste) {
+    const existente = await usuarios.buscarPorEmail(u.email);
+    if (existente) {
+      console.log(`  • já existe:  ${u.email} (${existente.papel})`);
+      continue;
+    }
+    await usuarios.criar(u);
+    console.log(`  ✓ criado:     ${u.email} (${u.papel})  senha: ${u.senha}`);
   }
-  usuarios.criar(u);
-  console.log(`  ✓ criado:     ${u.email} (${u.papel})  senha: ${u.senha}`);
-}
 
 // --------------------------------------------------------------------------
 // Solicitações de exemplo (só insere se a tabela estiver vazia).
@@ -71,15 +72,21 @@ const solicitacoesDeExemplo = [
   },
 ];
 
-console.log('\nCriando solicitações de exemplo...\n');
+  console.log('\nCriando solicitações de exemplo...\n');
 
-if (solicitacoes.listar().length > 0) {
-  console.log('  • já existem solicitações — nada a inserir.');
-} else {
-  for (const s of solicitacoesDeExemplo) {
-    solicitacoes.criar(s);
-    console.log(`  ✓ criada:     "${s.assunto}"`);
+  if ((await solicitacoes.listar()).length > 0) {
+    console.log('  • já existem solicitações — nada a inserir.');
+  } else {
+    for (const s of solicitacoesDeExemplo) {
+      await solicitacoes.criar(s);
+      console.log(`  ✓ criada:     "${s.assunto}"`);
+    }
   }
+
+  console.log('\nPronto. Lembre de trocar as senhas antes de ir para produção.');
 }
 
-console.log('\nPronto. Lembre de trocar as senhas antes de ir para produção.');
+main().catch((err) => {
+  console.error('Erro no seed:', err);
+  process.exit(1);
+});

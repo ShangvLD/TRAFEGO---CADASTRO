@@ -1,9 +1,14 @@
 /* ============================================================================
-   Session store sobre o SQLite embutido (node:sqlite)
+   Session store sobre o libSQL/Turso (assíncrono)
 
-   Substitui pacotes que exigem compilação nativa. Implementa o mínimo da
-   interface de Store do express-session (get / set / destroy / touch),
-   guardando as sessões na tabela "sessoes" e limpando as expiradas.
+   Implementa o mínimo da interface de Store do express-session
+   (get / set / destroy / touch), guardando as sessões na tabela "sessoes".
+
+   Como o cliente do banco agora é assíncrono, cada método faz a consulta e
+   chama o callback do express-session ao terminar. Não há mais o setInterval
+   de limpeza (não faz sentido em ambiente serverless, onde o processo é
+   efêmero): as sessões expiradas são removidas quando lidas, e podem ser
+   varridas por um script/cron se um dia for necessário.
    ========================================================================== */
 
 const db = require('./db');
@@ -12,31 +17,6 @@ module.exports = function (session) {
   const Store = session.Store;
 
   class SqliteStore extends Store {
-    constructor(opts = {}) {
-      super(opts);
-      // Prepara as consultas uma vez só.
-      this._get = db.prepare('SELECT dados, expira_em FROM sessoes WHERE sid = ?');
-      this._set = db.prepare(
-        `INSERT INTO sessoes (sid, dados, expira_em) VALUES (?, ?, ?)
-         ON CONFLICT(sid) DO UPDATE SET dados = excluded.dados, expira_em = excluded.expira_em`
-      );
-      this._del = db.prepare('DELETE FROM sessoes WHERE sid = ?');
-      this._touch = db.prepare('UPDATE sessoes SET expira_em = ? WHERE sid = ?');
-      this._limpar = db.prepare('DELETE FROM sessoes WHERE expira_em < ?');
-
-      // Limpa sessões expiradas periodicamente (a cada 15 min).
-      const intervalo = setInterval(() => this._limparExpiradas(), 15 * 60 * 1000);
-      if (intervalo.unref) intervalo.unref(); // não segura o processo aberto
-    }
-
-    _limparExpiradas() {
-      try {
-        this._limpar.run(Date.now());
-      } catch (_) {
-        /* silencioso: limpeza é best-effort */
-      }
-    }
-
     // Quando expira a sessão (usa o maxAge do cookie, ou 1 dia por padrão).
     _validadeEm(sess) {
       const maxAge = sess?.cookie?.maxAge;
@@ -45,44 +25,45 @@ module.exports = function (session) {
     }
 
     get(sid, cb) {
-      try {
-        const linha = this._get.get(sid);
+      (async () => {
+        const linha = await db
+          .prepare('SELECT dados, expira_em FROM sessoes WHERE sid = ?')
+          .get(sid);
         if (!linha) return cb(null, null);
         if (linha.expira_em < Date.now()) {
-          this._del.run(sid);
+          await db.prepare('DELETE FROM sessoes WHERE sid = ?').run(sid);
           return cb(null, null);
         }
         return cb(null, JSON.parse(linha.dados));
-      } catch (err) {
-        return cb(err);
-      }
+      })().catch((err) => cb(err));
     }
 
     set(sid, sess, cb) {
-      try {
-        this._set.run(sid, JSON.stringify(sess), this._validadeEm(sess));
+      (async () => {
+        await db
+          .prepare(
+            `INSERT INTO sessoes (sid, dados, expira_em) VALUES (?, ?, ?)
+             ON CONFLICT(sid) DO UPDATE SET dados = excluded.dados, expira_em = excluded.expira_em`
+          )
+          .run(sid, JSON.stringify(sess), this._validadeEm(sess));
         return cb && cb(null);
-      } catch (err) {
-        return cb && cb(err);
-      }
+      })().catch((err) => cb && cb(err));
     }
 
     destroy(sid, cb) {
-      try {
-        this._del.run(sid);
+      (async () => {
+        await db.prepare('DELETE FROM sessoes WHERE sid = ?').run(sid);
         return cb && cb(null);
-      } catch (err) {
-        return cb && cb(err);
-      }
+      })().catch((err) => cb && cb(err));
     }
 
     touch(sid, sess, cb) {
-      try {
-        this._touch.run(this._validadeEm(sess), sid);
+      (async () => {
+        await db
+          .prepare('UPDATE sessoes SET expira_em = ? WHERE sid = ?')
+          .run(this._validadeEm(sess), sid);
         return cb && cb(null);
-      } catch (err) {
-        return cb && cb(err);
-      }
+      })().catch((err) => cb && cb(err));
     }
   }
 

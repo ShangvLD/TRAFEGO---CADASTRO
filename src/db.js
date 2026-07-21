@@ -1,99 +1,154 @@
 /* ============================================================================
-   Banco de dados (SQLite embutido no Node — módulo "node:sqlite")
+   Banco de dados (libSQL / Turso)
 
-   A partir do Node 22.5+ o SQLite vem embutido no runtime, então não há
-   nenhuma dependência nativa para compilar (o que evita precisar do Visual
-   Studio Build Tools no Windows).
+   Usa o cliente "@libsql/client", que fala tanto com um arquivo SQLite LOCAL
+   (desenvolvimento) quanto com o Turso na NUVEM (produção/Vercel) — a mesma
+   API, mudando só a URL.
 
-   O arquivo do banco fica em /data, fora do controle de versão (.gitignore),
-   pois guarda os logins reais. O schema é criado na primeira execução.
+     • Desenvolvimento (padrão): arquivo local em ./data/trafego.db
+         -> não precisa de internet nem consome cota do Turso.
+     • Produção (Vercel): defina TURSO_DATABASE_URL (libsql://...) e
+       TURSO_AUTH_TOKEN nas variáveis de ambiente. Aí o app grava no Turso,
+       que é persistente (o disco do Vercel é efêmero e não serve p/ banco).
+
+   IMPORTANTE: o cliente é ASSÍNCRONO. As funções da camada de dados
+   (usuarios.js / solicitacoes.js) usam await. Este módulo expõe um pequeno
+   wrapper "prepare(sql).get/all/run" para manter o código de consulta parecido
+   com o antigo (node:sqlite), só que retornando Promises.
    ========================================================================== */
+
+require('dotenv').config();
 
 const path = require('node:path');
 const fs = require('node:fs');
-const { DatabaseSync } = require('node:sqlite');
-
-// Pasta do banco. Por padrão fica em /data (desenvolvimento local), mas pode
-// ser sobrescrita por DATA_DIR — usado na hospedagem (ex.: Railway) para
-// apontar o banco a um disco persistente (volume), fora do sistema de
-// arquivos efêmero que zera a cada deploy.
-const dataDir = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
-fs.mkdirSync(dataDir, { recursive: true });
-
-const dbPath = path.join(dataDir, 'trafego.db');
-const db = new DatabaseSync(dbPath);
-
-// Boas práticas para SQLite em aplicação web.
-db.exec('PRAGMA journal_mode = WAL;');
-db.exec('PRAGMA foreign_keys = ON;');
+const { createClient } = require('@libsql/client');
 
 // --------------------------------------------------------------------------
-// Schema — criado apenas se ainda não existir.
+// Escolha da conexão
 // --------------------------------------------------------------------------
-db.exec(`
-  CREATE TABLE IF NOT EXISTS usuarios (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    nome        TEXT    NOT NULL,
-    email       TEXT    NOT NULL UNIQUE COLLATE NOCASE,
-    senha_hash  TEXT    NOT NULL,
-    papel       TEXT    NOT NULL CHECK (papel IN ('solicitante', 'responsavel', 'admin')),
-    ativo       INTEGER NOT NULL DEFAULT 1,
-    criado_em   TEXT    NOT NULL DEFAULT (datetime('now', 'localtime'))
-  );
+// Se TURSO_DATABASE_URL estiver definida, conecta no Turso (produção).
+// Caso contrário, cai para um arquivo SQLite local (desenvolvimento).
+let url = process.env.TURSO_DATABASE_URL;
+const authToken = process.env.TURSO_AUTH_TOKEN;
 
-  CREATE TABLE IF NOT EXISTS sessoes (
-    sid        TEXT PRIMARY KEY,
-    dados      TEXT NOT NULL,
-    expira_em  INTEGER NOT NULL
-  );
+if (!url) {
+  const dataDir = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
+  fs.mkdirSync(dataDir, { recursive: true });
+  url = `file:${path.join(dataDir, 'trafego.db')}`;
+}
 
-  CREATE TABLE IF NOT EXISTS solicitacoes (
-    id                INTEGER PRIMARY KEY AUTOINCREMENT,
-    solicitante_nome  TEXT    NOT NULL,
-    solicitante_email TEXT    NOT NULL COLLATE NOCASE,
-    assunto           TEXT    NOT NULL,
-    detalhes          TEXT,
-    anexo             TEXT,
-    status            TEXT    NOT NULL DEFAULT 'pendente'
-                              CHECK (status IN ('pendente', 'aprovado', 'reprovado')),
-    observacao        TEXT,
-    revisado_por      TEXT,
-    revisado_em       TEXT,
-    criado_em         TEXT    NOT NULL DEFAULT (datetime('now', 'localtime'))
-  );
-`);
+const client = createClient({
+  url,
+  authToken, // ignorado no modo "file:"
+  intMode: 'number', // retorna inteiros como Number (evita BigInt em COUNT/rowid)
+});
 
 // --------------------------------------------------------------------------
-// Migração leve — colunas de origem (integração com Microsoft Forms via
-// Power Automate). Rodam apenas se as colunas ainda não existirem, então é
-// seguro reexecutar sobre um banco já criado.
+// Inicialização do schema (idempotente)
 //
-//   origem     -> de onde veio a solicitação ('forms', 'seed', 'manual'...)
-//   origem_id  -> id da resposta no Microsoft Forms (evita gravar duplicado
-//                 caso o Power Automate reenvie o mesmo evento)
+// Como as chamadas são assíncronas, não dá para criar as tabelas no topo do
+// módulo (como era com node:sqlite). Em vez disso, memorizamos uma Promise de
+// "banco pronto" e cada consulta espera por ela na 1ª vez. As instruções são
+// todas "IF NOT EXISTS" / ALTER condicional, então rodar de novo é seguro.
 // --------------------------------------------------------------------------
-const colunasSolic = db
-  .prepare('PRAGMA table_info(solicitacoes)')
-  .all()
-  .map((c) => c.name);
+let readyPromise = null;
 
-if (!colunasSolic.includes('origem')) {
-  db.exec('ALTER TABLE solicitacoes ADD COLUMN origem TEXT');
-}
-if (!colunasSolic.includes('origem_id')) {
-  db.exec('ALTER TABLE solicitacoes ADD COLUMN origem_id TEXT');
-}
-// anexos -> lista de documentos em JSON ([{ nome, url }]). A coluna antiga
-// "anexo" (texto único) continua preenchida com o 1º documento, por compat.
-if (!colunasSolic.includes('anexos')) {
-  db.exec('ALTER TABLE solicitacoes ADD COLUMN anexos TEXT');
+function ensureReady() {
+  if (!readyPromise) readyPromise = init();
+  return readyPromise;
 }
 
-// Índice único parcial: garante que cada resposta do Forms entre uma só vez,
-// mas permite vários registros sem origem_id (seed, testes manuais).
-db.exec(
-  `CREATE UNIQUE INDEX IF NOT EXISTS idx_solic_origem_id
-     ON solicitacoes(origem_id) WHERE origem_id IS NOT NULL`
-);
+async function init() {
+  await client.executeMultiple(`
+    CREATE TABLE IF NOT EXISTS usuarios (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      nome        TEXT    NOT NULL,
+      email       TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+      senha_hash  TEXT    NOT NULL,
+      papel       TEXT    NOT NULL CHECK (papel IN ('solicitante', 'responsavel', 'admin')),
+      ativo       INTEGER NOT NULL DEFAULT 1,
+      criado_em   TEXT    NOT NULL DEFAULT (datetime('now', 'localtime'))
+    );
 
-module.exports = db;
+    CREATE TABLE IF NOT EXISTS sessoes (
+      sid        TEXT PRIMARY KEY,
+      dados      TEXT NOT NULL,
+      expira_em  INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS solicitacoes (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      solicitante_nome  TEXT    NOT NULL,
+      solicitante_email TEXT    NOT NULL COLLATE NOCASE,
+      assunto           TEXT    NOT NULL,
+      detalhes          TEXT,
+      anexo             TEXT,
+      status            TEXT    NOT NULL DEFAULT 'pendente'
+                                CHECK (status IN ('pendente', 'aprovado', 'reprovado')),
+      observacao        TEXT,
+      revisado_por      TEXT,
+      revisado_em       TEXT,
+      criado_em         TEXT    NOT NULL DEFAULT (datetime('now', 'localtime'))
+    );
+  `);
+
+  // Migração leve — colunas de origem (integração com Microsoft Forms).
+  const colunas = (await client.execute('PRAGMA table_info(solicitacoes)')).rows.map((c) => c.name);
+
+  if (!colunas.includes('origem')) {
+    await client.execute('ALTER TABLE solicitacoes ADD COLUMN origem TEXT');
+  }
+  if (!colunas.includes('origem_id')) {
+    await client.execute('ALTER TABLE solicitacoes ADD COLUMN origem_id TEXT');
+  }
+  if (!colunas.includes('anexos')) {
+    await client.execute('ALTER TABLE solicitacoes ADD COLUMN anexos TEXT');
+  }
+
+  // Índice único parcial: cada resposta do Forms entra uma só vez.
+  await client.execute(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_solic_origem_id
+       ON solicitacoes(origem_id) WHERE origem_id IS NOT NULL`
+  );
+}
+
+// --------------------------------------------------------------------------
+// Wrapper estilo "prepared statement", porém assíncrono.
+//
+//   await prepare(sql).get(a, b)   -> primeira linha (objeto) ou undefined
+//   await prepare(sql).all(a, b)   -> array de linhas (objetos)
+//   await prepare(sql).run(a, b)   -> { changes, lastInsertRowid }
+//
+// As linhas são convertidas para objetos simples (só as colunas nomeadas),
+// para o restante do código poder fazer { ...row } com segurança.
+// --------------------------------------------------------------------------
+function linhaParaObjeto(row, columns) {
+  const obj = {};
+  for (const nome of columns) obj[nome] = row[nome];
+  return obj;
+}
+
+function prepare(sql) {
+  return {
+    async get(...args) {
+      await ensureReady();
+      const rs = await client.execute({ sql, args });
+      return rs.rows.length ? linhaParaObjeto(rs.rows[0], rs.columns) : undefined;
+    },
+    async all(...args) {
+      await ensureReady();
+      const rs = await client.execute({ sql, args });
+      return rs.rows.map((r) => linhaParaObjeto(r, rs.columns));
+    },
+    async run(...args) {
+      await ensureReady();
+      const rs = await client.execute({ sql, args });
+      return {
+        changes: rs.rowsAffected,
+        lastInsertRowid: rs.lastInsertRowid == null ? null : Number(rs.lastInsertRowid),
+      };
+    },
+  };
+}
+
+module.exports = { prepare, ensureReady, client };

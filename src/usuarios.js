@@ -11,14 +11,14 @@ const db = require('./db');
 const CUSTO_HASH = 10; // fator de custo do bcrypt (equilíbrio segurança/velocidade)
 
 /** Busca um usuário ativo pelo e-mail. Retorna undefined se não existir. */
-function buscarPorEmail(email) {
+async function buscarPorEmail(email) {
   return db
     .prepare('SELECT * FROM usuarios WHERE email = ? AND ativo = 1')
     .get(email);
 }
 
 /** Busca um usuário pelo id. */
-function buscarPorId(id) {
+async function buscarPorId(id) {
   return db.prepare('SELECT * FROM usuarios WHERE id = ?').get(id);
 }
 
@@ -26,9 +26,9 @@ function buscarPorId(id) {
  * Cria um novo usuário com a senha já criptografada.
  * Lança erro se o e-mail já existir (restrição UNIQUE do banco).
  */
-function criar({ nome, email, senha, papel }) {
+async function criar({ nome, email, senha, papel }) {
   const senhaHash = bcrypt.hashSync(senha, CUSTO_HASH);
-  const info = db
+  const info = await db
     .prepare(
       `INSERT INTO usuarios (nome, email, senha_hash, papel)
        VALUES (?, ?, ?, ?)`
@@ -41,8 +41,8 @@ function criar({ nome, email, senha, papel }) {
  * Valida e-mail + senha. Retorna o usuário (sem o hash) se as credenciais
  * baterem, ou null caso contrário.
  */
-function validarCredenciais(email, senha) {
-  const usuario = buscarPorEmail(email);
+async function validarCredenciais(email, senha) {
+  const usuario = await buscarPorEmail(email);
   if (!usuario) return null;
 
   const senhaConfere = bcrypt.compareSync(senha, usuario.senha_hash);
@@ -54,7 +54,7 @@ function validarCredenciais(email, senha) {
 }
 
 /** Lista todos os usuários (uso administrativo). */
-function listar() {
+async function listar() {
   return db
     .prepare('SELECT id, nome, email, papel, ativo, criado_em FROM usuarios ORDER BY nome')
     .all();

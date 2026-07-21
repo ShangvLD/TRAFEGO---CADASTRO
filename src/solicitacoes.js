@@ -103,32 +103,32 @@ function hidratar(row) {
 }
 
 /** Lista todas as solicitações, mais recentes primeiro. */
-function listar() {
-  return db
+async function listar() {
+  const linhas = await db
     .prepare('SELECT * FROM solicitacoes ORDER BY datetime(criado_em) DESC, id DESC')
-    .all()
-    .map(hidratar);
+    .all();
+  return linhas.map(hidratar);
 }
 
 /** Lista apenas as solicitações de um e-mail (área do solicitante). */
-function listarPorEmail(email) {
-  return db
+async function listarPorEmail(email) {
+  const linhas = await db
     .prepare(
       `SELECT * FROM solicitacoes
        WHERE solicitante_email = ?
        ORDER BY datetime(criado_em) DESC, id DESC`
     )
-    .all(email)
-    .map(hidratar);
+    .all(email);
+  return linhas.map(hidratar);
 }
 
 /** Busca uma solicitação pelo id. */
-function buscarPorId(id) {
-  return hidratar(db.prepare('SELECT * FROM solicitacoes WHERE id = ?').get(id));
+async function buscarPorId(id) {
+  return hidratar(await db.prepare('SELECT * FROM solicitacoes WHERE id = ?').get(id));
 }
 
 /** Busca uma solicitação pelo id da resposta do Forms (para evitar duplicar). */
-function buscarPorOrigemId(origem_id) {
+async function buscarPorOrigemId(origem_id) {
   if (!origem_id) return null;
   return db.prepare('SELECT * FROM solicitacoes WHERE origem_id = ?').get(origem_id);
 }
@@ -137,8 +137,8 @@ function buscarPorOrigemId(origem_id) {
  * Registra a decisão do responsável (aprovado/reprovado).
  * Retorna a solicitação atualizada, ou null se o id não existir.
  */
-function registrarDecisao(id, { status, observacao, revisadoPor }) {
-  const info = db
+async function registrarDecisao(id, { status, observacao, revisadoPor }) {
+  const info = await db
     .prepare(
       `UPDATE solicitacoes
        SET status = ?, observacao = ?, revisado_por = ?, revisado_em = datetime('now', 'localtime')
@@ -151,14 +151,14 @@ function registrarDecisao(id, { status, observacao, revisadoPor }) {
 }
 
 /** Cria uma nova solicitação (usado pelo seed, pelo webhook do Forms e por testes). */
-function criar({ solicitante_nome, solicitante_email, assunto, detalhes, anexo, anexos, origem, origem_id }) {
+async function criar({ solicitante_nome, solicitante_email, assunto, detalhes, anexo, anexos, origem, origem_id }) {
   // Aceita "anexos" (lista/array) e/ou "anexo" (texto/link/JSON), e normaliza.
   const lista = normalizarAnexos(anexos != null ? anexos : anexo);
   const anexosJson = lista.length ? JSON.stringify(lista) : null;
   // Mantém a coluna antiga "anexo" preenchida com o 1º documento (compat).
   const anexoLegado = lista.length ? lista[0].url || lista[0].nome : anexo || null;
 
-  const info = db
+  const info = await db
     .prepare(
       `INSERT INTO solicitacoes
          (solicitante_nome, solicitante_email, assunto, detalhes, anexo, anexos, origem, origem_id)
@@ -184,15 +184,15 @@ function criar({ solicitante_nome, solicitante_email, assunto, detalhes, anexo, 
  *
  * Retorna { solicitacao, duplicada }.
  */
-function registrarDoForms(dados) {
+async function registrarDoForms(dados) {
   const origem_id = dados.origem_id || null;
 
   if (origem_id) {
-    const existente = buscarPorOrigemId(origem_id);
-    if (existente) return { solicitacao: existente, duplicada: true };
+    const existente = await buscarPorOrigemId(origem_id);
+    if (existente) return { solicitacao: hidratar(existente), duplicada: true };
   }
 
-  const solicitacao = criar({ ...dados, origem: 'forms', origem_id });
+  const solicitacao = await criar({ ...dados, origem: 'forms', origem_id });
   return { solicitacao, duplicada: false };
 }
 
@@ -201,10 +201,10 @@ function registrarDoForms(dados) {
  * a data original e o status. Deduplica por origem_id (para poder rodar de novo
  * sem duplicar). Retorna { solicitacao, duplicada }.
  */
-function importar({ solicitante_nome, solicitante_email, assunto, detalhes, anexos, status, criado_em, origem_id }) {
+async function importar({ solicitante_nome, solicitante_email, assunto, detalhes, anexos, status, criado_em, origem_id }) {
   if (origem_id) {
-    const existente = buscarPorOrigemId(origem_id);
-    if (existente) return { solicitacao: existente, duplicada: true };
+    const existente = await buscarPorOrigemId(origem_id);
+    if (existente) return { solicitacao: hidratar(existente), duplicada: true };
   }
 
   const lista = normalizarAnexos(anexos);
@@ -212,7 +212,7 @@ function importar({ solicitante_nome, solicitante_email, assunto, detalhes, anex
   const anexoLegado = lista.length ? lista[0].url || lista[0].nome : null;
   const st = ['pendente', 'aprovado', 'reprovado'].includes(status) ? status : 'pendente';
 
-  const info = db
+  const info = await db
     .prepare(
       `INSERT INTO solicitacoes
          (solicitante_nome, solicitante_email, assunto, detalhes, anexo, anexos, status, origem, origem_id, criado_em)
@@ -229,18 +229,18 @@ function importar({ solicitante_nome, solicitante_email, assunto, detalhes, anex
       origem_id || null,
       criado_em || null
     );
-  return { solicitacao: buscarPorId(info.lastInsertRowid), duplicada: false };
+  return { solicitacao: await buscarPorId(info.lastInsertRowid), duplicada: false };
 }
 
 /** Exclui uma solicitação pelo id. Retorna true se removeu algo. */
-function excluir(id) {
-  const info = db.prepare('DELETE FROM solicitacoes WHERE id = ?').run(id);
+async function excluir(id) {
+  const info = await db.prepare('DELETE FROM solicitacoes WHERE id = ?').run(id);
   return info.changes > 0;
 }
 
 /** Conta quantas solicitações há em cada status (para os indicadores/KPIs). */
-function contarPorStatus() {
-  const linhas = db
+async function contarPorStatus() {
+  const linhas = await db
     .prepare('SELECT status, COUNT(*) AS total FROM solicitacoes GROUP BY status')
     .all();
 

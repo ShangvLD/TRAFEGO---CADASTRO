@@ -200,47 +200,51 @@ console.log(`Colunas:    ${cabecalhos.length}`);
 console.log(`Linhas:     ${dados.length}`);
 console.log(`Modo:       ${confirmar ? 'GRAVAR (--confirmar)' : 'DRY-RUN (nada será gravado)'}\n`);
 
-let ok = 0;
-let dup = 0;
-let semEmail = 0;
+(async () => {
+  let ok = 0;
+  let dup = 0;
+  let semEmail = 0;
 
-dados.forEach((linha, n) => {
-  // Ignora linhas totalmente vazias.
-  if (linha.every((c) => String(c ?? '').trim() === '')) return;
+  for (let n = 0; n < dados.length; n++) {
+    const linha = dados[n];
 
-  const s = montar(linha, n + 1);
+    // Ignora linhas totalmente vazias.
+    if (linha.every((c) => String(c ?? '').trim() === '')) continue;
 
-  if (!s.solicitante_email) {
-    semEmail++;
-    console.log(`  [linha ${n + 2}] IGNORADA — sem e-mail.`);
-    return;
-  }
+    const s = montar(linha, n + 1);
 
-  if (!confirmar) {
-    // Mostra as 5 primeiras como amostra, e conta o resto.
-    if (ok < 5) {
-      console.log(`  • ${s.criado_em || '(sem data → hoje)'} | ${s.solicitante_nome} <${s.solicitante_email}>`);
-      console.log(`      assunto: ${s.assunto}`);
-      console.log(`      anexos:  ${s.anexos.length}  ${s.anexos.map((a) => a.nome).join(', ')}`);
+    if (!s.solicitante_email) {
+      semEmail++;
+      console.log(`  [linha ${n + 2}] IGNORADA — sem e-mail.`);
+      continue;
     }
-    ok++;
-    return;
+
+    if (!confirmar) {
+      // Mostra as 5 primeiras como amostra, e conta o resto.
+      if (ok < 5) {
+        console.log(`  • ${s.criado_em || '(sem data → hoje)'} | ${s.solicitante_nome} <${s.solicitante_email}>`);
+        console.log(`      assunto: ${s.assunto}`);
+        console.log(`      anexos:  ${s.anexos.length}  ${s.anexos.map((a) => a.nome).join(', ')}`);
+      }
+      ok++;
+      continue;
+    }
+
+    const { duplicada } = await solicitacoes.importar(s);
+    if (duplicada) dup++;
+    else ok++;
   }
 
-  const { duplicada } = solicitacoes.importar(s);
-  if (duplicada) dup++;
-  else ok++;
-});
-
-console.log('\n----------------------------------------');
-if (confirmar) {
-  console.log(`  ✓ Importadas:  ${ok}`);
-  console.log(`  • Já existiam: ${dup}`);
-  console.log(`  • Sem e-mail:  ${semEmail}`);
-  console.log('\nPronto. Confira no painel do responsável.');
-} else {
-  console.log(`  Seriam importadas ~${ok} solicitações (amostra das 5 primeiras acima).`);
-  console.log(`  Sem e-mail (seriam ignoradas): ${semEmail}`);
-  console.log('\n  Confira as datas e o assunto acima. Se estiver certo, rode de novo com --confirmar.');
-}
-console.log('');
+  console.log('\n----------------------------------------');
+  if (confirmar) {
+    console.log(`  ✓ Importadas:  ${ok}`);
+    console.log(`  • Já existiam: ${dup}`);
+    console.log(`  • Sem e-mail:  ${semEmail}`);
+    console.log('\nPronto. Confira no painel do responsável.');
+  } else {
+    console.log(`  Seriam importadas ~${ok} solicitações (amostra das 5 primeiras acima).`);
+    console.log(`  Sem e-mail (seriam ignoradas): ${semEmail}`);
+    console.log('\n  Confira as datas e o assunto acima. Se estiver certo, rode de novo com --confirmar.');
+  }
+  console.log('');
+})();

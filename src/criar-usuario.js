@@ -37,14 +37,16 @@ if (senha.length < 6) {
   process.exit(1);
 }
 
-try {
-  const novo = usuarios.criar({ nome, email, senha, papel });
-  console.log(`✓ Usuário criado: ${novo.email} (${novo.papel})`);
-} catch (erro) {
-  if (String(erro.message).includes('UNIQUE')) {
-    console.error(`Já existe um usuário com o e-mail "${email}".`);
-  } else {
-    console.error('Erro ao criar usuário:', erro.message);
+(async () => {
+  try {
+    const novo = await usuarios.criar({ nome, email, senha, papel });
+    console.log(`✓ Usuário criado: ${novo.email} (${novo.papel})`);
+  } catch (erro) {
+    if (String(erro.message).includes('UNIQUE')) {
+      console.error(`Já existe um usuário com o e-mail "${email}".`);
+    } else {
+      console.error('Erro ao criar usuário:', erro.message);
+    }
+    process.exit(1);
   }
-  process.exit(1);
-}
+})();

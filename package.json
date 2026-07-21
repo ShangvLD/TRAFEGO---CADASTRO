@@ -5,13 +5,13 @@
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node --disable-warning=ExperimentalWarning server.js",
-    "dev": "node --disable-warning=ExperimentalWarning --watch server.js",
-    "seed": "node --disable-warning=ExperimentalWarning src/seed.js",
-    "criar-usuario": "node --disable-warning=ExperimentalWarning src/criar-usuario.js",
-    "consultar": "node --disable-warning=ExperimentalWarning src/consultar.js",
-    "testar-webhook": "node --disable-warning=ExperimentalWarning src/testar-webhook.js",
-    "importar": "node --disable-warning=ExperimentalWarning src/importar-csv.js"
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "seed": "node src/seed.js",
+    "criar-usuario": "node src/criar-usuario.js",
+    "consultar": "node src/consultar.js",
+    "testar-webhook": "node src/testar-webhook.js",
+    "importar": "node src/importar-csv.js"
   },
   "keywords": ["jomed", "cadastro", "trafego"],
   "author": "Jomed",
@@ -20,6 +20,7 @@
     "node": ">=22.5.0"
   },
   "dependencies": {
+    "@libsql/client": "^0.14.0",
     "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",

@@ -1,12 +1,17 @@
 /* ============================================================================
-   TRÁFEGO — Cadastro | Servidor (Fase 1)
+   TRÁFEGO — Cadastro | Servidor
 
    Responsável por:
      - servir os arquivos estáticos (CSS, imagens, JS do front)
      - autenticação por sessão (login / logout)
      - proteger as páginas por papel (solicitante x responsável)
+     - receber respostas do Microsoft Forms (webhook via Power Automate)
 
-   Suba com:  npm start   (ou npm run dev para recarregar ao salvar)
+   Roda de duas formas:
+     - LOCAL (npm start / npm run dev): sobe um servidor HTTP normal.
+     - VERCEL (serverless): o arquivo api/index.js importa este "app" e o
+       Vercel o executa a cada requisição. Por isso NÃO chamamos app.listen()
+       quando somos importados — só quando o arquivo é executado direto.
    ========================================================================== */
 
 require('dotenv').config();
@@ -16,13 +21,20 @@ const express = require('express');
 const session = require('express-session');
 const SqliteStore = require('./src/session-store')(session);
 
-require('./src/db'); // inicializa o banco (cria as tabelas na 1ª execução)
 const usuarios = require('./src/usuarios');
 const solicitacoes = require('./src/solicitacoes');
 const { exigirLogin, exigirPapel, paginaInicialPorPapel } = require('./src/auth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const EM_PRODUCAO = process.env.NODE_ENV === 'production';
+
+// Em produção (Vercel) o app fica atrás de um proxy HTTPS. Sem isto, o cookie
+// "secure" não é enviado e a sessão nunca gruda.
+if (EM_PRODUCAO) app.set('trust proxy', 1);
+
+// Pequeno auxiliar: deixa handlers assíncronos encaminharem erros ao Express.
+const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 // --------------------------------------------------------------------------
 // Middlewares base
@@ -31,6 +43,10 @@ const PORT = process.env.PORT || 3000;
 function capturarRaw(req, res, buf) {
   req.rawBody = buf && buf.length ? buf.toString('utf8') : '';
 }
+
+// Arquivos estáticos (CSS, imagens) ANTES da sessão: assim requisições de
+// assets não disparam uma consulta ao store de sessão a cada arquivo.
+app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(express.urlencoded({ extended: true })); // formulários HTML
 app.use(express.json({ strict: false, verify: capturarRaw })); // requisições fetch (login via JS) — strict:false aceita corpo em string
@@ -44,14 +60,11 @@ app.use(
     cookie: {
       httpOnly: true, // cookie inacessível a JavaScript do navegador
       sameSite: 'lax',
-      secure: false, // troque para true quando servir por HTTPS
+      secure: EM_PRODUCAO, // exige HTTPS em produção (Vercel serve por HTTPS)
       maxAge: 8 * 60 * 60 * 1000, // 8 horas
     },
   })
 );
-
-// Arquivos estáticos (CSS, imagens). Ficam públicos de propósito.
-app.use(express.static(path.join(__dirname, 'public')));
 
 const VIEWS = path.join(__dirname, 'views');
 
@@ -68,29 +81,32 @@ app.get('/login', (req, res) => {
 });
 
 // Processa o login (chamado via fetch pela tela de login).
-app.post('/api/login', (req, res) => {
-  const email = (req.body.email || '').trim();
-  const senha = req.body.senha || '';
+app.post(
+  '/api/login',
+  wrap(async (req, res) => {
+    const email = (req.body.email || '').trim();
+    const senha = req.body.senha || '';
 
-  if (!email || !senha) {
-    return res.status(400).json({ ok: false, erro: 'Informe e-mail e senha.' });
-  }
+    if (!email || !senha) {
+      return res.status(400).json({ ok: false, erro: 'Informe e-mail e senha.' });
+    }
 
-  const usuario = usuarios.validarCredenciais(email, senha);
-  if (!usuario) {
-    return res.status(401).json({ ok: false, erro: 'E-mail ou senha inválidos.' });
-  }
+    const usuario = await usuarios.validarCredenciais(email, senha);
+    if (!usuario) {
+      return res.status(401).json({ ok: false, erro: 'E-mail ou senha inválidos.' });
+    }
 
-  // Guarda apenas o essencial na sessão.
-  req.session.usuario = {
-    id: usuario.id,
-    nome: usuario.nome,
-    email: usuario.email,
-    papel: usuario.papel,
-  };
+    // Guarda apenas o essencial na sessão.
+    req.session.usuario = {
+      id: usuario.id,
+      nome: usuario.nome,
+      email: usuario.email,
+      papel: usuario.papel,
+    };
 
-  res.json({ ok: true, redirect: paginaInicialPorPapel(usuario.papel) });
-});
+    res.json({ ok: true, redirect: paginaInicialPorPapel(usuario.papel) });
+  })
+);
 
 // Encerra a sessão.
 app.post('/api/logout', (req, res) => {
@@ -132,42 +148,60 @@ app.get('/responsavel', exigirLogin, exigirPapel('responsavel', 'admin'), (req, 
 // --------------------------------------------------------------------------
 
 // Lista para o painel do responsável (com os indicadores).
-app.get('/api/solicitacoes', exigirLogin, exigirPapel('responsavel', 'admin'), (req, res) => {
-  res.json({
-    ok: true,
-    papel: req.session.usuario.papel, // o front usa para mostrar o botão de excluir só ao admin
-    resumo: solicitacoes.contarPorStatus(),
-    solicitacoes: solicitacoes.listar(),
-  });
-});
+app.get(
+  '/api/solicitacoes',
+  exigirLogin,
+  exigirPapel('responsavel', 'admin'),
+  wrap(async (req, res) => {
+    const [resumo, lista] = await Promise.all([
+      solicitacoes.contarPorStatus(),
+      solicitacoes.listar(),
+    ]);
+    res.json({
+      ok: true,
+      papel: req.session.usuario.papel, // o front usa para mostrar o botão de excluir só ao admin
+      resumo,
+      solicitacoes: lista,
+    });
+  })
+);
 
 // Exclui uma solicitação — SOMENTE admin.
-app.delete('/api/solicitacoes/:id', exigirLogin, exigirPapel('admin'), (req, res) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id)) {
-    return res.status(400).json({ ok: false, erro: 'Id inválido.' });
-  }
-  const removido = solicitacoes.excluir(id);
-  if (!removido) {
-    return res.status(404).json({ ok: false, erro: 'Solicitação não encontrada.' });
-  }
-  res.json({ ok: true });
-});
+app.delete(
+  '/api/solicitacoes/:id',
+  exigirLogin,
+  exigirPapel('admin'),
+  wrap(async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      return res.status(400).json({ ok: false, erro: 'Id inválido.' });
+    }
+    const removido = await solicitacoes.excluir(id);
+    if (!removido) {
+      return res.status(404).json({ ok: false, erro: 'Solicitação não encontrada.' });
+    }
+    res.json({ ok: true });
+  })
+);
 
 // Solicitações do próprio solicitante logado ("Minhas solicitações").
-app.get('/api/minhas-solicitacoes', exigirLogin, (req, res) => {
-  res.json({
-    ok: true,
-    solicitacoes: solicitacoes.listarPorEmail(req.session.usuario.email),
-  });
-});
+app.get(
+  '/api/minhas-solicitacoes',
+  exigirLogin,
+  wrap(async (req, res) => {
+    res.json({
+      ok: true,
+      solicitacoes: await solicitacoes.listarPorEmail(req.session.usuario.email),
+    });
+  })
+);
 
 // Registra a decisão (aprovar / reprovar) — apenas responsável/admin.
 app.post(
   '/api/solicitacoes/:id/decisao',
   exigirLogin,
   exigirPapel('responsavel', 'admin'),
-  (req, res) => {
+  wrap(async (req, res) => {
     const id = Number(req.params.id);
     const { status, observacao } = req.body;
 
@@ -175,7 +209,7 @@ app.post(
       return res.status(400).json({ ok: false, erro: 'Status inválido.' });
     }
 
-    const atualizada = solicitacoes.registrarDecisao(id, {
+    const atualizada = await solicitacoes.registrarDecisao(id, {
       status,
       observacao,
       revisadoPor: req.session.usuario.nome,
@@ -186,7 +220,7 @@ app.post(
     }
 
     res.json({ ok: true, solicitacao: atualizada });
-  }
+  })
 );
 
 // --------------------------------------------------------------------------
@@ -211,80 +245,84 @@ app.post(
 // "anexo placa 1") é reunido na lista de documentos. O valor de cada um pode
 // ser um link, texto, ou o JSON do campo de upload do Microsoft Forms.
 // --------------------------------------------------------------------------
-app.post('/api/forms/webhook', express.json({ type: () => true, strict: false, verify: capturarRaw }), (req, res) => {
-  // O express.json acima (type: () => true) garante que o corpo seja lido como
-  // JSON mesmo que o Power Automate não envie o cabeçalho Content-Type.
-  const segredoEsperado = process.env.FORMS_WEBHOOK_SECRET;
+app.post(
+  '/api/forms/webhook',
+  express.json({ type: () => true, strict: false, verify: capturarRaw }),
+  wrap(async (req, res) => {
+    // O express.json acima (type: () => true) garante que o corpo seja lido como
+    // JSON mesmo que o Power Automate não envie o cabeçalho Content-Type.
+    const segredoEsperado = process.env.FORMS_WEBHOOK_SECRET;
 
-  if (!segredoEsperado) {
-    return res
-      .status(503)
-      .json({ ok: false, erro: 'Webhook não configurado (defina FORMS_WEBHOOK_SECRET no .env).' });
-  }
-
-  if (req.get('x-webhook-secret') !== segredoEsperado) {
-    return res.status(401).json({ ok: false, erro: 'Segredo inválido.' });
-  }
-
-  // Normaliza o corpo: alguns fluxos do Power Automate enviam o JSON como
-  // TEXTO (string) em vez de objeto. Nesse caso, o req.body vem como string —
-  // então reinterpretamos como JSON aqui para não "perder" os campos.
-  let b = req.body || {};
-  if (typeof b === 'string') {
-    try {
-      b = JSON.parse(b);
-    } catch {
-      b = {};
+    if (!segredoEsperado) {
+      return res
+        .status(503)
+        .json({ ok: false, erro: 'Webhook não configurado (defina FORMS_WEBHOOK_SECRET no .env).' });
     }
-  }
-  if (typeof b !== 'object' || b === null) b = {};
 
-  const solicitante_email = String(b.solicitante_email || '').trim();
-  const assunto = String(b.assunto || '').trim();
-  let solicitante_nome = String(b.solicitante_nome || '').trim();
+    if (req.get('x-webhook-secret') !== segredoEsperado) {
+      return res.status(401).json({ ok: false, erro: 'Segredo inválido.' });
+    }
 
-  // Obrigatórios: e-mail e assunto. O nome é opcional — se não vier, usamos a
-  // parte antes do "@" do e-mail (o Forms nem sempre coleta o nome de quem responde).
-  if (!solicitante_email || !assunto) {
-    return res.status(400).json({
-      ok: false,
-      erro: 'Campos obrigatórios ausentes: solicitante_email e assunto.',
-      // Diagnóstico: mostra o que realmente chegou, para ajustar o fluxo.
-      _debug: {
-        tipo_corpo: typeof req.body,
-        chaves_recebidas: b && typeof b === 'object' ? Object.keys(b) : null,
-        raw_tamanho: req.rawBody ? req.rawBody.length : 0,
-        raw_amostra: (req.rawBody || '').slice(0, 400),
-        content_type: req.get('content-type') || null,
-      },
+    // Normaliza o corpo: alguns fluxos do Power Automate enviam o JSON como
+    // TEXTO (string) em vez de objeto. Nesse caso, o req.body vem como string —
+    // então reinterpretamos como JSON aqui para não "perder" os campos.
+    let b = req.body || {};
+    if (typeof b === 'string') {
+      try {
+        b = JSON.parse(b);
+      } catch {
+        b = {};
+      }
+    }
+    if (typeof b !== 'object' || b === null) b = {};
+
+    const solicitante_email = String(b.solicitante_email || '').trim();
+    const assunto = String(b.assunto || '').trim();
+    let solicitante_nome = String(b.solicitante_nome || '').trim();
+
+    // Obrigatórios: e-mail e assunto. O nome é opcional — se não vier, usamos a
+    // parte antes do "@" do e-mail (o Forms nem sempre coleta o nome de quem responde).
+    if (!solicitante_email || !assunto) {
+      return res.status(400).json({
+        ok: false,
+        erro: 'Campos obrigatórios ausentes: solicitante_email e assunto.',
+        // Diagnóstico: mostra o que realmente chegou, para ajustar o fluxo.
+        _debug: {
+          tipo_corpo: typeof req.body,
+          chaves_recebidas: b && typeof b === 'object' ? Object.keys(b) : null,
+          raw_tamanho: req.rawBody ? req.rawBody.length : 0,
+          raw_amostra: (req.rawBody || '').slice(0, 400),
+          content_type: req.get('content-type') || null,
+        },
+      });
+    }
+    if (!solicitante_nome) {
+      solicitante_nome = solicitante_email.split('@')[0] || solicitante_email;
+    }
+
+    // Reúne anexos de QUALQUER campo cujo nome comece com "anexo" — assim o fluxo
+    // pode ter um campo por upload ("anexo cnh", "anexo placa 1", ...), além de
+    // "anexo"/"anexos". Cada valor pode ser link, texto ou o JSON do Forms.
+    let anexos = [];
+    for (const [chave, valor] of Object.entries(b)) {
+      if (/^anexo/i.test(chave)) {
+        anexos = anexos.concat(solicitacoes.normalizarAnexos(valor));
+      }
+    }
+
+    const { solicitacao, duplicada } = await solicitacoes.registrarDoForms({
+      solicitante_nome,
+      solicitante_email,
+      assunto,
+      detalhes: b.detalhes,
+      anexos,
+      origem_id: b.origem_id,
     });
-  }
-  if (!solicitante_nome) {
-    solicitante_nome = solicitante_email.split('@')[0] || solicitante_email;
-  }
 
-  // Reúne anexos de QUALQUER campo cujo nome comece com "anexo" — assim o fluxo
-  // pode ter um campo por upload ("anexo cnh", "anexo placa 1", ...), além de
-  // "anexo"/"anexos". Cada valor pode ser link, texto ou o JSON do Forms.
-  let anexos = [];
-  for (const [chave, valor] of Object.entries(b)) {
-    if (/^anexo/i.test(chave)) {
-      anexos = anexos.concat(solicitacoes.normalizarAnexos(valor));
-    }
-  }
-
-  const { solicitacao, duplicada } = solicitacoes.registrarDoForms({
-    solicitante_nome,
-    solicitante_email,
-    assunto,
-    detalhes: b.detalhes,
-    anexos,
-    origem_id: b.origem_id,
-  });
-
-  // 200 mesmo quando duplicada: o Power Automate considera sucesso e não reenvia.
-  res.json({ ok: true, duplicada, id: solicitacao.id });
-});
+    // 200 mesmo quando duplicada: o Power Automate considera sucesso e não reenvia.
+    res.json({ ok: true, duplicada, id: solicitacao.id });
+  })
+);
 
 // --------------------------------------------------------------------------
 // Tratamento de corpo JSON malformado (ex.: Power Automate quebrando o JSON
@@ -294,12 +332,21 @@ app.use((err, req, res, next) => {
   if (err && (err.type === 'entity.parse.failed' || err instanceof SyntaxError)) {
     return res.status(400).json({ ok: false, erro: 'Corpo JSON inválido (verifique o campo de anexo no fluxo).' });
   }
-  next(err);
+  // Qualquer outro erro (ex.: falha ao falar com o banco): loga e devolve 500.
+  console.error('Erro não tratado:', err);
+  if (res.headersSent) return next(err);
+  res.status(500).json({ ok: false, erro: 'Erro interno.' });
 });
 
 // --------------------------------------------------------------------------
-// Sobe o servidor
+// Sobe o servidor SOMENTE quando executado direto (desenvolvimento local).
+// No Vercel, este arquivo é apenas IMPORTADO (por api/index.js), então o
+// listen não roda — o Vercel cuida de receber as requisições.
 // --------------------------------------------------------------------------
-app.listen(PORT, () => {
-  console.log(`\n  TRÁFEGO — Cadastro rodando em  http://localhost:${PORT}\n`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`\n  TRÁFEGO — Cadastro rodando em  http://localhost:${PORT}\n`);
+  });
+}
+
+module.exports = app;

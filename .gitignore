@@ -16,6 +16,9 @@ node_modules/
 dist/
 build/
 
+# === Vercel (metadados locais do deploy) ===
+.vercel
+
 # === Logs e temporários ===
 *.log
 *.tmp
