@@ -80,6 +80,10 @@
                 <div class="kpi-label"><span class="material-symbols-rounded">cancel</span> Reprovadas</div>
                 <div class="kpi-value" id="kpi-reprovado">—</div>
             </div>
+            <div class="kpi">
+                <div class="kpi-label"><span class="material-symbols-rounded">rule</span> Parciais</div>
+                <div class="kpi-value" id="kpi-parcial">—</div>
+            </div>
         </div>
 
         <!-- Lista de solicitações -->
@@ -142,6 +146,7 @@
         // Guarda as solicitações carregadas para abrir o detalhe sem novo fetch.
         let solicitacoesCache = [];
         let ehAdmin = false; // controla a exibição do botão de excluir
+        let idAtual = null;  // id da solicitação aberta no modal
 
         // Formata "2026-07-13 15:40:12" -> "13/07/2026"
         function formatarData(iso) {
@@ -161,6 +166,7 @@
             pendente:  '<span class="badge is-warning">Pendente</span>',
             aprovado:  '<span class="badge is-success">Aprovado</span>',
             reprovado: '<span class="badge is-danger">Reprovado</span>',
+            parcial:   '<span class="badge is-parcial">Parcial</span>',
         };
 
         // Cores dos clientes/operações. Marcas conhecidas têm cor fixa; as demais
@@ -302,6 +308,41 @@
             return `<div class="detalhe-linha"><span class="detalhe-rot">${rot}</span><span class="detalhe-val">${val}</span></div>`;
         }
 
+        // Seção "Decisão por cliente": um bloco por cliente com o selo atual e
+        // os botões Aprovar/Reprovar individuais.
+        function decisaoPorCliente(s) {
+            const clientes = s.clientes || [];
+            if (!clientes.length) return '<p class="modal-vazio">Sem clientes nesta solicitação.</p>';
+            const decisoes = s.decisoes || {};
+            const linhas = clientes.map((c) => {
+                const d = decisoes[c] || {};
+                const st = d.status || 'pendente';
+                const cor = corCliente(c.toUpperCase());
+                const info = (st !== 'pendente' && (d.por || d.em))
+                    ? `<div class="cli-info">por ${esc(d.por || '—')}${d.em ? ' · ' + formatarData(d.em) : ''}</div>`
+                    : '';
+                const obs = d.obs
+                    ? `<div class="cli-obs"><span class="material-symbols-rounded">chat</span>${esc(d.obs)}</div>`
+                    : '';
+                return `<div class="cli-decisao" data-cliente="${esc(c)}">
+                    <div class="cli-topo">
+                        <span class="cliente-chip" style="--chip:${cor}">${esc(c)}</span>
+                        ${BADGE[st] || ''}
+                    </div>
+                    <div class="cli-acoes">
+                        <button type="button" class="btn-cli aprovar${st === 'aprovado' ? ' ativo' : ''}" data-cliente="${esc(c)}" data-status="aprovado">
+                            <span class="material-symbols-rounded">check</span> Aprovar
+                        </button>
+                        <button type="button" class="btn-cli reprovar${st === 'reprovado' ? ' ativo' : ''}" data-cliente="${esc(c)}" data-status="reprovado">
+                            <span class="material-symbols-rounded">close</span> Reprovar
+                        </button>
+                    </div>
+                    ${info}${obs}
+                </div>`;
+            }).join('');
+            return `<div class="cli-lista">${linhas}</div>`;
+        }
+
         // Conteúdo do modal de detalhes.
         function detalheHtml(s) {
             const anexos = Array.isArray(s.anexos) ? s.anexos : [];
@@ -309,25 +350,23 @@
                 ? `<div class="anexo-lista">${anexos.map(anexoCard).join('')}</div>`
                 : '<p class="modal-vazio">Nenhum documento anexado nesta solicitação.</p>';
 
-            const observacao = s.observacao ? linhaDetalhe('Observação', esc(s.observacao)) : '';
-            const revisao = s.status === 'pendente'
-                ? ''
-                : linhaDetalhe('Revisado por', `${esc(s.revisado_por || '—')}${s.revisado_em ? ' · ' + formatarData(s.revisado_em) : ''}`);
-
             return `
                 <div class="detalhe-topo">
                     <div>
                         <strong class="detalhe-nome">${esc(s.solicitante_nome)}</strong>
                         <div class="detalhe-email">${esc(s.solicitante_email)}</div>
                     </div>
-                    ${BADGE[s.status] || esc(s.status)}
+                    ${BADGE[s.status_geral] || esc(s.status_geral || s.status)}
                 </div>
                 <div class="detalhe-grid">
                     ${linhaDetalhe('Data', formatarData(s.criado_em))}
                     ${linhaDetalhe('Assunto', clientesChips(s.assunto))}
-                    ${observacao}
-                    ${revisao}
                 </div>
+                <h4 class="detalhe-secao">
+                    <span class="material-symbols-rounded" style="vertical-align:-5px;color:var(--primary)">how_to_reg</span>
+                    Decisão por cliente
+                </h4>
+                ${decisaoPorCliente(s)}
                 <h4 class="detalhe-secao">
                     <span class="material-symbols-rounded" style="vertical-align:-5px;color:var(--primary)">list_alt</span>
                     Detalhes
@@ -348,20 +387,19 @@
                     <span class="material-symbols-rounded">delete</span> Excluir
                 </button>`);
             }
-            if (s.status === 'pendente') {
-                botoes.push(`<button class="btn-modal reprovar" data-id="${s.id}" type="button">
-                    <span class="material-symbols-rounded">close</span> Reprovar
-                </button>`);
-                botoes.push(`<button class="btn-modal aprovar" data-id="${s.id}" type="button">
-                    <span class="material-symbols-rounded">check</span> Aprovar
-                </button>`);
-            }
+            botoes.push(`<button class="btn-modal reprovar" data-id="${s.id}" data-todos="1" type="button">
+                <span class="material-symbols-rounded">close</span> Reprovar todos
+            </button>`);
+            botoes.push(`<button class="btn-modal aprovar" data-id="${s.id}" data-todos="1" type="button">
+                <span class="material-symbols-rounded">check</span> Aprovar todos
+            </button>`);
             return botoes.join('');
         }
 
         function abrirModal(id) {
             const s = solicitacoesCache.find((x) => String(x.id) === String(id));
             if (!s) return;
+            idAtual = s.id;
             modalBody.innerHTML = detalheHtml(s);
             modalFooter.innerHTML = footerHtml(s);
             overlay.hidden = false;
@@ -370,21 +408,14 @@
 
         function fecharModal() {
             overlay.hidden = true;
+            idAtual = null;
             document.body.style.overflow = '';
         }
 
         function linhaHtml(s) {
-            const verBtn = `<button class="btn-acao ver" data-id="${s.id}" title="Ver detalhes">
+            const verBtn = `<button class="btn-acao ver" data-id="${s.id}" title="Ver e decidir">
                                 <span class="material-symbols-rounded">visibility</span>
                             </button>`;
-            const decisao = s.status === 'pendente'
-                ? `<button class="btn-acao aprovar" data-id="${s.id}" title="Aprovar">
-                       <span class="material-symbols-rounded">check</span>
-                   </button>
-                   <button class="btn-acao reprovar" data-id="${s.id}" title="Reprovar">
-                       <span class="material-symbols-rounded">close</span>
-                   </button>`
-                : `<span style="color:var(--text-secondary);font-size:0.82rem">por ${esc(s.revisado_por || '—')}</span>`;
 
             // Excluir: só aparece para o admin.
             const excluirBtn = ehAdmin
@@ -398,8 +429,8 @@
                 <td>${esc(s.solicitante_nome)}<br><small style="color:var(--text-secondary)">${esc(s.solicitante_email)}</small></td>
                 <td>${clientesChips(s.assunto)}</td>
                 <td>${anexosResumo(s.anexos)}</td>
-                <td>${BADGE[s.status] || esc(s.status)}</td>
-                <td><div style="display:flex;gap:6px;align-items:center">${verBtn}${decisao}${excluirBtn}</div></td>
+                <td>${BADGE[s.status_geral] || esc(s.status_geral || s.status)}</td>
+                <td><div style="display:flex;gap:6px;align-items:center">${verBtn}${excluirBtn}</div></td>
             </tr>`;
         }
 
@@ -408,6 +439,7 @@
             document.getElementById('kpi-pendente').textContent = r.pendente ?? 0;
             document.getElementById('kpi-aprovado').textContent = r.aprovado ?? 0;
             document.getElementById('kpi-reprovado').textContent = r.reprovado ?? 0;
+            document.getElementById('kpi-parcial').textContent = r.parcial ?? 0;
         }
 
         async function carregar() {
@@ -441,23 +473,60 @@
             }
         }
 
-        async function decidir(id, status) {
+        // Recarrega lista + KPIs e, se o modal estiver aberto, re-renderiza-o
+        // com os dados atualizados (para o modal refletir a decisão na hora).
+        async function recarregar(idModal) {
+            await carregar();
+            if (idModal != null && !overlay.hidden) {
+                const s = solicitacoesCache.find((x) => String(x.id) === String(idModal));
+                if (s) {
+                    modalBody.innerHTML = detalheHtml(s);
+                    modalFooter.innerHTML = footerHtml(s);
+                } else {
+                    fecharModal();
+                }
+            }
+        }
+
+        async function postDecisao(url, corpoJson) {
+            const resp = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(corpoJson),
+            });
+            if (resp.status === 401) { window.location.href = '/login'; return null; }
+            return resp.json();
+        }
+
+        // Decisão de UM cliente da solicitação.
+        async function decidirCliente(id, cliente, status) {
             let observacao = '';
             if (status === 'reprovado') {
-                observacao = prompt('Motivo da reprovação (opcional):') || '';
+                observacao = prompt(`Motivo da reprovação de "${cliente}" (opcional):`) || '';
             }
             try {
-                const resp = await fetch(`/api/solicitacoes/${id}/decisao`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ status, observacao }),
-                });
-                const dados = await resp.json();
-                if (dados.ok) {
-                    carregar(); // recarrega a lista e os KPIs
-                } else {
-                    alert(dados.erro || 'Não foi possível registrar a decisão.');
-                }
+                const dados = await postDecisao(`/api/solicitacoes/${id}/cliente-decisao`, { cliente, status, observacao });
+                if (!dados) return;
+                if (dados.ok) recarregar(id);
+                else alert(dados.erro || 'Não foi possível registrar a decisão.');
+            } catch (e) {
+                alert('Erro de conexão com o servidor.');
+            }
+        }
+
+        // Aplica a mesma decisão a TODOS os clientes.
+        async function decidirTodos(id, status) {
+            const acao = status === 'aprovado' ? 'APROVAR todos os clientes' : 'REPROVAR todos os clientes';
+            if (!confirm(`Deseja ${acao} desta solicitação?`)) return;
+            let observacao = '';
+            if (status === 'reprovado') {
+                observacao = prompt('Motivo da reprovação (opcional, vale para todos):') || '';
+            }
+            try {
+                const dados = await postDecisao(`/api/solicitacoes/${id}/decisao-todos`, { status, observacao });
+                if (!dados) return;
+                if (dados.ok) recarregar(id);
+                else alert(dados.erro || 'Não foi possível registrar a decisão.');
             } catch (e) {
                 alert('Erro de conexão com o servidor.');
             }
@@ -479,29 +548,33 @@
             }
         }
 
-        // Clique na tabela: botões de ação ou abrir o detalhe da linha.
+        // Clique na tabela: ver detalhes / excluir, ou abrir o detalhe da linha.
         corpo.addEventListener('click', (e) => {
             const btn = e.target.closest('.btn-acao');
             if (btn) {
                 const id = btn.dataset.id;
-                if (btn.classList.contains('ver')) { abrirModal(id); return; }
                 if (btn.classList.contains('excluir')) { excluir(id); return; }
-                decidir(id, btn.classList.contains('aprovar') ? 'aprovado' : 'reprovado');
+                abrirModal(id); // "ver"
                 return;
             }
             const tr = e.target.closest('tr[data-id]');
             if (tr) abrirModal(tr.dataset.id);
         });
 
-        // Ações dentro do modal (excluir / aprovar / reprovar).
+        // Botões de decisão POR CLIENTE (dentro do corpo do modal).
+        modalBody.addEventListener('click', (e) => {
+            const btn = e.target.closest('.btn-cli');
+            if (!btn || idAtual == null) return;
+            decidirCliente(idAtual, btn.dataset.cliente, btn.dataset.status);
+        });
+
+        // Rodapé do modal: excluir / aprovar todos / reprovar todos.
         modalFooter.addEventListener('click', (e) => {
             const btn = e.target.closest('.btn-modal');
             if (!btn) return;
             const id = btn.dataset.id;
             if (btn.classList.contains('excluir')) { excluir(id); return; }
-            const status = btn.classList.contains('aprovar') ? 'aprovado' : 'reprovado';
-            fecharModal();
-            decidir(id, status);
+            decidirTodos(id, btn.classList.contains('aprovar') ? 'aprovado' : 'reprovado');
         });
 
         // Fechar o modal.

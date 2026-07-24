@@ -104,6 +104,13 @@ async function init() {
   if (!colunas.includes('anexos')) {
     await client.execute('ALTER TABLE solicitacoes ADD COLUMN anexos TEXT');
   }
+  // decisoes -> JSON com a decisão por cliente/operação:
+  //   { "MERCADO LIVRE": { status, obs, por, em }, "SHOPEE": { ... } }
+  // Cada solicitação lista vários clientes no "assunto" (um por pesquisa do
+  // Forms), e cada um pode ser aprovado/reprovado individualmente.
+  if (!colunas.includes('decisoes')) {
+    await client.execute('ALTER TABLE solicitacoes ADD COLUMN decisoes TEXT');
+  }
 
   // Índice único parcial: cada resposta do Forms entra uma só vez.
   await client.execute(

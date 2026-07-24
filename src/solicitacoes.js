@@ -86,6 +86,65 @@ function normalizarAnexos(entrada) {
  * precisar interpretar. Usa a coluna nova "anexos" (JSON) e, se estiver vazia
  * (linhas antigas), cai para a coluna antiga "anexo".
  */
+// ---------------------------------------------------------------------------
+// Clientes / operações e decisão por cliente
+//
+// O "assunto" traz vários clientes separados por "|" (um por pesquisa do
+// Forms). Cada um pode ser aprovado/reprovado separadamente; guardamos isso
+// na coluna "decisoes" (JSON): { "<cliente>": { status, obs, por, em } }.
+// ---------------------------------------------------------------------------
+
+/** Extrai a lista de clientes do assunto (sem vazios, sem repetir). */
+function parseClientes(assunto) {
+  const vistos = new Set();
+  const lista = [];
+  for (const parte of String(assunto || '').split('|')) {
+    const nome = parte.trim();
+    if (!nome) continue;
+    const chave = nome.toUpperCase();
+    if (vistos.has(chave)) continue;
+    vistos.add(chave);
+    lista.push(nome);
+  }
+  return lista;
+}
+
+/** Lê o JSON de decisões de uma linha (objeto vazio se não houver). */
+function parseDecisoes(row) {
+  if (!row || !row.decisoes) return {};
+  try {
+    const d = JSON.parse(row.decisoes);
+    return d && typeof d === 'object' ? d : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Status "geral" da solicitação a partir das decisões por cliente:
+ *   pendente  -> algum cliente ainda sem decisão
+ *   aprovado  -> todos aprovados
+ *   reprovado -> todos reprovados
+ *   parcial   -> misto (uns aprovados, outros reprovados)
+ * Sem clientes ou sem nenhuma decisão, cai para o status legado da linha.
+ */
+function statusGeral(clientes, decisoes, statusLegado) {
+  if (!clientes.length) return statusLegado || 'pendente';
+  if (Object.keys(decisoes).length === 0) return statusLegado || 'pendente';
+
+  let aprov = 0, reprov = 0, pend = 0;
+  for (const c of clientes) {
+    const st = decisoes[c] && decisoes[c].status;
+    if (st === 'aprovado') aprov++;
+    else if (st === 'reprovado') reprov++;
+    else pend++;
+  }
+  if (pend > 0) return 'pendente';
+  if (reprov === 0) return 'aprovado';
+  if (aprov === 0) return 'reprovado';
+  return 'parcial';
+}
+
 function hidratar(row) {
   if (!row) return row;
   let anexos = [];
@@ -99,7 +158,15 @@ function hidratar(row) {
   if ((!anexos || !anexos.length) && row.anexo) {
     anexos = normalizarAnexos(row.anexo);
   }
-  return { ...row, anexos: Array.isArray(anexos) ? anexos : [] };
+  const clientes = parseClientes(row.assunto);
+  const decisoes = parseDecisoes(row);
+  return {
+    ...row,
+    anexos: Array.isArray(anexos) ? anexos : [],
+    clientes,
+    decisoes,
+    status_geral: statusGeral(clientes, decisoes, row.status),
+  };
 }
 
 /** Lista todas as solicitações, mais recentes primeiro. */
@@ -238,18 +305,79 @@ async function excluir(id) {
   return info.changes > 0;
 }
 
-/** Conta quantas solicitações há em cada status (para os indicadores/KPIs). */
+/**
+ * Conta as solicitações por status GERAL (considerando a decisão por cliente).
+ * Inclui "parcial" (decisões mistas). Calculado em JS porque o status geral
+ * depende do JSON de decisões, não de uma única coluna.
+ */
 async function contarPorStatus() {
   const linhas = await db
-    .prepare('SELECT status, COUNT(*) AS total FROM solicitacoes GROUP BY status')
+    .prepare('SELECT status, assunto, decisoes FROM solicitacoes')
     .all();
 
-  const resumo = { total: 0, pendente: 0, aprovado: 0, reprovado: 0 };
+  const resumo = { total: 0, pendente: 0, aprovado: 0, reprovado: 0, parcial: 0 };
   for (const l of linhas) {
-    resumo[l.status] = l.total;
-    resumo.total += l.total;
+    const clientes = parseClientes(l.assunto);
+    const sg = statusGeral(clientes, parseDecisoes(l), l.status);
+    if (resumo[sg] == null) resumo[sg] = 0;
+    resumo[sg]++;
+    resumo.total++;
   }
   return resumo;
+}
+
+/** Horário atual do banco ("AAAA-MM-DD HH:MM:SS"), p/ carimbar as decisões. */
+async function agoraDoBanco() {
+  const r = await db.prepare("SELECT datetime('now', 'localtime') AS agora").get();
+  return r ? r.agora : null;
+}
+
+/** Grava a coluna decisoes e sincroniza o status legado com o status geral. */
+async function salvarDecisoes(id, clientes, decisoes, revisadoPor, agora) {
+  const sg = statusGeral(clientes, decisoes, 'pendente');
+  // A coluna "status" só aceita pendente/aprovado/reprovado (CHECK). Para o
+  // caso "parcial", guardamos "pendente" na coluna legada — o status geral
+  // real é recalculado a partir de "decisoes" na leitura.
+  const statusLegado = ['aprovado', 'reprovado'].includes(sg) ? sg : 'pendente';
+  await db
+    .prepare(
+      `UPDATE solicitacoes
+       SET decisoes = ?, status = ?, revisado_por = ?, revisado_em = ?
+       WHERE id = ?`
+    )
+    .run(JSON.stringify(decisoes), statusLegado, revisadoPor || null, agora, id);
+  return buscarPorId(id);
+}
+
+/**
+ * Registra a decisão de UM cliente/operação da solicitação.
+ * Retorna a solicitação atualizada, ou null se o id/cliente não existir.
+ */
+async function registrarDecisaoCliente(id, { cliente, status, observacao, revisadoPor }) {
+  const s = await buscarPorId(id);
+  if (!s) return null;
+  const alvo = (s.clientes || []).find((c) => c.toUpperCase() === String(cliente || '').toUpperCase());
+  if (!alvo) return null;
+
+  const decisoes = { ...(s.decisoes || {}) };
+  const agora = await agoraDoBanco();
+  decisoes[alvo] = { status, obs: observacao || '', por: revisadoPor || '', em: agora };
+  return salvarDecisoes(id, s.clientes, decisoes, revisadoPor, agora);
+}
+
+/**
+ * Aplica a MESMA decisão a todos os clientes da solicitação (Aprovar/Reprovar
+ * todos). Retorna a solicitação atualizada, ou null se o id não existir.
+ */
+async function registrarDecisaoTodos(id, { status, observacao, revisadoPor }) {
+  const s = await buscarPorId(id);
+  if (!s) return null;
+  const agora = await agoraDoBanco();
+  const decisoes = { ...(s.decisoes || {}) };
+  for (const c of s.clientes || []) {
+    decisoes[c] = { status, obs: observacao || '', por: revisadoPor || '', em: agora };
+  }
+  return salvarDecisoes(id, s.clientes, decisoes, revisadoPor, agora);
 }
 
 module.exports = {
@@ -258,6 +386,8 @@ module.exports = {
   buscarPorId,
   buscarPorOrigemId,
   registrarDecisao,
+  registrarDecisaoCliente,
+  registrarDecisaoTodos,
   criar,
   registrarDoForms,
   importar,

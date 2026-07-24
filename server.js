@@ -223,6 +223,62 @@ app.post(
   })
 );
 
+// Decisão de UM cliente/operação da solicitação (aprovar/reprovar individual).
+app.post(
+  '/api/solicitacoes/:id/cliente-decisao',
+  exigirLogin,
+  exigirPapel('responsavel', 'admin'),
+  wrap(async (req, res) => {
+    const id = Number(req.params.id);
+    const { cliente, status, observacao } = req.body;
+
+    if (!cliente || !String(cliente).trim()) {
+      return res.status(400).json({ ok: false, erro: 'Cliente não informado.' });
+    }
+    if (!['aprovado', 'reprovado'].includes(status)) {
+      return res.status(400).json({ ok: false, erro: 'Status inválido.' });
+    }
+
+    const atualizada = await solicitacoes.registrarDecisaoCliente(id, {
+      cliente,
+      status,
+      observacao,
+      revisadoPor: req.session.usuario.nome,
+    });
+
+    if (!atualizada) {
+      return res.status(404).json({ ok: false, erro: 'Solicitação ou cliente não encontrado.' });
+    }
+    res.json({ ok: true, solicitacao: atualizada });
+  })
+);
+
+// Aplica a mesma decisão a TODOS os clientes (Aprovar todos / Reprovar todos).
+app.post(
+  '/api/solicitacoes/:id/decisao-todos',
+  exigirLogin,
+  exigirPapel('responsavel', 'admin'),
+  wrap(async (req, res) => {
+    const id = Number(req.params.id);
+    const { status, observacao } = req.body;
+
+    if (!['aprovado', 'reprovado'].includes(status)) {
+      return res.status(400).json({ ok: false, erro: 'Status inválido.' });
+    }
+
+    const atualizada = await solicitacoes.registrarDecisaoTodos(id, {
+      status,
+      observacao,
+      revisadoPor: req.session.usuario.nome,
+    });
+
+    if (!atualizada) {
+      return res.status(404).json({ ok: false, erro: 'Solicitação não encontrada.' });
+    }
+    res.json({ ok: true, solicitacao: atualizada });
+  })
+);
+
 // --------------------------------------------------------------------------
 // Webhook do Microsoft Forms (via Power Automate)
 //
