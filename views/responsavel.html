@@ -213,21 +213,72 @@
             return `${icone} ${n} ${n === 1 ? 'arquivo' : 'arquivos'}`;
         }
 
+        // O anexo é uma imagem? (para mostrar miniatura em vez de ícone genérico)
+        function ehImagem(nome, url) {
+            const alvo = String(nome || url || '').toLowerCase();
+            return /\.(png|jpe?g|gif|webp|bmp|heic)(\?|$)/.test(alvo);
+        }
+
+        // O anexo parece a foto do condutor/motorista? (pelo nome do arquivo)
+        function ehFotoCondutor(nome) {
+            return /condutor|motorista|foto/i.test(String(nome || ''));
+        }
+
+        // Deixa e-mail/link clicável dentro do valor de um detalhe.
+        function valorDetalhe(val) {
+            if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) return `<a href="mailto:${esc(val)}">${esc(val)}</a>`;
+            return esc(val);
+        }
+
+        // Quebra "Condutor: X | CPF: Y | Contato: ." em linhas organizadas,
+        // na ordem em que vieram do Forms, ocultando campos vazios/placeholder.
+        function detalhesCampos(detalhes) {
+            const txt = String(detalhes || '').trim();
+            if (!txt) return '<p class="modal-vazio">Sem detalhes informados.</p>';
+            const linhas = [];
+            for (const parte of txt.split(/\s*\|\s*/)) {
+                const i = parte.indexOf(':');
+                let rot = '', val = parte.trim();
+                if (i >= 0) { rot = parte.slice(0, i).trim(); val = parte.slice(i + 1).trim(); }
+                if (!val || /^[.\-–—\s]*$/.test(val)) continue; // pula vazio ou "." / "-"
+                linhas.push(
+                    `<div class="campo">` +
+                    (rot ? `<span class="campo-rot">${esc(rot)}</span>` : '') +
+                    `<span class="campo-val">${valorDetalhe(val)}</span></div>`
+                );
+            }
+            return linhas.length
+                ? `<div class="detalhe-campos">${linhas.join('')}</div>`
+                : '<p class="modal-vazio">Sem detalhes informados.</p>';
+        }
+
         // Card de um documento anexado (dentro do modal).
         function anexoCard(a) {
             const icone = iconeArquivo(a.nome, a.url);
             const nome = esc(a.nome || 'Documento');
-            if (a.url) {
-                return `<a class="anexo-card" href="${esc(a.url)}" target="_blank" rel="noopener">
+            const condutor = ehFotoCondutor(a.nome);
+
+            if (!a.url) {
+                return `<div class="anexo-card is-plain">
                     <span class="anexo-card__icon material-symbols-rounded">${icone}</span>
-                    <span class="anexo-card__info"><strong>${nome}</strong><small>Abrir no Microsoft 365</small></span>
-                    <span class="anexo-card__open material-symbols-rounded">open_in_new</span>
-                </a>`;
+                    <span class="anexo-card__info"><strong>${nome}</strong><small>Sem link disponível</small></span>
+                </div>`;
             }
-            return `<div class="anexo-card is-plain">
-                <span class="anexo-card__icon material-symbols-rounded">${icone}</span>
-                <span class="anexo-card__info"><strong>${nome}</strong><small>Sem link disponível</small></span>
-            </div>`;
+
+            // Imagens ganham miniatura (com fallback para ícone caso não carregue).
+            const visual = ehImagem(a.nome, a.url)
+                ? `<span class="anexo-card__thumb">
+                       <img src="${esc(a.url)}" alt="" loading="lazy" onerror="this.remove()">
+                       <span class="material-symbols-rounded">${icone}</span>
+                   </span>`
+                : `<span class="anexo-card__icon material-symbols-rounded">${icone}</span>`;
+            const legenda = condutor ? 'Foto do condutor' : 'Abrir no Microsoft 365';
+
+            return `<a class="anexo-card${condutor ? ' is-condutor' : ''}" href="${esc(a.url)}" target="_blank" rel="noopener">
+                ${visual}
+                <span class="anexo-card__info"><strong>${nome}</strong><small>${legenda}</small></span>
+                <span class="anexo-card__open material-symbols-rounded">open_in_new</span>
+            </a>`;
         }
 
         function linhaDetalhe(rot, val) {
@@ -257,10 +308,14 @@
                 <div class="detalhe-grid">
                     ${linhaDetalhe('Data', formatarData(s.criado_em))}
                     ${linhaDetalhe('Assunto', clientesChips(s.assunto))}
-                    ${linhaDetalhe('Detalhes', esc(s.detalhes) || '—')}
                     ${observacao}
                     ${revisao}
                 </div>
+                <h4 class="detalhe-secao">
+                    <span class="material-symbols-rounded" style="vertical-align:-5px;color:var(--primary)">list_alt</span>
+                    Detalhes
+                </h4>
+                ${detalhesCampos(s.detalhes)}
                 <h4 class="detalhe-secao">
                     <span class="material-symbols-rounded" style="vertical-align:-5px;color:var(--primary)">folder_open</span>
                     Documentos anexados (${anexos.length})
