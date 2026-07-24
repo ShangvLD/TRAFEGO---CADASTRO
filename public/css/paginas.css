@@ -350,6 +350,28 @@ a.anexo-card:hover {
 .btn-modal.excluir { color: var(--danger); border-color: var(--danger-soft); margin-right: auto; }
 .btn-modal.excluir:hover { background: var(--danger-soft); border-color: var(--danger); }
 
+/* ---- Chips de cliente / operação (coluna "Assunto") ---------------- */
+.cliente-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.cliente-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: var(--radius-pill);
+    font-size: 0.74rem;
+    font-weight: 700;
+    line-height: 1.35;
+    white-space: nowrap;
+    color: var(--chip, var(--text));
+    border: 1.5px solid var(--chip, var(--border));
+    /* Fundo suave derivado da própria cor do cliente. */
+    background: color-mix(in srgb, var(--chip, #888) 10%, #fff);
+}
+
 @media (max-width: 1024px) {
     .form-grid { grid-template-columns: 1fr; }
     .kpi-grid { grid-template-columns: repeat(2, 1fr); }

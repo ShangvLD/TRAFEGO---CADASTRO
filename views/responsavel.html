@@ -163,6 +163,36 @@
             reprovado: '<span class="badge is-danger">Reprovado</span>',
         };
 
+        // Cores dos clientes/operações. Marcas conhecidas têm cor fixa; as demais
+        // recebem uma cor estável (mesma cor sempre para o mesmo nome) via hash.
+        const CLIENTE_COR = {
+            'MERCADO LIVRE': '#c98a00',
+            'SHOPEE':        '#ee4d2d',
+            'AMAZON':        '#146eb4',
+            'SAMSUNG':       '#034ea2',
+            'BAYER':         '#1f8a4c',
+            'LOREAL':        '#111827',
+            "L'OREAL":       '#111827',
+            'KENVUE':        '#c026d3',
+        };
+        const CLIENTE_PALETA = ['#005a9e','#c98a00','#ee4d2d','#7b2ff7','#1f8a4c','#0e7490','#9d174d','#4338ca','#0f766e','#a16207','#be123c','#3f6212','#b91c1c','#6d28d9'];
+
+        function corCliente(nome) {
+            if (CLIENTE_COR[nome]) return CLIENTE_COR[nome];
+            let h = 0;
+            for (let i = 0; i < nome.length; i++) h = (h * 31 + nome.charCodeAt(i)) >>> 0;
+            return CLIENTE_PALETA[h % CLIENTE_PALETA.length];
+        }
+
+        // Transforma "MERCADO LIVRE | SHOPEE | | |" em chips coloridos, sem os vazios.
+        function clientesChips(assunto) {
+            const nomes = String(assunto || '').split('|').map((s) => s.trim()).filter(Boolean);
+            if (!nomes.length) return '<span style="color:var(--text-secondary)">—</span>';
+            return '<div class="cliente-chips">' + nomes.map((n) =>
+                `<span class="cliente-chip" style="--chip:${corCliente(n.toUpperCase())}">${esc(n)}</span>`
+            ).join('') + '</div>';
+        }
+
         // Ícone do documento conforme a extensão do arquivo.
         function iconeArquivo(nome, url) {
             const alvo = String(nome || url || '').toLowerCase();
@@ -226,7 +256,7 @@
                 </div>
                 <div class="detalhe-grid">
                     ${linhaDetalhe('Data', formatarData(s.criado_em))}
-                    ${linhaDetalhe('Assunto', esc(s.assunto))}
+                    ${linhaDetalhe('Assunto', clientesChips(s.assunto))}
                     ${linhaDetalhe('Detalhes', esc(s.detalhes) || '—')}
                     ${observacao}
                     ${revisao}
@@ -294,7 +324,7 @@
             return `<tr data-id="${s.id}" class="linha-clic">
                 <td>${formatarData(s.criado_em)}</td>
                 <td>${esc(s.solicitante_nome)}<br><small style="color:var(--text-secondary)">${esc(s.solicitante_email)}</small></td>
-                <td>${esc(s.assunto)}</td>
+                <td>${clientesChips(s.assunto)}</td>
                 <td>${anexosResumo(s.anexos)}</td>
                 <td>${BADGE[s.status] || esc(s.status)}</td>
                 <td><div style="display:flex;gap:6px;align-items:center">${verBtn}${decisao}${excluirBtn}</div></td>
