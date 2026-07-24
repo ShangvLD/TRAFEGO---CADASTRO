@@ -230,21 +230,38 @@
             return esc(val);
         }
 
+        // Acha o anexo que é a foto do condutor: prioriza nome com
+        // condutor/motorista/foto; senão, a primeira imagem anexada.
+        function acharFotoCondutor(anexos) {
+            const imgs = (Array.isArray(anexos) ? anexos : []).filter((a) => a.url && ehImagem(a.nome, a.url));
+            if (!imgs.length) return null;
+            return imgs.find((a) => ehFotoCondutor(a.nome)) || imgs[0];
+        }
+
         // Quebra "Condutor: X | CPF: Y | Contato: ." em linhas organizadas,
         // na ordem em que vieram do Forms, ocultando campos vazios/placeholder.
-        function detalhesCampos(detalhes) {
+        // Se houver foto do condutor, mostra uma miniatura ao lado do nome.
+        function detalhesCampos(detalhes, anexos) {
             const txt = String(detalhes || '').trim();
             if (!txt) return '<p class="modal-vazio">Sem detalhes informados.</p>';
+            const foto = acharFotoCondutor(anexos);
             const linhas = [];
             for (const parte of txt.split(/\s*\|\s*/)) {
                 const i = parte.indexOf(':');
                 let rot = '', val = parte.trim();
                 if (i >= 0) { rot = parte.slice(0, i).trim(); val = parte.slice(i + 1).trim(); }
                 if (!val || /^[.\-–—\s]*$/.test(val)) continue; // pula vazio ou "." / "-"
+                const ehCondutor = /^condutor$/i.test(rot);
+                const miniFoto = (ehCondutor && foto)
+                    ? `<a class="condutor-foto" href="${esc(foto.url)}" target="_blank" rel="noopener" title="Abrir foto do condutor">
+                           <img src="${esc(foto.url)}" alt="Foto do condutor" loading="lazy" onerror="this.remove()">
+                           <span class="material-symbols-rounded">account_circle</span>
+                       </a>`
+                    : '';
                 linhas.push(
-                    `<div class="campo">` +
+                    `<div class="campo${ehCondutor ? ' campo-condutor' : ''}">` +
                     (rot ? `<span class="campo-rot">${esc(rot)}</span>` : '') +
-                    `<span class="campo-val">${valorDetalhe(val)}</span></div>`
+                    `<span class="campo-val">${miniFoto}<span class="campo-texto">${valorDetalhe(val)}</span></span></div>`
                 );
             }
             return linhas.length
@@ -315,7 +332,7 @@
                     <span class="material-symbols-rounded" style="vertical-align:-5px;color:var(--primary)">list_alt</span>
                     Detalhes
                 </h4>
-                ${detalhesCampos(s.detalhes)}
+                ${detalhesCampos(s.detalhes, anexos)}
                 <h4 class="detalhe-secao">
                     <span class="material-symbols-rounded" style="vertical-align:-5px;color:var(--primary)">folder_open</span>
                     Documentos anexados (${anexos.length})
