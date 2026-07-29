@@ -11,6 +11,7 @@
     "criar-usuario": "node src/criar-usuario.js",
     "consultar": "node src/consultar.js",
     "testar-webhook": "node src/testar-webhook.js",
+    "testar-validacao": "node src/testar-validacao.js",
     "importar": "node src/importar-csv.js",
     "exportar-turso": "node src/exportar-turso.js",
     "importar-supabase": "node src/importar-supabase.js"

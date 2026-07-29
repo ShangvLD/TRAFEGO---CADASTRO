@@ -17,12 +17,15 @@
 require('dotenv').config();
 
 const path = require('node:path');
+const fs = require('node:fs');
 const express = require('express');
 const session = require('express-session');
 const SessaoStore = require('./src/session-store')(session);
 
 const usuarios = require('./src/usuarios');
 const solicitacoes = require('./src/solicitacoes');
+const cadastros = require('./src/cadastros');
+const configFormulario = require('./src/config-formulario');
 const { exigirLogin, exigirPapel, paginaInicialPorPapel } = require('./src/auth');
 
 const app = express();
@@ -47,6 +50,36 @@ function capturarRaw(req, res, buf) {
 // Arquivos estáticos (CSS, imagens) ANTES da sessão: assim requisições de
 // assets não disparam uma consulta ao store de sessão a cada arquivo.
 app.use(express.static(path.join(__dirname, 'public')));
+
+// --------------------------------------------------------------------------
+// src/validacao.js servido ao NAVEGADOR
+//
+// O mesmo arquivo valida no servidor e no cliente — uma só fonte de verdade.
+// Sem isso, teríamos duas cópias das regras de CPF/placa/CNH divergindo com o
+// tempo (o front aceita e o back recusa, ou pior: o contrário).
+//
+// O módulo é CommonJS e não usa require, então basta envolvê-lo num escopo com
+// um "module.exports" de mentira e publicar o resultado em window.Validacao.
+// --------------------------------------------------------------------------
+const validacaoParaNavegador = (() => {
+  const fonte = fs.readFileSync(path.join(__dirname, 'src', 'validacao.js'), 'utf8');
+  return (
+    '/* Gerado a partir de src/validacao.js — não edite aqui. */\n' +
+    '(function () {\n' +
+    'var module = { exports: {} };\n' +
+    'var exports = module.exports;\n' +
+    fonte +
+    '\nwindow.Validacao = module.exports;\n' +
+    '})();\n'
+  );
+})();
+
+app.get('/js/validacao.js', (req, res) => {
+  res.type('application/javascript');
+  // Em produção o arquivo só muda com um deploy novo, então pode ser cacheado.
+  res.set('Cache-Control', EM_PRODUCAO ? 'public, max-age=3600' : 'no-store');
+  res.send(validacaoParaNavegador);
+});
 
 app.use(express.urlencoded({ extended: true })); // formulários HTML
 app.use(express.json({ strict: false, verify: capturarRaw })); // requisições fetch (login via JS) — strict:false aceita corpo em string
@@ -133,14 +166,26 @@ app.get('/', (req, res) => {
   res.redirect('/login');
 });
 
-// Área do solicitante.
+// Área do solicitante (formulário do Microsoft Forms embutido).
 app.get('/solicitante', exigirLogin, exigirPapel('solicitante', 'admin'), (req, res) => {
   res.sendFile(path.join(VIEWS, 'solicitante.html'));
+});
+
+// Formulário NATIVO de cadastro. Conviva com o /solicitante durante a
+// transição: as duas entradas gravam na mesma tabela, e a migração das pessoas
+// pode ser feita por operação, sem troca de chave geral.
+app.get('/cadastro', exigirLogin, exigirPapel('solicitante', 'admin'), (req, res) => {
+  res.sendFile(path.join(VIEWS, 'cadastro.html'));
 });
 
 // Painel do responsável.
 app.get('/responsavel', exigirLogin, exigirPapel('responsavel', 'admin'), (req, res) => {
   res.sendFile(path.join(VIEWS, 'responsavel.html'));
+});
+
+// Configuração do formulário — SOMENTE admin.
+app.get('/admin/formulario', exigirLogin, exigirPapel('admin'), (req, res) => {
+  res.sendFile(path.join(VIEWS, 'admin-formulario.html'));
 });
 
 // --------------------------------------------------------------------------
@@ -181,6 +226,126 @@ app.delete(
       return res.status(404).json({ ok: false, erro: 'Solicitação não encontrada.' });
     }
     res.json({ ok: true });
+  })
+);
+
+// --------------------------------------------------------------------------
+// Configuração do formulário (operações e matriz de documentos)
+//
+// A LEITURA é liberada a qualquer usuário logado — o formulário precisa dela
+// para montar os campos. A ESCRITA é só do admin.
+// --------------------------------------------------------------------------
+app.get(
+  '/api/config-formulario',
+  exigirLogin,
+  wrap(async (req, res) => {
+    res.json({ ok: true, ...(await configFormulario.paraFormulario()) });
+  })
+);
+
+// Matriz completa (inclui itens desativados) — para a tela de administração.
+app.get(
+  '/api/admin/formulario',
+  exigirLogin,
+  exigirPapel('admin'),
+  wrap(async (req, res) => {
+    res.json({ ok: true, ...(await configFormulario.paraAdmin()) });
+  })
+);
+
+// Cria uma operação (cliente novo).
+app.post(
+  '/api/admin/operacoes',
+  exigirLogin,
+  exigirPapel('admin'),
+  wrap(async (req, res) => {
+    const r = await configFormulario.criarOperacao((req.body || {}).nome);
+    if (!r.ok) return res.status(400).json({ ok: false, erro: r.erro });
+    res.status(201).json(r);
+  })
+);
+
+// Liga/desliga uma operação.
+app.patch(
+  '/api/admin/operacoes/:id',
+  exigirLogin,
+  exigirPapel('admin'),
+  wrap(async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
+
+    const achou = await configFormulario.definirOperacaoAtiva(id, !!(req.body || {}).ativo);
+    if (!achou) return res.status(404).json({ ok: false, erro: 'Operação não encontrada.' });
+    res.json({ ok: true });
+  })
+);
+
+// Cria um tipo de documento.
+app.post(
+  '/api/admin/documentos',
+  exigirLogin,
+  exigirPapel('admin'),
+  wrap(async (req, res) => {
+    const { codigo, rotulo, temValidade } = req.body || {};
+    const r = await configFormulario.criarDocumento({ codigo, rotulo, temValidade });
+    if (!r.ok) return res.status(400).json({ ok: false, erro: r.erro });
+    res.status(201).json(r);
+  })
+);
+
+// Atualiza um documento: ativo, rótulo e/ou para quais operações ele vale.
+app.patch(
+  '/api/admin/documentos/:id',
+  exigirLogin,
+  exigirPapel('admin'),
+  wrap(async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
+
+    const b = req.body || {};
+    let mexeu = false;
+
+    if (typeof b.ativo === 'boolean') {
+      mexeu = (await configFormulario.definirDocumentoAtivo(id, b.ativo)) || mexeu;
+    }
+    if (typeof b.rotulo === 'string') {
+      mexeu = (await configFormulario.renomearDocumento(id, b.rotulo)) || mexeu;
+    }
+    if (typeof b.todas === 'boolean') {
+      const ids = Array.isArray(b.operacaoIds) ? b.operacaoIds.map(Number).filter(Number.isInteger) : [];
+      mexeu = (await configFormulario.definirOperacoesDoDocumento(id, { todas: b.todas, operacaoIds: ids })) || mexeu;
+    }
+
+    if (!mexeu) return res.status(404).json({ ok: false, erro: 'Documento não encontrado ou nada a alterar.' });
+    res.json({ ok: true });
+  })
+);
+
+// --------------------------------------------------------------------------
+// Cadastro pelo formulário NATIVO do Portal
+//
+// O corpo é revalidado aqui com o MESMO módulo usado no navegador. A validação
+// do front é conveniência (feedback imediato); esta é a que vale — qualquer um
+// pode enviar um POST direto, sem passar pela tela.
+//
+// O solicitante NÃO vem do corpo: é sempre quem está logado. Assim ninguém
+// registra cadastro em nome de outra pessoa.
+// --------------------------------------------------------------------------
+app.post(
+  '/api/cadastros',
+  exigirLogin,
+  exigirPapel('solicitante', 'admin'),
+  wrap(async (req, res) => {
+    const resultado = await cadastros.validarECriar(req.body || {}, {
+      nome: req.session.usuario.nome,
+      email: req.session.usuario.email,
+    });
+
+    if (!resultado.ok) {
+      return res.status(400).json({ ok: false, erros: resultado.erros });
+    }
+
+    res.status(201).json({ ok: true, id: resultado.id });
   })
 );
 

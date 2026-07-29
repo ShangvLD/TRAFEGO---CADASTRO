@@ -1,0 +1,406 @@
+/* ============================================================================
+   Formulário nativo de cadastro
+
+   Segue os mesmos tokens do base.css e o mesmo padrão de campo do login.css
+   (label acima, input com fundo suave, foco azul com halo), acrescentando o que
+   o formulário precisa: grade responsiva, estado de erro por campo, seleção de
+   operações e área de documentos.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Seções do formulário
+   -------------------------------------------------------------------------- */
+.form-secao {
+    margin-bottom: var(--space-6);
+}
+
+.form-secao__titulo {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: var(--space-1);
+}
+
+.form-secao__titulo .material-symbols-rounded {
+    color: var(--primary);
+    font-size: 22px;
+}
+
+.form-secao__ajuda {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: var(--space-4);
+}
+
+/* --------------------------------------------------------------------------
+   Grade de campos
+   -------------------------------------------------------------------------- */
+.campos {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-4);
+}
+
+.campos--3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.campo-largo {
+    grid-column: 1 / -1;
+}
+
+@media (max-width: 720px) {
+    .campos,
+    .campos--3 {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* --------------------------------------------------------------------------
+   Campo (label + input + erro)
+   -------------------------------------------------------------------------- */
+.campo {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.campo > label {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: var(--space-2);
+}
+
+.campo .obrigatorio {
+    color: var(--danger);
+    margin-left: 2px;
+}
+
+.campo input,
+.campo select,
+.campo textarea {
+    width: 100%;
+    padding: 11px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font: inherit;
+    font-size: 0.95rem;
+    color: var(--text);
+    background: var(--surface-muted);
+    transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
+}
+
+.campo textarea {
+    resize: vertical;
+    min-height: 88px;
+}
+
+.campo input:focus,
+.campo select:focus,
+.campo textarea:focus {
+    outline: none;
+    border-color: var(--primary);
+    background: var(--surface);
+    box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+.campo input::placeholder,
+.campo textarea::placeholder {
+    color: #9aa8b6;
+}
+
+/* Dica abaixo do campo (formato esperado etc.) */
+.campo .dica {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    margin-top: var(--space-1);
+}
+
+/* ---- Estado de ERRO ---- */
+.campo.com-erro input,
+.campo.com-erro select,
+.campo.com-erro textarea {
+    border-color: var(--danger);
+    background: var(--danger-soft);
+}
+
+.campo.com-erro input:focus,
+.campo.com-erro select:focus,
+.campo.com-erro textarea:focus {
+    box-shadow: 0 0 0 3px rgba(209, 52, 56, 0.16);
+}
+
+.campo .erro {
+    display: none;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--danger);
+    margin-top: var(--space-1);
+}
+
+.campo.com-erro .erro {
+    display: flex;
+}
+
+.campo .erro .material-symbols-rounded {
+    font-size: 16px;
+}
+
+/* ---- Estado VÁLIDO (confirmação discreta) ---- */
+.campo.ok input,
+.campo.ok select {
+    border-color: var(--success);
+}
+
+/* --------------------------------------------------------------------------
+   Operações (checkboxes como chips)
+   -------------------------------------------------------------------------- */
+.operacoes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+}
+
+.operacao-chip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 10px 16px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: var(--surface-muted);
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+    transition: all var(--transition);
+}
+
+.operacao-chip:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.operacao-chip input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.operacao-chip .material-symbols-rounded {
+    font-size: 18px;
+    opacity: 0.35;
+    transition: opacity var(--transition);
+}
+
+.operacao-chip:has(input:checked) {
+    border-color: var(--primary);
+    background: var(--primary-soft);
+    color: var(--primary-darker);
+}
+
+.operacao-chip:has(input:checked) .material-symbols-rounded {
+    opacity: 1;
+}
+
+.operacao-chip:has(input:focus-visible) {
+    box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+/* --------------------------------------------------------------------------
+   Documentos
+   -------------------------------------------------------------------------- */
+.docs-aviso {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    background: var(--surface-muted);
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+}
+
+.docs-aviso .material-symbols-rounded {
+    color: var(--warning);
+    font-size: 22px;
+    flex-shrink: 0;
+}
+
+/* Checklist dos documentos exigidos (enquanto o upload não está ligado) */
+.docs-lista {
+    display: grid;
+    gap: var(--space-2);
+}
+
+.doc-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: 10px var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-muted);
+    font-size: 0.9rem;
+}
+
+.doc-item .material-symbols-rounded {
+    font-size: 20px;
+    color: var(--primary);
+}
+
+.doc-item .doc-rotulo {
+    font-weight: 600;
+    color: var(--text);
+}
+
+.doc-item .doc-tag {
+    padding: 2px 8px;
+    border-radius: var(--radius-pill);
+    background: var(--warning-soft);
+    color: var(--warning);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.doc-item .doc-uso {
+    margin-left: auto;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+    .doc-item .doc-uso { display: none; }
+}
+
+/* --------------------------------------------------------------------------
+   Rodapé de ações
+   -------------------------------------------------------------------------- */
+.form-acoes {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    padding-top: var(--space-5);
+    border-top: 1px solid var(--border);
+    margin-top: var(--space-6);
+}
+
+.form-acoes .aviso-erros {
+    flex: 1;
+    display: none;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--danger);
+}
+
+.form-acoes .aviso-erros.visivel {
+    display: flex;
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 12px 22px;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    font: inherit;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background var(--transition), border-color var(--transition), transform var(--transition);
+}
+
+.btn:active {
+    transform: translateY(1px);
+}
+
+.btn--primario {
+    background: var(--primary);
+    color: #fff;
+}
+
+.btn--primario:hover:not(:disabled) {
+    background: var(--primary-dark);
+}
+
+.btn--secundario {
+    background: var(--surface);
+    border-color: var(--border);
+    color: var(--text-secondary);
+}
+
+.btn--secundario:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* --------------------------------------------------------------------------
+   Sucesso após o envio
+   -------------------------------------------------------------------------- */
+.enviado {
+    display: none;
+    text-align: center;
+    padding: var(--space-8) var(--space-5);
+}
+
+.enviado.visivel {
+    display: block;
+}
+
+.enviado .icone {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 68px;
+    height: 68px;
+    border-radius: 50%;
+    background: var(--success-soft);
+    margin-bottom: var(--space-4);
+}
+
+.enviado .icone .material-symbols-rounded {
+    font-size: 38px;
+    color: var(--success);
+}
+
+.enviado h3 {
+    font-size: 1.25rem;
+    color: var(--text);
+    margin-bottom: var(--space-2);
+}
+
+.enviado p {
+    color: var(--text-secondary);
+    margin-bottom: var(--space-5);
+}
+
+.enviado .protocolo {
+    display: inline-block;
+    padding: 6px 14px;
+    border-radius: var(--radius-pill);
+    background: var(--primary-soft);
+    color: var(--primary-darker);
+    font-weight: 700;
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+}

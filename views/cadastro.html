@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Novo cadastro — Tráfego | Jomed</title>
+    <link rel="icon" type="image/png" href="/img/logo-jomed.png">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
+
+    <link rel="stylesheet" href="/css/base.css">
+    <link rel="stylesheet" href="/css/paginas.css">
+    <link rel="stylesheet" href="/css/cadastro.css">
+</head>
+<body class="has-header">
+
+    <!-- ============================= HEADER ============================= -->
+    <header class="app-header">
+        <div class="app-header__inner">
+            <div class="brand">
+                <div class="brand-logo">
+                    <img src="/img/logo-jomed.png" alt="Jomed Transportes e Logística">
+                </div>
+                <div class="brand-text">
+                    <h1>Tráfego</h1>
+                    <span>Cadastro</span>
+                </div>
+            </div>
+
+            <nav class="main-nav" aria-label="Menu principal">
+                <a href="/cadastro" class="active">Novo cadastro</a>
+                <a href="/solicitante">Via Forms</a>
+                <a href="/responsavel" data-admin-only hidden>Painel de aprovação</a>
+            </nav>
+
+            <div class="header-actions">
+                <button class="user-chip" id="user-chip" type="button" title="Conta">
+                    <div class="user-avatar" id="user-avatar">··</div>
+                    <span class="user-name" id="user-name">Carregando...</span>
+                    <span class="material-symbols-rounded" style="font-size:18px;color:rgba(255,255,255,0.75)">expand_more</span>
+                </button>
+
+                <div class="user-menu" id="user-menu">
+                    <div class="user-menu__info">
+                        <strong id="menu-nome">—</strong>
+                        <small id="menu-email">—</small>
+                    </div>
+                    <button type="button" class="danger" id="btn-sair">
+                        <span class="material-symbols-rounded">logout</span> Sair
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="page-container">
+
+        <section class="card card--hero">
+            <h2>Novo cadastro de terceiro</h2>
+            <p>Preencha os dados do condutor, do proprietário e do veículo. Os campos são conferidos na hora — CPF, placa e validade da CNH são validados antes do envio, para a solicitação não voltar por erro de digitação.</p>
+        </section>
+
+        <!-- ===================== FORMULÁRIO ===================== -->
+        <section class="card" id="painel-form">
+            <form id="form-cadastro" novalidate autocomplete="off">
+
+                <!-- ---------------- CONDUTOR ---------------- -->
+                <div class="form-secao">
+                    <div class="form-secao__titulo">
+                        <span class="material-symbols-rounded">person</span> Condutor
+                    </div>
+                    <p class="form-secao__ajuda">Mesmos campos do formulário do Forms. O CPF é a chave do cadastro — se o condutor já existir, os dados dele são atualizados em vez de duplicados.</p>
+
+                    <div class="campos">
+                        <div class="campo campo-largo" data-campo="condutor_nome">
+                            <label for="condutor_nome">Condutor <span class="obrigatorio">*</span></label>
+                            <input type="text" id="condutor_nome" name="condutor_nome" placeholder="Nome completo do condutor" maxlength="120">
+                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
+                        </div>
+
+                        <div class="campo" data-campo="condutor_cpf">
+                            <label for="condutor_cpf">CPF <span class="obrigatorio">*</span></label>
+                            <input type="text" id="condutor_cpf" name="condutor_cpf" placeholder="000.000.000-00" inputmode="numeric" maxlength="14">
+                            <span class="dica">Conferido pelo dígito verificador</span>
+                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
+                        </div>
+
+                        <div class="campo" data-campo="condutor_telefone">
+                            <label for="condutor_telefone">Contato MOT <span class="obrigatorio">*</span></label>
+                            <input type="text" id="condutor_telefone" name="condutor_telefone" placeholder="(47) 98869-7821" inputmode="tel" maxlength="20">
+                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
+                        </div>
+
+                        <div class="campo campo-largo" data-campo="condutor_email">
+                            <label for="condutor_email">EMAIL</label>
+                            <input type="email" id="condutor_email" name="condutor_email" placeholder="email@exemplo.com" maxlength="254">
+                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ---------------- CNH ---------------- -->
+                <div class="form-secao">
+                    <div class="form-secao__titulo">
+                        <span class="material-symbols-rounded">badge</span> CNH
+                        <span class="badge is-info" style="margin-left:auto;font-size:0.7rem">Novo — não existe no Forms</span>
+                    </div>
+                    <p class="form-secao__ajuda">Campos <strong>opcionais</strong> que não existiam no Forms. Preenchendo a validade, o sistema passa a avisar antes do vencimento — hoje isso não é possível porque a data não é coletada.</p>
+
+                    <div class="campos campos--3">
+                        <div class="campo" data-campo="cnh_numero">
+                            <label for="cnh_numero">Número da CNH</label>
+                            <input type="text" id="cnh_numero" name="cnh_numero" placeholder="11 dígitos" inputmode="numeric" maxlength="14">
+                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
+                        </div>
+
+                        <div class="campo" data-campo="cnh_categoria">
+                            <label for="cnh_categoria">Categoria</label>
+                            <select id="cnh_categoria" name="cnh_categoria">
+                                <option value="">Selecione...</option>
+                            </select>
+                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
+                        </div>
+
+                        <div class="campo" data-campo="cnh_validade">
+                            <label for="cnh_validade">Validade</label>
+                            <input type="date" id="cnh_validade" name="cnh_validade">
+                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ---------------- PROPRIETÁRIO ---------------- -->
+                <div class="form-secao">
+                    <div class="form-secao__titulo">
+                        <span class="material-symbols-rounded">handshake</span> Proprietário
+                    </div>
+                    <p class="form-secao__ajuda">Dono do veículo. O campo de documento é <strong>novo</strong> (não existe no Forms) e é opcional — serve para não duplicar o mesmo proprietário a cada cadastro.</p>
+
+                    <div class="campos campos--3">
+                        <div class="campo" data-campo="proprietario_nome">
+                            <label for="proprietario_nome">Proprietário</label>
+                            <input type="text" id="proprietario_nome" name="proprietario_nome" placeholder="Nome ou razão social" maxlength="120">
+                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
+                        </div>
+
+                        <div class="campo" data-campo="proprietario_documento">
+                            <label for="proprietario_documento">CPF / CNPJ do proprietário</label>
+                            <input type="text" id="proprietario_documento" name="proprietario_documento" placeholder="Opcional" inputmode="numeric" maxlength="18">
+                            <span class="dica">Novo — não existe no Forms</span>
+                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
+                        </div>
+
+                        <div class="campo" data-campo="proprietario_telefone">
+                            <label for="proprietario_telefone">Contato Prop</label>
+                            <input type="text" id="proprietario_telefone" name="proprietario_telefone" placeholder="(11) 96304-0076" inputmode="tel" maxlength="20">
+                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ---------------- VEÍCULO ---------------- -->
+                <div class="form-secao">
+                    <div class="form-secao__titulo">
+                        <span class="material-symbols-rounded">local_shipping</span> Veículo
+                    </div>
+                    <p class="form-secao__ajuda">Informe ao menos uma placa. Aceita o formato antigo (ABC1234) e o Mercosul (ABC1D23).</p>
+
+                    <div class="campos">
+                        <div class="campo" data-campo="placa_cavalo">
+                            <label for="placa_cavalo">Placa Cavalo</label>
+                            <input type="text" id="placa_cavalo" name="placa_cavalo" placeholder="ABC1D23" maxlength="8" style="text-transform:uppercase">
+                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
+                        </div>
+
+                        <div class="campo" data-campo="placa_carreta">
+                            <label for="placa_carreta">Placa Carreta</label>
+                            <input type="text" id="placa_carreta" name="placa_carreta" placeholder="XYZ4321" maxlength="8" style="text-transform:uppercase">
+                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ---------------- RASTREAMENTO ---------------- -->
+                <div class="form-secao">
+                    <div class="form-secao__titulo">
+                        <span class="material-symbols-rounded">my_location</span> Rastreamento
+                    </div>
+                    <p class="form-secao__ajuda">Opcional. Deixe em branco se não houver — não preencha com ponto ou traço.</p>
+
+                    <div class="campos">
+                        <div class="campo" data-campo="tag">
+                            <label for="tag">TAG</label>
+                            <input type="text" id="tag" name="tag" placeholder="Identificação da TAG" maxlength="60">
+                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
+                        </div>
+
+                        <div class="campo" data-campo="rastreador_id">
+                            <label for="rastreador_id">Rastreador ID</label>
+                            <input type="text" id="rastreador_id" name="rastreador_id" placeholder="Identificação do equipamento" maxlength="60">
+                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ---------------- OPERAÇÕES ---------------- -->
+                <div class="form-secao">
+                    <div class="form-secao__titulo">
+                        <span class="material-symbols-rounded">checklist</span> Operações
+                    </div>
+                    <p class="form-secao__ajuda">Marque as operações para as quais este cadastro está sendo solicitado. Cada uma é aprovada ou reprovada separadamente pelo responsável.</p>
+
+                    <div class="campo" data-campo="operacoes">
+                        <div class="operacoes" id="operacoes"></div>
+                        <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
+                    </div>
+                </div>
+
+                <!-- ---------------- OBSERVAÇÕES ---------------- -->
+                <div class="form-secao">
+                    <div class="form-secao__titulo">
+                        <span class="material-symbols-rounded">chat</span> Observações
+                    </div>
+
+                    <div class="campo" data-campo="obs">
+                        <label for="obs">OBS</label>
+                        <textarea id="obs" name="obs" placeholder="Opcional" maxlength="2000"></textarea>
+                        <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
+                    </div>
+                </div>
+
+                <!-- ---------------- DOCUMENTOS ---------------- -->
+                <div class="form-secao">
+                    <div class="form-secao__titulo">
+                        <span class="material-symbols-rounded">attach_file</span> Documentos
+                    </div>
+
+                    <p class="form-secao__ajuda">Os mesmos documentos pedidos no Forms. Duas perguntas duplicadas foram unificadas: <em>ANTT&nbsp;1</em> virou <em>ANTT</em>, e o <em>Certificado SEST SENAT</em> virou o mesmo campo do <em>Certificado de Direção Segura</em>.</p>
+
+                    <div class="docs-aviso" style="margin-bottom:var(--space-4)">
+                        <span class="material-symbols-rounded">construction</span>
+                        <div>
+                            <strong>O envio de arquivos ainda não está ligado nesta tela.</strong><br>
+                            Falta a liberação de acesso à biblioteca do SharePoint. Por enquanto,
+                            envie os arquivos pelo formulário do Microsoft Forms e use esta tela
+                            para registrar os dados — que ficam validados e consultáveis.
+                        </div>
+                    </div>
+
+                    <div class="docs-lista" id="docs-lista"></div>
+                </div>
+
+                <!-- ---------------- AÇÕES ---------------- -->
+                <div class="form-acoes">
+                    <span class="aviso-erros" id="aviso-erros">
+                        <span class="material-symbols-rounded">error</span>
+                        <span id="aviso-erros-txt"></span>
+                    </span>
+                    <button type="button" class="btn btn--secundario" id="btn-limpar">
+                        <span class="material-symbols-rounded">restart_alt</span> Limpar
+                    </button>
+                    <button type="submit" class="btn btn--primario" id="btn-enviar">
+                        <span class="material-symbols-rounded">send</span> Enviar cadastro
+                    </button>
+                </div>
+            </form>
+
+            <!-- ---------------- SUCESSO ---------------- -->
+            <div class="enviado" id="painel-enviado">
+                <div class="icone"><span class="material-symbols-rounded">check_circle</span></div>
+                <h3>Cadastro enviado</h3>
+                <p>A solicitação foi registrada e já está disponível para o time responsável.</p>
+                <p class="protocolo" id="protocolo">#—</p>
+                <div style="margin-top:var(--space-6)">
+                    <button type="button" class="btn btn--primario" id="btn-novo">
+                        <span class="material-symbols-rounded">add</span> Fazer outro cadastro
+                    </button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="/js/app.js"></script>
+    <!-- MESMO módulo de validação usado no servidor (uma só fonte de verdade). -->
+    <script src="/js/validacao.js"></script>
+    <script>
+        const V = window.Validacao;
+
+        const form = document.getElementById('form-cadastro');
+        const painelForm = document.getElementById('painel-form');
+        const painelEnviado = document.getElementById('painel-enviado');
+        const btnEnviar = document.getElementById('btn-enviar');
+        const avisoErros = document.getElementById('aviso-erros');
+        const avisoErrosTxt = document.getElementById('aviso-erros-txt');
+
+        // ------------------------------------------------------------------
+        // Monta as opções que vêm do módulo de validação, para o formulário
+        // nunca ficar fora de sincronia com o que o servidor aceita.
+        // ------------------------------------------------------------------
+        const selCategoria = document.getElementById('cnh_categoria');
+        for (const c of V.CATEGORIAS_CNH) {
+            const opt = document.createElement('option');
+            opt.value = c;
+            opt.textContent = c;
+            selCategoria.appendChild(opt);
+        }
+
+        const docsLista = document.getElementById('docs-lista');
+        const divOperacoes = document.getElementById('operacoes');
+
+        // ------------------------------------------------------------------
+        // Configuração vinda do BANCO (editável em /admin/formulario).
+        //
+        // As operações e a matriz de documentos NÃO estão mais no código: o
+        // admin muda a exigência de um cliente e vale na próxima abertura do
+        // formulário, sem deploy. As constantes do validacao.js seguem como
+        // semente inicial e como reserva caso a API falhe.
+        // ------------------------------------------------------------------
+        let CONFIG = {
+            operacoes: V.OPERACOES,
+            documentos: V.TIPOS_DOCUMENTO.map((t) => ({
+                codigo: t.id, rotulo: t.rotulo, temValidade: t.temValidade, operacoes: t.operacoes,
+            })),
+        };
+
+        async function carregarConfig() {
+            try {
+                const r = await fetch('/api/config-formulario');
+                if (!r.ok) return; // mantém a reserva
+                const j = await r.json();
+                if (j.ok && Array.isArray(j.operacoes) && j.operacoes.length) {
+                    CONFIG = { operacoes: j.operacoes, documentos: j.documentos || [] };
+                }
+            } catch (e) {
+                /* sem conexão: segue com a reserva */
+            }
+        }
+
+        function desenharOperacoes() {
+            divOperacoes.innerHTML = '';
+            for (const op of CONFIG.operacoes) {
+                const label = document.createElement('label');
+                label.className = 'operacao-chip';
+                label.innerHTML =
+                    '<input type="checkbox" name="operacoes" value="' + op + '">' +
+                    '<span class="material-symbols-rounded">check_circle</span>' +
+                    '<span>' + op + '</span>';
+                divOperacoes.appendChild(label);
+            }
+        }
+
+        /**
+         * Mostra só os documentos exigidos pelas operações marcadas.
+         * Sem operação marcada, mostra os que valem para todas — evita anunciar
+         * exigência de um cliente que a pessoa ainda não selecionou.
+         */
+        function desenharDocumentos() {
+            const marcadas = [...form.querySelectorAll('input[name=operacoes]:checked')].map((c) => c.value);
+            const aplicaveis = CONFIG.documentos.filter(
+                (d) => !d.operacoes || d.operacoes.some((op) => marcadas.includes(op))
+            );
+
+            docsLista.innerHTML = aplicaveis.map((d) => {
+                const especifico = d.operacoes
+                    ? '<span class="doc-tag" style="background:var(--primary-soft);color:var(--primary-darker)">' +
+                      d.operacoes.join(', ') + '</span>'
+                    : '';
+                return '<div class="doc-item">' +
+                    '<span class="material-symbols-rounded">description</span>' +
+                    '<span class="doc-rotulo">' + d.rotulo + '</span>' +
+                    (d.temValidade ? '<span class="doc-tag">validade</span>' : '') +
+                    especifico +
+                '</div>';
+            }).join('');
+
+            const extras = CONFIG.documentos.length - aplicaveis.length;
+            if (extras > 0) {
+                docsLista.innerHTML +=
+                    '<p class="form-secao__ajuda" style="margin:var(--space-2) 0 0">' +
+                    extras + ' documento(s) só são exigidos por outras operações.</p>';
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // Coleta / exibição
+        // ------------------------------------------------------------------
+        function coletar() {
+            const d = {};
+            for (const el of form.querySelectorAll('input[type=text], input[type=email], input[type=date], select, textarea')) {
+                d[el.name] = el.value;
+            }
+            d.operacoes = [...form.querySelectorAll('input[name=operacoes]:checked')].map((c) => c.value);
+            return d;
+        }
+
+        function caixa(campo) {
+            return form.querySelector('[data-campo="' + campo + '"]');
+        }
+
+        function marcarErro(campo, mensagem) {
+            const c = caixa(campo);
+            if (!c) return;
+            c.classList.add('com-erro');
+            c.classList.remove('ok');
+            const txt = c.querySelector('.erro-txt');
+            if (txt) txt.textContent = mensagem;
+        }
+
+        function limparErro(campo, valido) {
+            const c = caixa(campo);
+            if (!c) return;
+            c.classList.remove('com-erro');
+            if (valido) c.classList.add('ok');
+        }
+
+        function limparTodosOsErros() {
+            for (const c of form.querySelectorAll('.campo')) {
+                c.classList.remove('com-erro', 'ok');
+            }
+            avisoErros.classList.remove('visivel');
+        }
+
+        // ------------------------------------------------------------------
+        // Validação em tempo real — só depois que a pessoa sai do campo, para
+        // não acusar erro enquanto ela ainda está digitando.
+        // ------------------------------------------------------------------
+        function validarUmCampo(nome) {
+            const { erros, dados } = V.validarCadastro(coletar(), { operacoesPermitidas: CONFIG.operacoes });
+            if (erros[nome]) marcarErro(nome, erros[nome]);
+            else limparErro(nome, dados[nome] != null);
+        }
+
+        for (const el of form.querySelectorAll('input[type=text], input[type=email], input[type=date], select, textarea')) {
+            el.addEventListener('blur', () => validarUmCampo(el.name));
+            // Ao corrigir, tira o vermelho na hora (sem esperar sair do campo).
+            el.addEventListener('input', () => {
+                const c = caixa(el.name);
+                if (c && c.classList.contains('com-erro')) validarUmCampo(el.name);
+            });
+        }
+
+        // Ao mudar as operações, a lista de documentos exigidos muda com elas.
+        divOperacoes.addEventListener('change', () => {
+            validarUmCampo('operacoes');
+            desenharDocumentos();
+        });
+
+        // Máscaras leves: formatam enquanto digita, sem impedir a digitação.
+        function mascarar(id, formatador) {
+            const el = document.getElementById(id);
+            el.addEventListener('input', () => {
+                const posFim = el.selectionStart === el.value.length;
+                const formatado = formatador(el.value);
+                if (formatado !== el.value) {
+                    el.value = formatado;
+                    if (posFim) el.setSelectionRange(formatado.length, formatado.length);
+                }
+            });
+        }
+
+        mascarar('condutor_cpf', (v) => {
+            const d = V.apenasDigitos(v).slice(0, 11);
+            if (d.length <= 3) return d;
+            if (d.length <= 6) return d.slice(0, 3) + '.' + d.slice(3);
+            if (d.length <= 9) return d.slice(0, 3) + '.' + d.slice(3, 6) + '.' + d.slice(6);
+            return d.slice(0, 3) + '.' + d.slice(3, 6) + '.' + d.slice(6, 9) + '-' + d.slice(9);
+        });
+
+        const mascaraTelefone = (v) => {
+            const d = V.apenasDigitos(v).slice(0, 11);
+            if (d.length <= 2) return d;
+            if (d.length <= 6) return '(' + d.slice(0, 2) + ') ' + d.slice(2);
+            if (d.length <= 10) return '(' + d.slice(0, 2) + ') ' + d.slice(2, 6) + '-' + d.slice(6);
+            return '(' + d.slice(0, 2) + ') ' + d.slice(2, 7) + '-' + d.slice(7);
+        };
+        mascarar('condutor_telefone', mascaraTelefone);
+        mascarar('proprietario_telefone', mascaraTelefone);
+
+        mascarar('proprietario_documento', (v) => {
+            const d = V.apenasDigitos(v).slice(0, 14);
+            if (d.length <= 11) {
+                if (d.length <= 3) return d;
+                if (d.length <= 6) return d.slice(0, 3) + '.' + d.slice(3);
+                if (d.length <= 9) return d.slice(0, 3) + '.' + d.slice(3, 6) + '.' + d.slice(6);
+                return d.slice(0, 3) + '.' + d.slice(3, 6) + '.' + d.slice(6, 9) + '-' + d.slice(9);
+            }
+            return d.slice(0, 2) + '.' + d.slice(2, 5) + '.' + d.slice(5, 8) + '/' + d.slice(8, 12) + '-' + d.slice(12);
+        });
+
+        for (const id of ['placa_cavalo', 'placa_carreta']) {
+            mascarar(id, (v) => V.normalizarPlaca(v).slice(0, 7));
+        }
+
+        // ------------------------------------------------------------------
+        // Envio
+        // ------------------------------------------------------------------
+        form.addEventListener('submit', async (ev) => {
+            ev.preventDefault();
+            limparTodosOsErros();
+
+            const entrada = coletar();
+            const { ok, erros } = V.validarCadastro(entrada, { operacoesPermitidas: CONFIG.operacoes });
+
+            if (!ok) {
+                for (const campo of Object.keys(erros)) marcarErro(campo, erros[campo]);
+                const quantos = Object.keys(erros).length;
+                avisoErrosTxt.textContent =
+                    quantos === 1 ? '1 campo precisa de atenção.' : quantos + ' campos precisam de atenção.';
+                avisoErros.classList.add('visivel');
+                const primeiro = form.querySelector('.campo.com-erro');
+                if (primeiro) primeiro.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return;
+            }
+
+            btnEnviar.disabled = true;
+            btnEnviar.innerHTML = '<span class="material-symbols-rounded">hourglass_top</span> Enviando...';
+
+            try {
+                const resp = await fetch('/api/cadastros', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(entrada),
+                });
+                const json = await resp.json();
+
+                if (!resp.ok || !json.ok) {
+                    // O servidor revalida: se ele recusar, mostramos campo a campo.
+                    if (json.erros) {
+                        for (const campo of Object.keys(json.erros)) marcarErro(campo, json.erros[campo]);
+                        avisoErrosTxt.textContent = 'O servidor recusou alguns campos.';
+                        avisoErros.classList.add('visivel');
+                    } else {
+                        avisoErrosTxt.textContent = json.erro || 'Não foi possível enviar. Tente de novo.';
+                        avisoErros.classList.add('visivel');
+                    }
+                    return;
+                }
+
+                document.getElementById('protocolo').textContent = '#' + json.id;
+                form.style.display = 'none';
+                painelEnviado.classList.add('visivel');
+                painelEnviado.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } catch (e) {
+                avisoErrosTxt.textContent = 'Falha de conexão. Verifique a internet e tente de novo.';
+                avisoErros.classList.add('visivel');
+            } finally {
+                btnEnviar.disabled = false;
+                btnEnviar.innerHTML = '<span class="material-symbols-rounded">send</span> Enviar cadastro';
+            }
+        });
+
+        document.getElementById('btn-limpar').addEventListener('click', () => {
+            form.reset();
+            limparTodosOsErros();
+        });
+
+        document.getElementById('btn-novo').addEventListener('click', () => {
+            form.reset();
+            limparTodosOsErros();
+            desenharDocumentos();
+            painelEnviado.classList.remove('visivel');
+            form.style.display = '';
+            painelForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+
+        document.getElementById('btn-limpar').addEventListener('click', desenharDocumentos);
+
+        // ------------------------------------------------------------------
+        // Início: busca a configuração e monta as partes dinâmicas.
+        // ------------------------------------------------------------------
+        (async () => {
+            desenharOperacoes();   // desenha já com a reserva, para a tela não piscar vazia
+            desenharDocumentos();
+            await carregarConfig();
+            desenharOperacoes();   // redesenha com o que veio do banco
+            desenharDocumentos();
+        })();
+    </script>
+</body>
+</html>

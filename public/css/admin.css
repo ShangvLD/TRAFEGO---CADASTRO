@@ -1,0 +1,316 @@
+/* ============================================================================
+   Tela de administração do formulário
+
+   A peça central é a MATRIZ documento x operação. Com 7+ documentos e 9+
+   operações ela cresce na horizontal, então rola dentro do próprio contêiner
+   (a página nunca rola de lado) e a primeira coluna fica fixa, para não se
+   perder de qual documento é a linha.
+   ========================================================================== */
+
+.matriz-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+}
+
+.matriz {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.88rem;
+}
+
+.matriz th,
+.matriz td {
+    padding: var(--space-3);
+    border-bottom: 1px solid var(--border);
+    text-align: center;
+    white-space: nowrap;
+}
+
+.matriz tbody tr:last-child th,
+.matriz tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* ---- Primeira coluna fixa ---- */
+.matriz .col-doc {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    min-width: 230px;
+    text-align: left;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+}
+
+.matriz thead .col-doc {
+    z-index: 3;
+    background: var(--surface-muted);
+}
+
+.matriz tbody .col-doc strong {
+    display: block;
+    color: var(--text);
+    font-weight: 600;
+}
+
+.matriz tbody .col-doc small {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+
+.matriz tbody .col-doc .doc-tag {
+    display: inline-block;
+    margin-top: 4px;
+    padding: 1px 7px;
+    border-radius: var(--radius-pill);
+    background: var(--warning-soft);
+    color: var(--warning);
+    font-size: 0.68rem;
+    font-weight: 700;
+}
+
+/* ---- Cabeçalho ---- */
+.matriz thead th {
+    background: var(--surface-muted);
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    position: sticky;
+    top: 0;
+}
+
+/* Nomes de cliente na vertical: com 9+ colunas, na horizontal a tabela fica
+   larguíssima e o nome do documento sai da tela. */
+.matriz thead .col-op {
+    height: 130px;
+    padding: var(--space-2) 0;
+    vertical-align: bottom;
+    width: 44px;
+    min-width: 44px;
+}
+
+.matriz thead .col-op span {
+    display: inline-block;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    max-height: 112px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.matriz thead .col-op.inativa {
+    opacity: 0.4;
+}
+
+.matriz thead .col-op.inativa span::after {
+    content: " (off)";
+}
+
+.matriz .col-todas {
+    width: 70px;
+    min-width: 70px;
+    background: var(--primary-soft);
+}
+
+.matriz thead .col-todas {
+    color: var(--primary-darker);
+}
+
+/* ---- Células ---- */
+.matriz .celula input,
+.matriz .col-todas input {
+    width: 17px;
+    height: 17px;
+    accent-color: var(--primary);
+    cursor: pointer;
+}
+
+.matriz .celula input:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+
+.matriz tbody tr:hover .col-doc,
+.matriz tbody tr:hover td {
+    background: #fbfdff;
+}
+
+.matriz .linha-inativa {
+    opacity: 0.45;
+}
+
+.matriz .carregando {
+    padding: var(--space-8);
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+/* --------------------------------------------------------------------------
+   Listas de configuração (operações / documentos)
+   -------------------------------------------------------------------------- */
+.admin-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-6);
+    margin-top: var(--space-6);
+}
+
+@media (max-width: 900px) {
+    .admin-grid { grid-template-columns: 1fr; }
+}
+
+.lista-cfg {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: var(--space-4);
+}
+
+.item-cfg {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: 8px var(--space-3);
+    border-radius: var(--radius-sm);
+}
+
+.item-cfg:hover {
+    background: var(--surface-muted);
+}
+
+.item-cfg .item-nome {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.item-cfg .item-nome.apagado {
+    color: var(--text-secondary);
+    text-decoration: line-through;
+    font-weight: 500;
+}
+
+/* ---- Interruptor ---- */
+.switch {
+    position: relative;
+    display: inline-flex;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+
+.switch input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.switch .trilho {
+    width: 38px;
+    height: 21px;
+    border-radius: var(--radius-pill);
+    background: #cbd5e1;
+    transition: background var(--transition);
+    position: relative;
+}
+
+.switch .trilho::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: var(--shadow-sm);
+    transition: transform var(--transition);
+}
+
+.switch input:checked + .trilho {
+    background: var(--success);
+}
+
+.switch input:checked + .trilho::after {
+    transform: translateX(17px);
+}
+
+.switch input:focus-visible + .trilho {
+    box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+/* --------------------------------------------------------------------------
+   Formulário de acréscimo
+   -------------------------------------------------------------------------- */
+.add-linha {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border);
+}
+
+.add-linha input[type="text"] {
+    flex: 1;
+    min-width: 160px;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font: inherit;
+    font-size: 0.92rem;
+    background: var(--surface-muted);
+}
+
+.add-linha input[type="text"]:focus {
+    outline: none;
+    border-color: var(--primary);
+    background: var(--surface);
+    box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+.check-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.check-inline input {
+    accent-color: var(--primary);
+}
+
+/* --------------------------------------------------------------------------
+   Aviso inline
+   -------------------------------------------------------------------------- */
+.aviso-inline {
+    min-height: 22px;
+    margin-top: var(--space-4);
+    font-size: 0.88rem;
+    font-weight: 600;
+}
+
+.aviso-inline.erro     { color: var(--danger); }
+.aviso-inline.atencao  { color: var(--warning); }
+.aviso-inline.ok       { color: var(--success); }
+
+.badge.is-danger {
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+
+.badge.is-warning {
+    background: var(--warning-soft);
+    color: var(--warning);
+}

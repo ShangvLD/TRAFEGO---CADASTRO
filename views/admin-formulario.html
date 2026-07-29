@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configurar formulário — Tráfego | Jomed</title>
+    <link rel="icon" type="image/png" href="/img/logo-jomed.png">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
+
+    <link rel="stylesheet" href="/css/base.css">
+    <link rel="stylesheet" href="/css/paginas.css">
+    <link rel="stylesheet" href="/css/cadastro.css">
+    <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body class="has-header">
+
+    <header class="app-header">
+        <div class="app-header__inner">
+            <div class="brand">
+                <div class="brand-logo">
+                    <img src="/img/logo-jomed.png" alt="Jomed Transportes e Logística">
+                </div>
+                <div class="brand-text">
+                    <h1>Tráfego</h1>
+                    <span>Cadastro</span>
+                </div>
+            </div>
+
+            <nav class="main-nav" aria-label="Menu principal">
+                <a href="/cadastro">Novo cadastro</a>
+                <a href="/responsavel">Painel de aprovação</a>
+                <a href="/admin/formulario" class="active">Configurar</a>
+            </nav>
+
+            <div class="header-actions">
+                <button class="user-chip" id="user-chip" type="button" title="Conta">
+                    <div class="user-avatar" id="user-avatar">··</div>
+                    <span class="user-name" id="user-name">Carregando...</span>
+                    <span class="material-symbols-rounded" style="font-size:18px;color:rgba(255,255,255,0.75)">expand_more</span>
+                </button>
+                <div class="user-menu" id="user-menu">
+                    <div class="user-menu__info">
+                        <strong id="menu-nome">—</strong>
+                        <small id="menu-email">—</small>
+                    </div>
+                    <button type="button" class="danger" id="btn-sair">
+                        <span class="material-symbols-rounded">logout</span> Sair
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="page-container">
+
+        <section class="card card--hero">
+            <h2>Configurar o formulário</h2>
+            <p>Defina quais operações aparecem no formulário e qual documento cada uma exige. As mudanças valem na hora, sem precisar de deploy — o formulário lê esta configuração a cada abertura.</p>
+        </section>
+
+        <!-- ===================== MATRIZ ===================== -->
+        <section class="card">
+            <div class="card-header">
+                <h3><span class="material-symbols-rounded" style="color:var(--primary);vertical-align:-5px">grid_on</span> Documentos por operação</h3>
+                <span class="badge is-info" id="status-salvo">—</span>
+            </div>
+
+            <p class="form-secao__ajuda">
+                Marque em quais operações cada documento é exigido. A coluna <strong>Todas</strong>
+                vale para qualquer operação — útil para documento universal como a CNH.
+                Desmarcando <strong>Todas</strong>, escolha as operações uma a uma.
+            </p>
+
+            <div class="matriz-wrap">
+                <table class="matriz" id="matriz">
+                    <thead id="matriz-cabeca"></thead>
+                    <tbody id="matriz-corpo">
+                        <tr><td class="carregando">Carregando configuração...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <div class="admin-grid">
+            <!-- ===================== OPERAÇÕES ===================== -->
+            <section class="card">
+                <div class="card-header">
+                    <h3><span class="material-symbols-rounded" style="color:var(--primary);vertical-align:-5px">storefront</span> Operações</h3>
+                </div>
+                <p class="form-secao__ajuda">Desligar uma operação a remove do formulário. Os cadastros antigos que a citam continuam intactos.</p>
+
+                <div class="lista-cfg" id="lista-operacoes"></div>
+
+                <form class="add-linha" id="form-operacao">
+                    <input type="text" id="nova-operacao" placeholder="Nome do cliente (ex.: NESTLE)" maxlength="60" required>
+                    <button type="submit" class="btn btn--primario">
+                        <span class="material-symbols-rounded">add</span> Adicionar
+                    </button>
+                </form>
+            </section>
+
+            <!-- ===================== DOCUMENTOS ===================== -->
+            <section class="card">
+                <div class="card-header">
+                    <h3><span class="material-symbols-rounded" style="color:var(--primary);vertical-align:-5px">description</span> Tipos de documento</h3>
+                </div>
+                <p class="form-secao__ajuda">Desligar um documento o remove do formulário, sem apagar o que já foi enviado.</p>
+
+                <div class="lista-cfg" id="lista-documentos"></div>
+
+                <form class="add-linha" id="form-documento">
+                    <input type="text" id="novo-documento" placeholder="Nome do documento (ex.: Laudo de opacidade)" maxlength="80" required>
+                    <label class="check-inline">
+                        <input type="checkbox" id="novo-documento-validade"> tem validade
+                    </label>
+                    <button type="submit" class="btn btn--primario">
+                        <span class="material-symbols-rounded">add</span> Adicionar
+                    </button>
+                </form>
+            </section>
+        </div>
+
+        <p class="aviso-inline" id="aviso"></p>
+    </main>
+
+    <script src="/js/app.js"></script>
+    <script>
+        const elMatrizCabeca = document.getElementById('matriz-cabeca');
+        const elMatrizCorpo = document.getElementById('matriz-corpo');
+        const elListaOps = document.getElementById('lista-operacoes');
+        const elListaDocs = document.getElementById('lista-documentos');
+        const elStatus = document.getElementById('status-salvo');
+        const elAviso = document.getElementById('aviso');
+
+        let cfg = { operacoes: [], documentos: [] };
+
+        function esc(txt) {
+            const d = document.createElement('div');
+            d.textContent = txt == null ? '' : String(txt);
+            return d.innerHTML;
+        }
+
+        function avisar(msg, tipo) {
+            elAviso.textContent = msg;
+            elAviso.className = 'aviso-inline ' + (tipo || '');
+            if (msg) setTimeout(() => { elAviso.textContent = ''; elAviso.className = 'aviso-inline'; }, 5000);
+        }
+
+        function marcarStatus(txt, classe) {
+            elStatus.textContent = txt;
+            elStatus.className = 'badge ' + (classe || 'is-info');
+        }
+
+        // ------------------------------------------------------------------
+        // Carregamento
+        // ------------------------------------------------------------------
+        async function carregar() {
+            const r = await fetch('/api/admin/formulario');
+            if (!r.ok) {
+                elMatrizCorpo.innerHTML = '<tr><td class="carregando">Sem permissão ou falha ao carregar.</td></tr>';
+                return;
+            }
+            const j = await r.json();
+            cfg = { operacoes: j.operacoes, documentos: j.documentos };
+            desenhar();
+            marcarStatus('Carregado', 'is-info');
+        }
+
+        // ------------------------------------------------------------------
+        // Desenho da matriz
+        // ------------------------------------------------------------------
+        function desenhar() {
+            const ops = cfg.operacoes;
+
+            elMatrizCabeca.innerHTML =
+                '<tr><th class="col-doc">Documento</th><th class="col-todas">Todas</th>' +
+                ops.map((o) =>
+                    '<th class="col-op' + (o.ativo ? '' : ' inativa') + '" title="' + esc(o.nome) + '">' +
+                    '<span>' + esc(o.nome) + '</span></th>'
+                ).join('') +
+                '</tr>';
+
+            if (!cfg.documentos.length) {
+                elMatrizCorpo.innerHTML = '<tr><td class="carregando">Nenhum documento configurado.</td></tr>';
+                return;
+            }
+
+            elMatrizCorpo.innerHTML = cfg.documentos.map((d) => {
+                const celulas = ops.map((o) => {
+                    const marcado = d.todasOperacoes || d.operacoes.includes(o.nome);
+                    return '<td class="celula">' +
+                        '<input type="checkbox" data-doc="' + d.id + '" data-op="' + o.id + '"' +
+                        (marcado ? ' checked' : '') +
+                        (d.todasOperacoes ? ' disabled' : '') + '>' +
+                        '</td>';
+                }).join('');
+
+                return '<tr' + (d.ativo ? '' : ' class="linha-inativa"') + '>' +
+                    '<td class="col-doc">' +
+                        '<strong>' + esc(d.rotulo) + '</strong>' +
+                        (d.temValidade ? '<span class="doc-tag">validade</span>' : '') +
+                        '<small>' + esc(d.codigo) + '</small>' +
+                    '</td>' +
+                    '<td class="col-todas">' +
+                        '<input type="checkbox" class="chk-todas" data-doc="' + d.id + '"' +
+                        (d.todasOperacoes ? ' checked' : '') + '>' +
+                    '</td>' +
+                    celulas +
+                '</tr>';
+            }).join('');
+
+            // ---- Listas laterais ----
+            elListaOps.innerHTML = ops.map((o) =>
+                '<div class="item-cfg">' +
+                    '<label class="switch">' +
+                        '<input type="checkbox" data-op-ativo="' + o.id + '"' + (o.ativo ? ' checked' : '') + '>' +
+                        '<span class="trilho"></span>' +
+                    '</label>' +
+                    '<span class="item-nome' + (o.ativo ? '' : ' apagado') + '">' + esc(o.nome) + '</span>' +
+                '</div>'
+            ).join('');
+
+            elListaDocs.innerHTML = cfg.documentos.map((d) =>
+                '<div class="item-cfg">' +
+                    '<label class="switch">' +
+                        '<input type="checkbox" data-doc-ativo="' + d.id + '"' + (d.ativo ? ' checked' : '') + '>' +
+                        '<span class="trilho"></span>' +
+                    '</label>' +
+                    '<span class="item-nome' + (d.ativo ? '' : ' apagado') + '">' + esc(d.rotulo) + '</span>' +
+                '</div>'
+            ).join('');
+        }
+
+        // ------------------------------------------------------------------
+        // Gravação
+        // ------------------------------------------------------------------
+        async function enviar(url, metodo, corpo) {
+            marcarStatus('Salvando...', 'is-warning');
+            try {
+                const r = await fetch(url, {
+                    method: metodo,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: corpo ? JSON.stringify(corpo) : undefined,
+                });
+                const j = await r.json().catch(() => ({}));
+                if (!r.ok || !j.ok) {
+                    marcarStatus('Erro', 'is-danger');
+                    avisar(j.erro || 'Não foi possível salvar.', 'erro');
+                    return false;
+                }
+                marcarStatus('Salvo', 'is-success');
+                return true;
+            } catch (e) {
+                marcarStatus('Sem conexão', 'is-danger');
+                avisar('Falha de conexão.', 'erro');
+                return false;
+            }
+        }
+
+        /** Lê a linha da matriz e grava o conjunto de operações do documento. */
+        async function salvarLinha(docId) {
+            const todas = document.querySelector('.chk-todas[data-doc="' + docId + '"]').checked;
+            const operacaoIds = [...document.querySelectorAll('.celula input[data-doc="' + docId + '"]:checked')]
+                .map((c) => Number(c.dataset.op));
+
+            if (!todas && operacaoIds.length === 0) {
+                avisar('Esse documento ficaria sem nenhuma operação — ele não apareceria no formulário.', 'atencao');
+            }
+
+            const ok = await enviar('/api/admin/documentos/' + docId, 'PATCH', { todas, operacaoIds });
+            if (ok) await carregar();
+        }
+
+        // Delegação de eventos: a matriz é redesenhada inteira a cada gravação,
+        // então listeners individuais seriam perdidos.
+        document.addEventListener('change', async (ev) => {
+            const el = ev.target;
+
+            if (el.classList.contains('chk-todas')) {
+                return salvarLinha(el.dataset.doc);
+            }
+            if (el.closest('.celula')) {
+                return salvarLinha(el.dataset.doc);
+            }
+            if (el.dataset.opAtivo) {
+                const ok = await enviar('/api/admin/operacoes/' + el.dataset.opAtivo, 'PATCH', { ativo: el.checked });
+                if (ok) await carregar();
+                return;
+            }
+            if (el.dataset.docAtivo) {
+                const ok = await enviar('/api/admin/documentos/' + el.dataset.docAtivo, 'PATCH', { ativo: el.checked });
+                if (ok) await carregar();
+                return;
+            }
+        });
+
+        document.getElementById('form-operacao').addEventListener('submit', async (ev) => {
+            ev.preventDefault();
+            const input = document.getElementById('nova-operacao');
+            const ok = await enviar('/api/admin/operacoes', 'POST', { nome: input.value });
+            if (ok) { input.value = ''; await carregar(); }
+        });
+
+        document.getElementById('form-documento').addEventListener('submit', async (ev) => {
+            ev.preventDefault();
+            const input = document.getElementById('novo-documento');
+            const validade = document.getElementById('novo-documento-validade');
+            const ok = await enviar('/api/admin/documentos', 'POST', {
+                codigo: input.value,
+                rotulo: input.value,
+                temValidade: validade.checked,
+            });
+            if (ok) { input.value = ''; validade.checked = false; await carregar(); }
+        });
+
+        carregar();
+    </script>
+</body>
+</html>
