@@ -19,7 +19,7 @@ require('dotenv').config();
 const path = require('node:path');
 const express = require('express');
 const session = require('express-session');
-const SqliteStore = require('./src/session-store')(session);
+const SessaoStore = require('./src/session-store')(session);
 
 const usuarios = require('./src/usuarios');
 const solicitacoes = require('./src/solicitacoes');
@@ -53,7 +53,7 @@ app.use(express.json({ strict: false, verify: capturarRaw })); // requisições 
 
 app.use(
   session({
-    store: new SqliteStore(),
+    store: new SessaoStore(),
     secret: process.env.SESSION_SECRET || 'segredo-de-desenvolvimento-troque-me',
     resave: false,
     saveUninitialized: false,

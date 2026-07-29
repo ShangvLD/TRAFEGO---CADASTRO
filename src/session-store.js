@@ -1,5 +1,5 @@
 /* ============================================================================
-   Session store sobre o libSQL/Turso (assíncrono)
+   Session store sobre o PostgreSQL/Supabase (assíncrono)
 
    Implementa o mínimo da interface de Store do express-session
    (get / set / destroy / touch), guardando as sessões na tabela "sessoes".
@@ -16,7 +16,7 @@ const db = require('./db');
 module.exports = function (session) {
   const Store = session.Store;
 
-  class SqliteStore extends Store {
+  class SessaoStore extends Store {
     // Quando expira a sessão (usa o maxAge do cookie, ou 1 dia por padrão).
     _validadeEm(sess) {
       const maxAge = sess?.cookie?.maxAge;
@@ -67,5 +67,5 @@ module.exports = function (session) {
     }
   }
 
-  return SqliteStore;
+  return SessaoStore;
 };

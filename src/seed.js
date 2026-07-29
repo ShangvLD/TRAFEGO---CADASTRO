@@ -9,6 +9,7 @@
 
 const usuarios = require('./usuarios');
 const solicitacoes = require('./solicitacoes');
+const db = require('./db');
 
 const usuariosDeTeste = [
   {
@@ -86,7 +87,9 @@ const solicitacoesDeExemplo = [
   console.log('\nPronto. Lembre de trocar as senhas antes de ir para produção.');
 }
 
-main().catch((err) => {
-  console.error('Erro no seed:', err);
-  process.exit(1);
-});
+main()
+  .catch((err) => {
+    console.error('Erro no seed:', err);
+    process.exitCode = 1;
+  })
+  .finally(() => db.fechar());

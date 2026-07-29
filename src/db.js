@@ -1,161 +1,262 @@
 /* ============================================================================
-   Banco de dados (libSQL / Turso)
+   Banco de dados (PostgreSQL / Supabase)
 
-   Usa o cliente "@libsql/client", que fala tanto com um arquivo SQLite LOCAL
-   (desenvolvimento) quanto com o Turso na NUVEM (produção/Vercel) — a mesma
-   API, mudando só a URL.
+   Usa o driver "pg" (100% JavaScript, sem dependência nativa) para falar com o
+   PostgreSQL do Supabase. Antes o projeto usava SQLite/Turso; a camada de
+   consulta continua com a MESMA cara ("prepare(sql).get/all/run"), então
+   usuarios.js, solicitacoes.js e session-store.js praticamente não mudaram.
 
-     • Desenvolvimento (padrão): arquivo local em ./data/trafego.db
-         -> não precisa de internet nem consome cota do Turso.
-     • Produção (Vercel): defina TURSO_DATABASE_URL (libsql://...) e
-       TURSO_AUTH_TOKEN nas variáveis de ambiente. Aí o app grava no Turso,
-       que é persistente (o disco do Vercel é efêmero e não serve p/ banco).
+     • A conexão é OBRIGATÓRIA (não existe mais o modo "arquivo local"):
+       defina DATABASE_URL no .env (local) e nas Environment Variables do
+       Vercel (produção). Pegue a string no Supabase em
+       "Connect" > "Connection string" > aba ORMs/Node.js.
 
-   IMPORTANTE: o cliente é ASSÍNCRONO. As funções da camada de dados
-   (usuarios.js / solicitacoes.js) usam await. Este módulo expõe um pequeno
-   wrapper "prepare(sql).get/all/run" para manter o código de consulta parecido
-   com o antigo (node:sqlite), só que retornando Promises.
+     • Em ambiente serverless (Vercel), use a URL do POOLER do Supabase
+       (host ...pooler.supabase.com, porta 6543 — modo transaction). Cada
+       instância da função abre pouquíssimas conexões e o pooler protege o
+       banco de estourar o limite.
+
+   DIFERENÇAS DE DIALETO que este módulo resolve automaticamente, para o resto
+   do código continuar escrevendo SQL no estilo antigo:
+
+     ?  ............................ vira  $1, $2, $3...
+     datetime('now', 'localtime') .. vira  to_char(now() ..., 'YYYY-MM-DD HH24:MI:SS')
+     datetime(coluna) .............. vira  coluna  (o texto já ordena certo)
+
+   O cliente é ASSÍNCRONO: as funções da camada de dados usam await.
    ========================================================================== */
 
 require('dotenv').config();
 
-const path = require('node:path');
-const fs = require('node:fs');
-const { createClient } = require('@libsql/client');
+const { Pool, types } = require('pg');
 
 // --------------------------------------------------------------------------
-// Escolha da conexão
+// Tipos: BIGINT (int8) chega como string por padrão no "pg", porque pode
+// passar de 2^53. Aqui os únicos bigints são milissegundos de data
+// (sessoes.expira_em), muito abaixo desse limite — então convertemos para
+// Number e o código JS segue comparando número com número.
 // --------------------------------------------------------------------------
-// Se TURSO_DATABASE_URL estiver definida, conecta no Turso (produção).
-// Caso contrário, cai para um arquivo SQLite local (desenvolvimento).
-let url = process.env.TURSO_DATABASE_URL;
-const authToken = process.env.TURSO_AUTH_TOKEN;
+types.setTypeParser(20, (v) => (v === null ? null : Number(v)));
 
-if (!url) {
-  const dataDir = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
-  fs.mkdirSync(dataDir, { recursive: true });
-  url = `file:${path.join(dataDir, 'trafego.db')}`;
+// --------------------------------------------------------------------------
+// Fuso horário dos carimbos de data/hora
+//
+// As datas são guardadas como TEXTO "AAAA-MM-DD HH:MM:SS" (mesmo formato do
+// SQLite antigo, que o front-end já sabe exibir). O Turso rodava em UTC, então
+// mantemos UTC para as linhas novas ficarem coerentes com as 51 já existentes.
+// Para passar a gravar no horário de Brasília, troque 'UTC' por
+// 'America/Sao_Paulo' na linha abaixo (afeta só os registros futuros).
+// --------------------------------------------------------------------------
+const FUSO = 'UTC';
+const AGORA_SQL = `to_char(now() AT TIME ZONE '${FUSO}', 'YYYY-MM-DD HH24:MI:SS')`;
+
+// --------------------------------------------------------------------------
+// Conexão
+// --------------------------------------------------------------------------
+const connectionString =
+  process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.SUPABASE_DB_URL;
+
+if (!connectionString) {
+  throw new Error(
+    'DATABASE_URL não definida.\n' +
+      'Coloque a connection string do Supabase no .env (local) e nas Environment\n' +
+      'Variables do Vercel (produção). Veja docs/MIGRACAO-SUPABASE.md.'
+  );
 }
 
-const client = createClient({
-  url,
-  authToken, // ignorado no modo "file:"
-  intMode: 'number', // retorna inteiros como Number (evita BigInt em COUNT/rowid)
+const pool = new Pool({
+  connectionString,
+  // O Supabase exige TLS. Não validamos a cadeia do certificado porque o
+  // pooler usa um CA próprio que não vem no bundle padrão do Node.
+  ssl: { rejectUnauthorized: false },
+  // Serverless: poucas conexões por instância e ocioso curto, para a função
+  // não segurar conexões do pooler entre requisições.
+  max: 3,
+  idleTimeoutMillis: 10_000,
+  connectionTimeoutMillis: 15_000,
 });
+
+// Um erro em conexão ociosa não deve derrubar o processo.
+pool.on('error', (err) => {
+  console.error('[db] erro em conexão ociosa:', err.message);
+});
+
+// --------------------------------------------------------------------------
+// Tradução do SQL estilo SQLite -> PostgreSQL
+// --------------------------------------------------------------------------
+
+/**
+ * Troca os "?" por "$1, $2, ..." (numeração posicional do PostgreSQL),
+ * ignorando "?" que estejam dentro de literais entre aspas simples.
+ */
+function numerarParametros(sql) {
+  let saida = '';
+  let n = 0;
+  let dentroDeTexto = false;
+
+  for (let i = 0; i < sql.length; i++) {
+    const c = sql[i];
+
+    if (c === "'") {
+      // '' dentro de um literal é um apóstrofo escapado, não o fim do texto.
+      if (dentroDeTexto && sql[i + 1] === "'") {
+        saida += "''";
+        i++;
+        continue;
+      }
+      dentroDeTexto = !dentroDeTexto;
+      saida += c;
+      continue;
+    }
+
+    if (c === '?' && !dentroDeTexto) {
+      saida += `$${++n}`;
+      continue;
+    }
+
+    saida += c;
+  }
+
+  return saida;
+}
+
+/** Converte as funções de data do SQLite para o equivalente no PostgreSQL. */
+function traduzirDatas(sql) {
+  return (
+    sql
+      // datetime('now', 'localtime')  ->  to_char(now() ...)
+      .replace(/datetime\(\s*'now'\s*,\s*'localtime'\s*\)/gi, AGORA_SQL)
+      .replace(/datetime\(\s*'now'\s*\)/gi, AGORA_SQL)
+      // datetime(criado_em)  ->  criado_em
+      // (o texto "AAAA-MM-DD HH:MM:SS" já ordena cronologicamente)
+      .replace(/datetime\(\s*([a-z_][a-z0-9_.]*)\s*\)/gi, '$1')
+  );
+}
+
+function traduzir(sql) {
+  return numerarParametros(traduzirDatas(sql));
+}
 
 // --------------------------------------------------------------------------
 // Inicialização do schema (idempotente)
 //
-// Como as chamadas são assíncronas, não dá para criar as tabelas no topo do
-// módulo (como era com node:sqlite). Em vez disso, memorizamos uma Promise de
-// "banco pronto" e cada consulta espera por ela na 1ª vez. As instruções são
-// todas "IF NOT EXISTS" / ALTER condicional, então rodar de novo é seguro.
+// Tudo em UMA instrução de múltiplos comandos = uma só ida ao banco, o que
+// importa em serverless (cada cold start passa por aqui uma vez).
 // --------------------------------------------------------------------------
+const SCHEMA_SQL = `
+  CREATE TABLE IF NOT EXISTS usuarios (
+    id          integer GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    nome        text    NOT NULL,
+    email       text    NOT NULL,
+    senha_hash  text    NOT NULL,
+    papel       text    NOT NULL CHECK (papel IN ('solicitante', 'responsavel', 'admin')),
+    ativo       smallint NOT NULL DEFAULT 1,
+    criado_em   text    NOT NULL DEFAULT ${AGORA_SQL}
+  );
+
+  -- E-mail único ignorando maiúsculas/minúsculas (equivale ao COLLATE NOCASE
+  -- do SQLite, sem precisar da extensão citext).
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_usuarios_email_lower
+    ON usuarios (lower(email));
+
+  CREATE TABLE IF NOT EXISTS sessoes (
+    sid        text   PRIMARY KEY,
+    dados      text   NOT NULL,
+    expira_em  bigint NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS solicitacoes (
+    id                integer GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    solicitante_nome  text NOT NULL,
+    solicitante_email text NOT NULL,
+    assunto           text NOT NULL,
+    detalhes          text,
+    anexo             text,
+    status            text NOT NULL DEFAULT 'pendente'
+                           CHECK (status IN ('pendente', 'aprovado', 'reprovado')),
+    observacao        text,
+    revisado_por      text,
+    revisado_em       text,
+    criado_em         text NOT NULL DEFAULT ${AGORA_SQL},
+    origem            text,
+    origem_id         text,
+    anexos            text,
+    decisoes          text
+  );
+
+  -- Colunas acrescentadas depois (bancos criados antes destas versões).
+  ALTER TABLE solicitacoes ADD COLUMN IF NOT EXISTS origem    text;
+  ALTER TABLE solicitacoes ADD COLUMN IF NOT EXISTS origem_id text;
+  ALTER TABLE solicitacoes ADD COLUMN IF NOT EXISTS anexos    text;
+  ALTER TABLE solicitacoes ADD COLUMN IF NOT EXISTS decisoes  text;
+
+  -- Índice único parcial: cada resposta do Forms entra uma só vez.
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_solic_origem_id
+    ON solicitacoes (origem_id) WHERE origem_id IS NOT NULL;
+
+  -- Busca por e-mail do solicitante (área do solicitante), sem case.
+  CREATE INDEX IF NOT EXISTS idx_solic_email_lower
+    ON solicitacoes (lower(solicitante_email));
+
+  -- Limpeza de sessões expiradas por varredura, se um dia for preciso.
+  CREATE INDEX IF NOT EXISTS idx_sessoes_expira_em
+    ON sessoes (expira_em);
+`;
+
 let readyPromise = null;
 
 function ensureReady() {
-  if (!readyPromise) readyPromise = init();
+  if (!readyPromise) {
+    readyPromise = pool.query(SCHEMA_SQL).catch((err) => {
+      // Se falhar, não memoriza o erro: a próxima consulta tenta de novo.
+      readyPromise = null;
+      throw err;
+    });
+  }
   return readyPromise;
 }
 
-async function init() {
-  await client.executeMultiple(`
-    CREATE TABLE IF NOT EXISTS usuarios (
-      id          INTEGER PRIMARY KEY AUTOINCREMENT,
-      nome        TEXT    NOT NULL,
-      email       TEXT    NOT NULL UNIQUE COLLATE NOCASE,
-      senha_hash  TEXT    NOT NULL,
-      papel       TEXT    NOT NULL CHECK (papel IN ('solicitante', 'responsavel', 'admin')),
-      ativo       INTEGER NOT NULL DEFAULT 1,
-      criado_em   TEXT    NOT NULL DEFAULT (datetime('now', 'localtime'))
-    );
-
-    CREATE TABLE IF NOT EXISTS sessoes (
-      sid        TEXT PRIMARY KEY,
-      dados      TEXT NOT NULL,
-      expira_em  INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS solicitacoes (
-      id                INTEGER PRIMARY KEY AUTOINCREMENT,
-      solicitante_nome  TEXT    NOT NULL,
-      solicitante_email TEXT    NOT NULL COLLATE NOCASE,
-      assunto           TEXT    NOT NULL,
-      detalhes          TEXT,
-      anexo             TEXT,
-      status            TEXT    NOT NULL DEFAULT 'pendente'
-                                CHECK (status IN ('pendente', 'aprovado', 'reprovado')),
-      observacao        TEXT,
-      revisado_por      TEXT,
-      revisado_em       TEXT,
-      criado_em         TEXT    NOT NULL DEFAULT (datetime('now', 'localtime'))
-    );
-  `);
-
-  // Migração leve — colunas de origem (integração com Microsoft Forms).
-  const colunas = (await client.execute('PRAGMA table_info(solicitacoes)')).rows.map((c) => c.name);
-
-  if (!colunas.includes('origem')) {
-    await client.execute('ALTER TABLE solicitacoes ADD COLUMN origem TEXT');
-  }
-  if (!colunas.includes('origem_id')) {
-    await client.execute('ALTER TABLE solicitacoes ADD COLUMN origem_id TEXT');
-  }
-  if (!colunas.includes('anexos')) {
-    await client.execute('ALTER TABLE solicitacoes ADD COLUMN anexos TEXT');
-  }
-  // decisoes -> JSON com a decisão por cliente/operação:
-  //   { "MERCADO LIVRE": { status, obs, por, em }, "SHOPEE": { ... } }
-  // Cada solicitação lista vários clientes no "assunto" (um por pesquisa do
-  // Forms), e cada um pode ser aprovado/reprovado individualmente.
-  if (!colunas.includes('decisoes')) {
-    await client.execute('ALTER TABLE solicitacoes ADD COLUMN decisoes TEXT');
-  }
-
-  // Índice único parcial: cada resposta do Forms entra uma só vez.
-  await client.execute(
-    `CREATE UNIQUE INDEX IF NOT EXISTS idx_solic_origem_id
-       ON solicitacoes(origem_id) WHERE origem_id IS NOT NULL`
-  );
-}
-
 // --------------------------------------------------------------------------
-// Wrapper estilo "prepared statement", porém assíncrono.
+// Wrapper estilo "prepared statement", assíncrono.
 //
 //   await prepare(sql).get(a, b)   -> primeira linha (objeto) ou undefined
 //   await prepare(sql).all(a, b)   -> array de linhas (objetos)
 //   await prepare(sql).run(a, b)   -> { changes, lastInsertRowid }
 //
-// As linhas são convertidas para objetos simples (só as colunas nomeadas),
-// para o restante do código poder fazer { ...row } com segurança.
+// Em "run", lastInsertRowid vem do "RETURNING id" quando a consulta o pede
+// (os INSERTs de usuarios/solicitacoes pedem); caso contrário é null.
 // --------------------------------------------------------------------------
-function linhaParaObjeto(row, columns) {
-  const obj = {};
-  for (const nome of columns) obj[nome] = row[nome];
-  return obj;
-}
-
 function prepare(sql) {
+  const texto = traduzir(sql);
+
+  async function executar(args) {
+    await ensureReady();
+    return pool.query(texto, args);
+  }
+
   return {
     async get(...args) {
-      await ensureReady();
-      const rs = await client.execute({ sql, args });
-      return rs.rows.length ? linhaParaObjeto(rs.rows[0], rs.columns) : undefined;
+      const rs = await executar(args);
+      return rs.rows.length ? rs.rows[0] : undefined;
     },
     async all(...args) {
-      await ensureReady();
-      const rs = await client.execute({ sql, args });
-      return rs.rows.map((r) => linhaParaObjeto(r, rs.columns));
+      const rs = await executar(args);
+      return rs.rows;
     },
     async run(...args) {
-      await ensureReady();
-      const rs = await client.execute({ sql, args });
+      const rs = await executar(args);
+      const primeira = rs.rows && rs.rows.length ? rs.rows[0] : null;
       return {
-        changes: rs.rowsAffected,
-        lastInsertRowid: rs.lastInsertRowid == null ? null : Number(rs.lastInsertRowid),
+        changes: rs.rowCount,
+        lastInsertRowid: primeira && primeira.id != null ? Number(primeira.id) : null,
       };
     },
   };
 }
 
-module.exports = { prepare, ensureReady, client };
+/** Encerra o pool (usado pelos scripts de linha de comando). */
+async function fechar() {
+  await pool.end();
+}
+
+module.exports = { prepare, ensureReady, pool, fechar, AGORA_SQL, traduzir };

@@ -24,6 +24,7 @@
 
 const fs = require('node:fs');
 const solicitacoes = require('./solicitacoes');
+const db = require('./db');
 
 // --------------------------------------------------------------------------
 // Argumentos
@@ -247,4 +248,5 @@ console.log(`Modo:       ${confirmar ? 'GRAVAR (--confirmar)' : 'DRY-RUN (nada s
     console.log('\n  Confira as datas e o assunto acima. Se estiver certo, rode de novo com --confirmar.');
   }
   console.log('');
+  await db.fechar();
 })();

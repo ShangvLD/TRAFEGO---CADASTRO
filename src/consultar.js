@@ -25,13 +25,14 @@ const sql = process.argv.slice(2).join(' ').trim();
 
     console.log('\nDica: passe sua própria consulta, ex.:');
     console.log('  npm run consultar -- "SELECT * FROM solicitacoes WHERE status = \'aprovado\'"\n');
-    process.exit(0);
+    await db.fechar();
+    return;
   }
 
   // Com consulta: executa e mostra o resultado.
   try {
     const stmt = db.prepare(sql);
-    const ehLeitura = /^\s*(select|pragma|with)/i.test(sql);
+    const ehLeitura = /^\s*(select|with|table|show)/i.test(sql);
 
     if (ehLeitura) {
       const linhas = await stmt.all();
@@ -47,6 +48,8 @@ const sql = process.argv.slice(2).join(' ').trim();
     }
   } catch (erro) {
     console.error('Erro na consulta:', erro.message);
-    process.exit(1);
+    process.exitCode = 1;
+  } finally {
+    await db.fechar();
   }
 })();

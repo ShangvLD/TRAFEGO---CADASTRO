@@ -10,10 +10,14 @@ const db = require('./db');
 
 const CUSTO_HASH = 10; // fator de custo do bcrypt (equilíbrio segurança/velocidade)
 
-/** Busca um usuário ativo pelo e-mail. Retorna undefined se não existir. */
+/**
+ * Busca um usuário ativo pelo e-mail. Retorna undefined se não existir.
+ * A comparação ignora maiúsculas/minúsculas (lower nos dois lados, casando com
+ * o índice único idx_usuarios_email_lower).
+ */
 async function buscarPorEmail(email) {
   return db
-    .prepare('SELECT * FROM usuarios WHERE email = ? AND ativo = 1')
+    .prepare('SELECT * FROM usuarios WHERE lower(email) = lower(?) AND ativo = 1')
     .get(email);
 }
 
@@ -31,7 +35,8 @@ async function criar({ nome, email, senha, papel }) {
   const info = await db
     .prepare(
       `INSERT INTO usuarios (nome, email, senha_hash, papel)
-       VALUES (?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?)
+       RETURNING id`
     )
     .run(nome, email, senhaHash, papel);
   return buscarPorId(info.lastInsertRowid);

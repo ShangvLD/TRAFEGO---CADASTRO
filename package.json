@@ -11,9 +11,15 @@
     "criar-usuario": "node src/criar-usuario.js",
     "consultar": "node src/consultar.js",
     "testar-webhook": "node src/testar-webhook.js",
-    "importar": "node src/importar-csv.js"
+    "importar": "node src/importar-csv.js",
+    "exportar-turso": "node src/exportar-turso.js",
+    "importar-supabase": "node src/importar-supabase.js"
   },
-  "keywords": ["jomed", "cadastro", "trafego"],
+  "keywords": [
+    "jomed",
+    "cadastro",
+    "trafego"
+  ],
   "author": "Jomed",
   "license": "UNLICENSED",
   "engines": {
@@ -24,6 +30,7 @@
     "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "express-session": "^1.18.1"
+    "express-session": "^1.18.1",
+    "pg": "^8.22.0"
   }
 }

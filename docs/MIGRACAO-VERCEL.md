@@ -1,5 +1,11 @@
 # Migração Railway → Vercel + Turso
 
+> **HISTÓRICO — a parte do banco está desatualizada.** A hospedagem no Vercel
+> continua valendo, mas o **Turso foi substituído pelo Supabase (PostgreSQL)**.
+> Onde este guia fala de `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN`, hoje é uma
+> variável só: `DATABASE_URL`. Veja
+> [MIGRACAO-SUPABASE.md](MIGRACAO-SUPABASE.md).
+
 Guia passo a passo para colocar o sistema no Vercel (padrão dos parceiros),
 usando o **Turso** (SQLite na nuvem) como banco — já que o disco do Vercel é
 efêmero e não serve para banco de dados.

@@ -14,8 +14,9 @@ Possui login com dois perfis de acesso e identidade visual institucional.
 ## Stack
 
 - **Node.js + Express** — servidor web e API.
-- **SQLite embutido** (`node:sqlite`, sem dependência nativa) — banco dos logins, em `/data`.
-- **express-session** com store próprio em SQLite — sessão por cookie.
+- **PostgreSQL no Supabase** — banco de logins e solicitações, acessado pelo
+  driver `pg` (100% JavaScript, sem dependência nativa).
+- **express-session** com store próprio na tabela `sessoes` — sessão por cookie.
 - **bcryptjs** — senhas criptografadas.
 - Front-end em HTML/CSS puro (pasta `public` + `views`).
 
@@ -24,10 +25,10 @@ Possui login com dois perfis de acesso e identidade visual institucional.
 | Caminho | Descrição |
 | --- | --- |
 | `server.js` | Servidor Express: rotas, sessão e proteção por perfil. |
-| `src/db.js` | Conexão SQLite e criação do schema. |
+| `src/db.js` | Conexão PostgreSQL (Supabase), criação do schema e tradução do SQL. |
 | `src/usuarios.js` | Consultas de usuário e validação de senha. |
 | `src/auth.js` | Middlewares de login e autorização por papel. |
-| `src/session-store.js` | Store de sessão sobre o SQLite. |
+| `src/session-store.js` | Store de sessão sobre o PostgreSQL. |
 | `src/seed.js` | Cria usuários de teste (`npm run seed`). |
 | `src/criar-usuario.js` | Cria um usuário via linha de comando. |
 | `views/` | Páginas: `login.html`, `solicitante.html`, `responsavel.html`. |
@@ -37,13 +38,17 @@ Possui login com dois perfis de acesso e identidade visual institucional.
 
 ```bash
 npm install          # instala as dependências
-cp .env.example .env # cria o arquivo de ambiente (ajuste o SESSION_SECRET)
-npm run seed         # cria os usuários de teste (rodar uma vez)
+cp .env.example .env # cria o arquivo de ambiente
+                     # -> preencha DATABASE_URL (Supabase) e SESSION_SECRET
 npm start            # sobe em http://localhost:3000
 ```
 
-> Requer **Node.js 22.5+** (SQLite embutido). Não precisa de admin: pode usar a
-> versão portátil do Node.
+O banco é **sempre** o Supabase (não há mais banco em arquivo): sem
+`DATABASE_URL` o app não sobe. A connection string sai do painel do Supabase em
+**Connect > Connection string > Transaction pooler** — veja
+[docs/MIGRACAO-SUPABASE.md](docs/MIGRACAO-SUPABASE.md).
+
+> Requer **Node.js 22+**. Não precisa de admin: pode usar a versão portátil do Node.
 
 ## Controlando os logins
 
@@ -58,9 +63,10 @@ npm run criar-usuario -- "Nome Completo" email@jomedlog.com.br senha papel
 
 - **Fase 1 (concluída):** login, banco de usuários, dois perfis e proteção de rotas.
 - **Fase 2/3:** "Minhas solicitações" (solicitante) e painel de aprovação com dados reais.
-- **Fase 4:** integração Microsoft Forms → banco (via Power Automate).
-- **Hospedagem:** a definir (Vercel + Turso, ou Azure para manter o dado na Microsoft).
-  Em serverless (Vercel) o SQLite em arquivo não persiste — trocar por banco hospedado.
+- **Fase 4 (concluída):** integração Microsoft Forms → banco (via Power Automate).
+- **Hospedagem:** **Vercel** (serverless) + **Supabase** (PostgreSQL).
+  Guias: [docs/MIGRACAO-VERCEL.md](docs/MIGRACAO-VERCEL.md) (Railway → Vercel) e
+  [docs/MIGRACAO-SUPABASE.md](docs/MIGRACAO-SUPABASE.md) (Turso → Supabase).
 
 ## Identidade visual
 

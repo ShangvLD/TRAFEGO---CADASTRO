@@ -182,7 +182,7 @@ async function listarPorEmail(email) {
   const linhas = await db
     .prepare(
       `SELECT * FROM solicitacoes
-       WHERE solicitante_email = ?
+       WHERE lower(solicitante_email) = lower(?)
        ORDER BY datetime(criado_em) DESC, id DESC`
     )
     .all(email);
@@ -229,7 +229,8 @@ async function criar({ solicitante_nome, solicitante_email, assunto, detalhes, a
     .prepare(
       `INSERT INTO solicitacoes
          (solicitante_nome, solicitante_email, assunto, detalhes, anexo, anexos, origem, origem_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       RETURNING id`
     )
     .run(
       solicitante_nome,
@@ -283,7 +284,8 @@ async function importar({ solicitante_nome, solicitante_email, assunto, detalhes
     .prepare(
       `INSERT INTO solicitacoes
          (solicitante_nome, solicitante_email, assunto, detalhes, anexo, anexos, status, origem, origem_id, criado_em)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'importado', ?, COALESCE(?, datetime('now', 'localtime')))`
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'importado', ?, COALESCE(?, datetime('now', 'localtime')))
+       RETURNING id`
     )
     .run(
       solicitante_nome,
