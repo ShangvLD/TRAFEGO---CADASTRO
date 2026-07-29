@@ -328,6 +328,35 @@ async function contarPorStatus() {
   return resumo;
 }
 
+/**
+ * "Impressão digital" da lista, para o painel saber se algo mudou sem baixar
+ * tudo de novo.
+ *
+ * Uma consulta agregada só, contra a lista inteira que traz as 52 linhas com
+ * detalhes e anexos. O painel consulta isto a cada poucos segundos e só busca
+ * a lista completa quando o valor muda.
+ *
+ * Os três campos cobrem as mudanças que importam:
+ *   total        -> entrou ou saiu solicitação
+ *   maxId        -> chegou solicitação nova
+ *   maxRevisado  -> alguém aprovou/reprovou (revisado_em é reescrito a cada decisão)
+ */
+async function versao() {
+  const r = await db
+    .prepare(
+      `SELECT count(*)::int              AS total,
+              COALESCE(max(id), 0)       AS max_id,
+              COALESCE(max(revisado_em), '') AS max_revisado
+         FROM solicitacoes`
+    )
+    .get();
+  return {
+    total: r ? r.total : 0,
+    maxId: r ? Number(r.max_id) : 0,
+    maxRevisado: r ? r.max_revisado : '',
+  };
+}
+
 /** Horário atual do banco ("AAAA-MM-DD HH:MM:SS"), p/ carimbar as decisões. */
 async function agoraDoBanco() {
   const r = await db.prepare("SELECT datetime('now', 'localtime') AS agora").get();
@@ -396,4 +425,5 @@ module.exports = {
   excluir,
   normalizarAnexos,
   contarPorStatus,
+  versao,
 };

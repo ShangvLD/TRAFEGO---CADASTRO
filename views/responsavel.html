@@ -140,6 +140,12 @@
         </div>
     </div>
 
+    <!-- Aviso discreto de solicitação nova (atualização automática) -->
+    <div class="toast" id="toast-novidade" role="status" aria-live="polite">
+        <span class="material-symbols-rounded">notifications_active</span>
+        <span class="toast-txt"></span>
+    </div>
+
     <script src="/js/app.js"></script>
     <script>
         const corpo = document.getElementById('tabela-corpo');
@@ -587,9 +593,95 @@
         overlay.addEventListener('click', (e) => { if (e.target === overlay) fecharModal(); });
         document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !overlay.hidden) fecharModal(); });
 
-        document.getElementById('btn-atualizar').addEventListener('click', carregar);
+        document.getElementById('btn-atualizar').addEventListener('click', async () => {
+            await carregar();
+            versaoConhecida = impressaoLocal();
+        });
 
-        carregar();
+        // ==================================================================
+        // ATUALIZAÇÃO AUTOMÁTICA
+        //
+        // Por que polling e não WebSocket/SSE: o Vercel roda em funções
+        // serverless, que não mantêm conexão aberta — WebSocket não é suportado
+        // e SSE bate no limite de tempo de execução da função.
+        //
+        // Para não pesar, a verificação NÃO baixa a lista: consulta apenas
+        // /api/solicitacoes/versao (uma consulta agregada) e só busca as 52
+        // linhas com detalhes e anexos quando algo realmente mudou.
+        // ==================================================================
+        const INTERVALO_VERIFICACAO = 20000; // 20s
+        let versaoConhecida = null;
+        let verificando = false;
+
+        /** A mesma impressão digital que o servidor devolve, calculada do cache
+         *  local — evita uma requisição extra depois de cada recarga. */
+        function impressaoLocal() {
+            let maxId = 0;
+            let maxRevisado = '';
+            for (const s of solicitacoesCache) {
+                if (s.id > maxId) maxId = s.id;
+                if (s.revisado_em && s.revisado_em > maxRevisado) maxRevisado = s.revisado_em;
+            }
+            return `${solicitacoesCache.length}:${maxId}:${maxRevisado}`;
+        }
+
+        async function lerVersaoDoServidor() {
+            try {
+                const r = await fetch('/api/solicitacoes/versao');
+                if (!r.ok) return null;
+                const j = await r.json();
+                return j.ok ? `${j.total}:${j.maxId}:${j.maxRevisado}` : null;
+            } catch (e) {
+                return null; // sem conexão: tenta de novo no próximo ciclo
+            }
+        }
+
+        function avisarNovidade(quantas) {
+            const t = document.getElementById('toast-novidade');
+            t.querySelector('.toast-txt').textContent =
+                quantas === 1 ? '1 nova solicitação' : `${quantas} novas solicitações`;
+            t.classList.add('visivel');
+            clearTimeout(avisarNovidade._timer);
+            avisarNovidade._timer = setTimeout(() => t.classList.remove('visivel'), 6000);
+        }
+
+        async function verificarNovidades() {
+            // Aba em segundo plano: não gasta requisição. Ao voltar, verifica na hora.
+            if (document.visibilityState !== 'visible') return;
+            // Modal aberto: não troca a tabela embaixo de uma decisão em andamento.
+            if (!overlay.hidden) return;
+            if (verificando) return;
+
+            verificando = true;
+            try {
+                const versao = await lerVersaoDoServidor();
+                if (!versao || versao === versaoConhecida) return;
+
+                const maiorIdAntes = solicitacoesCache.reduce((m, s) => (s.id > m ? s.id : m), 0);
+                await carregar();
+                versaoConhecida = impressaoLocal();
+
+                const novas = solicitacoesCache.filter((s) => s.id > maiorIdAntes).length;
+                if (novas > 0) avisarNovidade(novas);
+            } finally {
+                verificando = false;
+            }
+        }
+
+        setInterval(verificarNovidades, INTERVALO_VERIFICACAO);
+        // Voltar para a aba: verifica imediatamente, sem esperar o ciclo.
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') verificarNovidades();
+        });
+        // Ao fechar o modal, aplica o que tiver chegado enquanto ele estava aberto.
+        document.getElementById('modal-fechar').addEventListener('click', () => {
+            setTimeout(verificarNovidades, 300);
+        });
+
+        (async () => {
+            await carregar();
+            versaoConhecida = impressaoLocal();
+        })();
     </script>
 </body>
 </html>

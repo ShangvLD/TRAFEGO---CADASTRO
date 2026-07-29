@@ -215,6 +215,22 @@ app.get(
   })
 );
 
+// "Impressão digital" da lista, para o painel se atualizar sozinho.
+//
+// O painel consulta esta rota a cada poucos segundos e só busca a lista
+// completa quando o valor muda. É uma consulta agregada, muito mais barata que
+// devolver as 52 linhas com detalhes e anexos a cada verificação — o que
+// importa no plano gratuito do banco.
+app.get(
+  '/api/solicitacoes/versao',
+  exigirLogin,
+  exigirPapel('responsavel', 'admin'),
+  wrap(async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.json({ ok: true, ...(await solicitacoes.versao()) });
+  })
+);
+
 // Exclui uma solicitação — SOMENTE admin.
 app.delete(
   '/api/solicitacoes/:id',

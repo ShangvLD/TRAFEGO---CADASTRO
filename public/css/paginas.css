@@ -3,6 +3,48 @@
    Complementa base.css.
    ========================================================================== */
 
+/* ---- Aviso de solicitação nova (atualização automática) --------------
+   Discreto de propósito: a tabela já se atualizou sozinha, o aviso só conta
+   o que aconteceu. Nada de modal ou alerta que interrompa o trabalho. */
+.toast {
+    position: fixed;
+    bottom: var(--space-6);
+    right: var(--space-6);
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-5);
+    border-radius: var(--radius-pill);
+    background: var(--primary-darker);
+    color: #fff;
+    font-size: 0.9rem;
+    font-weight: 600;
+    box-shadow: var(--shadow);
+    opacity: 0;
+    transform: translateY(12px);
+    pointer-events: none;
+    transition: opacity var(--transition), transform var(--transition);
+}
+
+.toast.visivel {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.toast .material-symbols-rounded {
+    font-size: 20px;
+}
+
+@media (max-width: 560px) {
+    .toast {
+        left: var(--space-4);
+        right: var(--space-4);
+        bottom: var(--space-4);
+        justify-content: center;
+    }
+}
+
 /* ---- Chamada para o formulário nativo (solicitante) ------------------
    Fica entre o hero e o formulário do Forms, durante a transição em que as
    duas entradas convivem. */
