@@ -3,6 +3,56 @@
    Complementa base.css.
    ========================================================================== */
 
+/* ---- Chamada para o formulário nativo (solicitante) ------------------
+   Fica entre o hero e o formulário do Forms, durante a transição em que as
+   duas entradas convivem. */
+.destaque-nativo {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-6);
+    margin-bottom: var(--space-6);
+    border-left: 4px solid var(--primary);
+    background: linear-gradient(90deg, var(--primary-soft) 0%, var(--surface) 55%);
+}
+
+.destaque-nativo__texto h3 {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: 1.05rem;
+    color: var(--primary-darker);
+    margin-bottom: var(--space-2);
+}
+
+.destaque-nativo__texto h3 .material-symbols-rounded {
+    color: var(--primary);
+    font-size: 22px;
+}
+
+.destaque-nativo__texto p {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    max-width: 62ch;
+}
+
+.destaque-nativo__nota {
+    margin-top: var(--space-2);
+    font-size: 0.82rem;
+    color: var(--warning);
+}
+
+.destaque-nativo .btn {
+    flex-shrink: 0;
+}
+
+@media (max-width: 760px) {
+    .destaque-nativo {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+
 /* ---- Grid formulário + orientações (solicitante) -------------------- */
 .form-grid {
     display: grid;

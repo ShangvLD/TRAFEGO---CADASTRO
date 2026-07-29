@@ -303,7 +303,9 @@ h1, h2, h3, h4 {
     font-size: 0.78rem;
 }
 
-.user-menu button {
+/* Itens do menu: <button> (ações) e <a> (navegação) têm a mesma aparência. */
+.user-menu button,
+.user-menu a {
     width: 100%;
     display: flex;
     align-items: center;
@@ -316,16 +318,73 @@ h1, h2, h3, h4 {
     font: inherit;
     font-size: 0.9rem;
     text-align: left;
+    text-decoration: none;
     cursor: pointer;
     transition: background var(--transition);
 }
 
-.user-menu button:hover {
+.user-menu button:hover,
+.user-menu a:hover {
     background: var(--surface-muted);
 }
 
 .user-menu button.danger {
     color: var(--danger);
+}
+
+/* Separador antes do logout, quando há itens de navegação acima dele. */
+.user-menu .user-menu__sep {
+    height: 1px;
+    background: var(--border);
+    margin: var(--space-2) var(--space-2);
+}
+
+/* ------------------------------------------------------------------ */
+/* 4b. BOTÕES                                                         */
+/* ------------------------------------------------------------------ */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 12px 22px;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    font: inherit;
+    font-size: 0.95rem;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background var(--transition), border-color var(--transition), transform var(--transition);
+}
+
+.btn:active {
+    transform: translateY(1px);
+}
+
+.btn--primario {
+    background: var(--primary);
+    color: #fff;
+}
+
+.btn--primario:hover:not(:disabled) {
+    background: var(--primary-dark);
+    color: #fff;
+}
+
+.btn--secundario {
+    background: var(--surface);
+    border-color: var(--border);
+    color: var(--text-secondary);
+}
+
+.btn--secundario:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }
 
 /* ------------------------------------------------------------------ */

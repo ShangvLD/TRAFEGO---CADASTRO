@@ -312,48 +312,8 @@
     display: flex;
 }
 
-.btn {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: 12px 22px;
-    border: 1px solid transparent;
-    border-radius: var(--radius);
-    font: inherit;
-    font-size: 0.95rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background var(--transition), border-color var(--transition), transform var(--transition);
-}
-
-.btn:active {
-    transform: translateY(1px);
-}
-
-.btn--primario {
-    background: var(--primary);
-    color: #fff;
-}
-
-.btn--primario:hover:not(:disabled) {
-    background: var(--primary-dark);
-}
-
-.btn--secundario {
-    background: var(--surface);
-    border-color: var(--border);
-    color: var(--text-secondary);
-}
-
-.btn--secundario:hover {
-    border-color: var(--primary);
-    color: var(--primary);
-}
-
-.btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-}
+/* Os estilos de .btn ficam em base.css — são componente genérico, usado
+   também na página de solicitação e na tela de administração. */
 
 /* --------------------------------------------------------------------------
    Sucesso após o envio
