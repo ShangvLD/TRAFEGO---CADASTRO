@@ -171,10 +171,14 @@ app.get('/solicitante', exigirLogin, exigirPapel('solicitante', 'admin'), (req, 
   res.sendFile(path.join(VIEWS, 'solicitante.html'));
 });
 
-// Formulário NATIVO de cadastro. Conviva com o /solicitante durante a
-// transição: as duas entradas gravam na mesma tabela, e a migração das pessoas
-// pode ser feita por operação, sem troca de chave geral.
-app.get('/cadastro', exigirLogin, exigirPapel('solicitante', 'admin'), (req, res) => {
+// Formulário NATIVO de cadastro — RESTRITO A ADMIN durante a validação.
+//
+// Convive com o /solicitante: as duas entradas gravam na mesma tabela. Enquanto
+// o upload de documentos não estiver liberado, o formulário nativo não substitui
+// o Forms, então só o admin o usa para validar. Para abrir aos solicitantes,
+// acrescente 'solicitante' aqui e na rota POST /api/cadastros, e remova o
+// data-admin-only do card em views/solicitante.html.
+app.get('/cadastro', exigirLogin, exigirPapel('admin'), (req, res) => {
   res.sendFile(path.join(VIEWS, 'cadastro.html'));
 });
 
@@ -330,11 +334,14 @@ app.patch(
 //
 // O solicitante NÃO vem do corpo: é sempre quem está logado. Assim ninguém
 // registra cadastro em nome de outra pessoa.
+//
+// RESTRITO A ADMIN, junto com a página /cadastro — não basta esconder o botão:
+// sem esta restrição, qualquer solicitante poderia gravar chamando a API direto.
 // --------------------------------------------------------------------------
 app.post(
   '/api/cadastros',
   exigirLogin,
-  exigirPapel('solicitante', 'admin'),
+  exigirPapel('admin'),
   wrap(async (req, res) => {
     const resultado = await cadastros.validarECriar(req.body || {}, {
       nome: req.session.usuario.nome,

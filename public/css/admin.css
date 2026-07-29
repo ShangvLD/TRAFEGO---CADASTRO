@@ -305,12 +305,4 @@
 .aviso-inline.atencao  { color: var(--warning); }
 .aviso-inline.ok       { color: var(--success); }
 
-.badge.is-danger {
-    background: var(--danger-soft);
-    color: var(--danger);
-}
-
-.badge.is-warning {
-    background: var(--warning-soft);
-    color: var(--warning);
-}
+/* As variantes .badge.is-* (success/warning/danger/info) ficam em base.css. */

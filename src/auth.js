@@ -35,11 +35,21 @@ function exigirLogin(req, res, next) {
 function exigirPapel(...papeisPermitidos) {
   return (req, res, next) => {
     const usuario = req.session && req.session.usuario;
+    const ehApi = req.path.startsWith('/api/');
+
     if (!usuario) {
-      return res.redirect('/login');
+      return ehApi
+        ? res.status(401).json({ ok: false, erro: 'Não autenticado.' })
+        : res.redirect('/login');
     }
+
     if (!papeisPermitidos.includes(usuario.papel)) {
-      // Logado, mas sem permissão: manda para a própria home.
+      // Em API, responde 403 em JSON: um redirect faria o fetch do front
+      // receber HTML e falhar ao interpretar a resposta.
+      if (ehApi) {
+        return res.status(403).json({ ok: false, erro: 'Sem permissão para esta ação.' });
+      }
+      // Em navegação normal, manda para a própria home.
       return res.redirect(paginaInicialPorPapel(usuario.papel));
     }
     return next();

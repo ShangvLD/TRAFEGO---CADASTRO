@@ -31,7 +31,7 @@
 
             <nav class="main-nav" aria-label="Menu principal">
                 <a href="/solicitante" class="active">Solicitar</a>
-                <a href="/cadastro">Formulário nativo</a>
+                <a href="/cadastro" data-admin-only hidden>Formulário nativo</a>
                 <a href="#minhas-solicitacoes">Minhas solicitações</a>
                 <a href="/responsavel" data-admin-only hidden>Painel de aprovação</a>
             </nav>
@@ -68,12 +68,19 @@
             <p>Preencha o formulário abaixo para enviar sua solicitação. As respostas são registradas com segurança pelo Microsoft Forms e encaminhadas ao time responsável.</p>
         </section>
 
-        <!-- Chamada para o formulário nativo (em uso paralelo ao Forms) -->
-        <section class="card destaque-nativo">
+        <!--
+            Chamada para o formulário nativo — SÓ PARA ADMIN nesta fase.
+            O data-admin-only o mantém oculto para os demais (app.js revela).
+            Ao liberar aos solicitantes, remova os dois data-admin-only daqui,
+            o do link no menu, e ajuste os papéis das rotas /cadastro e
+            POST /api/cadastros no server.js.
+        -->
+        <section class="card destaque-nativo" data-admin-only hidden>
             <div class="destaque-nativo__texto">
                 <h3>
                     <span class="material-symbols-rounded">bolt</span>
-                    Experimente o formulário nativo
+                    Formulário nativo
+                    <span class="badge is-warning" style="margin-left:var(--space-2);font-size:0.68rem">em validação · só admin</span>
                 </h3>
                 <p>
                     Os mesmos campos, mas com <strong>conferência na hora</strong>: CPF, placa e
@@ -81,8 +88,8 @@
                     por erro de digitação.
                 </p>
                 <p class="destaque-nativo__nota">
-                    Enquanto o envio de arquivos não estiver liberado, continue anexando os
-                    documentos pelo Microsoft Forms.
+                    Ainda não substitui o Forms: o envio de arquivos depende da liberação de
+                    acesso ao SharePoint. Continue anexando os documentos pelo Microsoft Forms.
                 </p>
             </div>
             <a href="/cadastro" class="btn btn--primario">
