@@ -27,7 +27,19 @@ const PAPEIS = {
     admin: true,
   },
 
-  // ---- Responsáveis: cada um vê SÓ o painel do seu módulo -----------------
+  // ---- Responsável: acompanha e decide em TODOS os módulos ----------------
+  // Terceiro, agregado e candidato. É o perfil padrão de quem analisa
+  // solicitação — não aprova só um tipo.
+  responsavel: {
+    rotulo: 'Responsável',
+    formularios: [],
+    paineis: '*',
+    admin: false,
+  },
+
+  // ---- Responsáveis RESTRITOS a um módulo ---------------------------------
+  // Opcionais: use quando alguém deve ver só um tipo de solicitação. O papel
+  // "responsavel" acima é o padrão e alcança os três.
   responsavel_terceiro: {
     rotulo: 'Responsável — Terceiro',
     formularios: [],
@@ -67,20 +79,13 @@ const PAPEIS = {
     admin: false,
   },
 
-  // ---- Legados (em uso hoje) ---------------------------------------------
+  // ---- Legado (em uso hoje) ----------------------------------------------
   // 'solicitante' preenchia o formulário de terceiro e via "Minhas
-  // solicitações"; 'responsavel' acompanhava o painel de terceiro.
+  // solicitações". Mantido porque há usuários com este papel em produção.
   solicitante: {
     rotulo: 'Solicitante (legado)',
     formularios: ['terceiro'],
     paineis: [],
-    admin: false,
-    legado: true,
-  },
-  responsavel: {
-    rotulo: 'Responsável (legado)',
-    formularios: [],
-    paineis: ['terceiro'],
     admin: false,
     legado: true,
   },
