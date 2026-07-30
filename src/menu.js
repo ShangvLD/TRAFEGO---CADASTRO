@@ -72,6 +72,7 @@ function menuPara(usuario) {
 function menuDaConta(usuario) {
   const itens = [];
   if (usuario && papeis.ehAdmin(usuario.papel)) {
+    itens.push({ href: '/admin/usuarios', rotulo: 'Usuários', icone: 'group' });
     itens.push({ href: '/admin/formulario', rotulo: 'Configurar formulário', icone: 'tune' });
   }
   return itens;

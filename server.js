@@ -245,6 +245,93 @@ app.get('/admin/formulario', exigirLogin, exigirAdmin, (req, res) => {
   res.sendFile(path.join(VIEWS, 'admin-formulario.html'));
 });
 
+// Gestão de usuários — SOMENTE admin.
+app.get('/admin/usuarios', exigirLogin, exigirAdmin, (req, res) => {
+  res.sendFile(path.join(VIEWS, 'admin-usuarios.html'));
+});
+
+// --------------------------------------------------------------------------
+// API de usuários (somente admin)
+//
+// Substitui o script de linha de comando `npm run criar-usuario`, que continua
+// funcionando mas exige acesso ao terminal do projeto.
+// --------------------------------------------------------------------------
+
+// Lista os usuários + os papéis disponíveis (para o seletor da tela).
+app.get(
+  '/api/admin/usuarios',
+  exigirLogin,
+  exigirAdmin,
+  wrap(async (req, res) => {
+    res.json({
+      ok: true,
+      usuarios: await usuarios.listarParaAdmin(),
+      papeis: papeis.PAPEIS_ATUAIS.map((p) => ({
+        valor: p,
+        rotulo: papeis.rotuloDoPapel(p),
+        formularios: papeis.formulariosDoPapel(p),
+        paineis: papeis.paineisDoPapel(p),
+      })),
+      senhaMinima: usuarios.SENHA_MINIMA,
+      meuId: req.session.usuario.id,
+    });
+  })
+);
+
+// Cria um usuário.
+app.post(
+  '/api/admin/usuarios',
+  exigirLogin,
+  exigirAdmin,
+  wrap(async (req, res) => {
+    const { nome, email, senha, papel } = req.body || {};
+    const r = await usuarios.criarValidado({ nome, email, senha, papel });
+    if (!r.ok) return res.status(400).json({ ok: false, erros: r.erros });
+    res.status(201).json({ ok: true, usuario: r.usuario });
+  })
+);
+
+// Ativa/desativa ou troca o papel.
+app.patch(
+  '/api/admin/usuarios/:id',
+  exigirLogin,
+  exigirAdmin,
+  wrap(async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
+
+    const b = req.body || {};
+    const idDoSolicitante = req.session.usuario.id;
+
+    if (typeof b.ativo === 'boolean') {
+      const r = await usuarios.definirAtivo(id, b.ativo, { idDoSolicitante });
+      if (!r.ok) return res.status(400).json({ ok: false, erro: r.erro });
+    }
+
+    if (typeof b.papel === 'string') {
+      const r = await usuarios.definirPapel(id, b.papel, { idDoSolicitante });
+      if (!r.ok) return res.status(400).json({ ok: false, erro: r.erro });
+    }
+
+    res.json({ ok: true });
+  })
+);
+
+// Define uma senha nova (quando a pessoa esquece a dela).
+app.post(
+  '/api/admin/usuarios/:id/senha',
+  exigirLogin,
+  exigirAdmin,
+  wrap(async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
+
+    const r = await usuarios.trocarSenha(id, (req.body || {}).senha);
+    if (!r.ok) return res.status(400).json({ ok: false, erro: r.erro });
+    res.json({ ok: true });
+  })
+);
+
 // --------------------------------------------------------------------------
 // API de solicitações
 // --------------------------------------------------------------------------
