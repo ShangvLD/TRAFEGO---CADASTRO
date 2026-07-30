@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cadastro — Tráfego | Jomed</title>
+    <link rel="icon" type="image/png" href="/img/logo-jomed.png">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
+
+    <link rel="stylesheet" href="/css/base.css">
+    <link rel="stylesheet" href="/css/paginas.css">
+    <link rel="stylesheet" href="/css/cadastro.css">
+</head>
+<body class="has-header">
+
+    <header class="app-header">
+        <div class="app-header__inner">
+            <div class="brand">
+                <div class="brand-logo">
+                    <img src="/img/logo-jomed.png" alt="Jomed Transportes e Logística">
+                </div>
+                <div class="brand-text">
+                    <h1>Tráfego</h1>
+                    <span>Cadastro</span>
+                </div>
+            </div>
+
+            <!-- Desenhado por /js/app.js a partir das permissões do usuário. -->
+            <nav class="main-nav" id="main-nav" aria-label="Menu principal"></nav>
+
+            <div class="header-actions">
+                <button class="user-chip" id="user-chip" type="button" title="Conta">
+                    <div class="user-avatar" id="user-avatar">··</div>
+                    <span class="user-name" id="user-name">Carregando...</span>
+                    <span class="material-symbols-rounded" style="font-size:18px;color:rgba(255,255,255,0.75)">expand_more</span>
+                </button>
+                <div class="user-menu" id="user-menu">
+                    <div class="user-menu__info">
+                        <strong id="menu-nome">—</strong>
+                        <small id="menu-email">—</small>
+                        <small id="menu-papel" class="menu-papel">—</small>
+                    </div>
+                    <div id="menu-conta-itens"></div>
+                    <button type="button" class="danger" id="btn-sair">
+                        <span class="material-symbols-rounded">logout</span> Sair
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="page-container">
+
+        <section class="card card--hero">
+            <h2 id="titulo">Cadastro</h2>
+            <p id="descricao">Carregando...</p>
+        </section>
+
+        <section class="card" id="painel-form">
+
+            <div class="docs-aviso" style="margin-bottom:var(--space-6)">
+                <span class="material-symbols-rounded">construction</span>
+                <div>
+                    <strong>Estrutura base.</strong> Os campos específicos deste módulo
+                    ainda serão definidos. Por enquanto o formulário aceita um resumo e
+                    uma descrição — o suficiente para o fluxo de envio, acompanhamento e
+                    aprovação já funcionar de ponta a ponta.
+                </div>
+            </div>
+
+            <form id="form-modulo" novalidate autocomplete="off">
+                <div class="form-secao">
+                    <div class="form-secao__titulo">
+                        <span class="material-symbols-rounded">edit_note</span> Dados da solicitação
+                    </div>
+
+                    <div class="campos">
+                        <div class="campo campo-largo" data-campo="assunto">
+                            <label for="assunto">Resumo <span class="obrigatorio">*</span></label>
+                            <input type="text" id="assunto" name="assunto" maxlength="200"
+                                   placeholder="Identifique a solicitação em uma linha">
+                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
+                        </div>
+
+                        <div class="campo campo-largo" data-campo="detalhes">
+                            <label for="detalhes">Detalhes</label>
+                            <textarea id="detalhes" name="detalhes" maxlength="4000"
+                                      placeholder="Descreva as informações relevantes"></textarea>
+                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-acoes">
+                    <span class="aviso-erros" id="aviso-erros">
+                        <span class="material-symbols-rounded">error</span>
+                        <span id="aviso-erros-txt"></span>
+                    </span>
+                    <button type="button" class="btn btn--secundario" id="btn-limpar">
+                        <span class="material-symbols-rounded">restart_alt</span> Limpar
+                    </button>
+                    <button type="submit" class="btn btn--primario" id="btn-enviar">
+                        <span class="material-symbols-rounded">send</span> Enviar
+                    </button>
+                </div>
+            </form>
+
+            <div class="enviado" id="painel-enviado">
+                <div class="icone"><span class="material-symbols-rounded">check_circle</span></div>
+                <h3>Solicitação enviada</h3>
+                <p>Sua solicitação foi registrada e já está disponível para análise.</p>
+                <p class="protocolo" id="protocolo">#—</p>
+                <div style="margin-top:var(--space-6)">
+                    <button type="button" class="btn btn--primario" id="btn-novo">
+                        <span class="material-symbols-rounded">add</span> Enviar outra
+                    </button>
+                    <a href="/minhas-solicitacoes" class="btn btn--secundario">
+                        <span class="material-symbols-rounded">fact_check</span> Ver minhas solicitações
+                    </a>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="/js/app.js"></script>
+    <script>
+        // O módulo vem da própria URL: /cadastro/<slug>
+        const SLUG = window.location.pathname.split('/').filter(Boolean)[1] || '';
+
+        const form = document.getElementById('form-modulo');
+        const painelEnviado = document.getElementById('painel-enviado');
+        const btnEnviar = document.getElementById('btn-enviar');
+        const avisoErros = document.getElementById('aviso-erros');
+        const avisoErrosTxt = document.getElementById('aviso-erros-txt');
+
+        function caixa(campo) { return form.querySelector('[data-campo="' + campo + '"]'); }
+
+        function marcarErro(campo, mensagem) {
+            const c = caixa(campo);
+            if (!c) return;
+            c.classList.add('com-erro');
+            const t = c.querySelector('.erro-txt');
+            if (t) t.textContent = mensagem;
+        }
+
+        function limparErros() {
+            for (const c of form.querySelectorAll('.campo')) c.classList.remove('com-erro');
+            avisoErros.classList.remove('visivel');
+        }
+
+        // Rótulos do módulo (título, descrição, aba do navegador).
+        (async () => {
+            try {
+                const r = await fetch('/api/modulos/' + SLUG);
+                if (!r.ok) return;
+                const j = await r.json();
+                if (!j.ok) return;
+                document.getElementById('titulo').textContent = j.modulo.rotulo;
+                document.getElementById('descricao').textContent = j.modulo.descricao;
+                document.title = j.modulo.rotulo + ' — Tráfego | Jomed';
+            } catch (e) { /* mantém os textos padrão */ }
+        })();
+
+        form.addEventListener('submit', async (ev) => {
+            ev.preventDefault();
+            limparErros();
+
+            const corpo = {
+                assunto: document.getElementById('assunto').value,
+                detalhes: document.getElementById('detalhes').value,
+            };
+
+            if (!corpo.assunto.trim()) {
+                marcarErro('assunto', 'Informe um resumo da solicitação.');
+                avisoErrosTxt.textContent = '1 campo precisa de atenção.';
+                avisoErros.classList.add('visivel');
+                return;
+            }
+
+            btnEnviar.disabled = true;
+            btnEnviar.innerHTML = '<span class="material-symbols-rounded">hourglass_top</span> Enviando...';
+
+            try {
+                const r = await fetch('/api/modulos/' + SLUG + '/solicitacoes', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(corpo),
+                });
+                const j = await r.json().catch(() => ({}));
+
+                if (!r.ok || !j.ok) {
+                    if (j.erros) {
+                        for (const c of Object.keys(j.erros)) marcarErro(c, j.erros[c]);
+                        avisoErrosTxt.textContent = 'O servidor recusou alguns campos.';
+                    } else {
+                        avisoErrosTxt.textContent = j.erro || 'Não foi possível enviar.';
+                    }
+                    avisoErros.classList.add('visivel');
+                    return;
+                }
+
+                document.getElementById('protocolo').textContent = '#' + j.id;
+                form.style.display = 'none';
+                painelEnviado.classList.add('visivel');
+            } catch (e) {
+                avisoErrosTxt.textContent = 'Falha de conexão. Tente de novo.';
+                avisoErros.classList.add('visivel');
+            } finally {
+                btnEnviar.disabled = false;
+                btnEnviar.innerHTML = '<span class="material-symbols-rounded">send</span> Enviar';
+            }
+        });
+
+        document.getElementById('btn-limpar').addEventListener('click', () => {
+            form.reset();
+            limparErros();
+        });
+
+        document.getElementById('btn-novo').addEventListener('click', () => {
+            form.reset();
+            limparErros();
+            painelEnviado.classList.remove('visivel');
+            form.style.display = '';
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel — Tráfego | Jomed</title>
+    <link rel="icon" type="image/png" href="/img/logo-jomed.png">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
+
+    <link rel="stylesheet" href="/css/base.css">
+    <link rel="stylesheet" href="/css/paginas.css">
+    <link rel="stylesheet" href="/css/cadastro.css">
+</head>
+<body class="has-header">
+
+    <header class="app-header">
+        <div class="app-header__inner">
+            <div class="brand">
+                <div class="brand-logo">
+                    <img src="/img/logo-jomed.png" alt="Jomed Transportes e Logística">
+                </div>
+                <div class="brand-text">
+                    <h1>Tráfego</h1>
+                    <span>Aprovação</span>
+                </div>
+            </div>
+
+            <nav class="main-nav" id="main-nav" aria-label="Menu principal"></nav>
+
+            <div class="header-actions">
+                <button class="user-chip" id="user-chip" type="button" title="Conta">
+                    <div class="user-avatar" id="user-avatar">··</div>
+                    <span class="user-name" id="user-name">Carregando...</span>
+                    <span class="material-symbols-rounded" style="font-size:18px;color:rgba(255,255,255,0.75)">expand_more</span>
+                </button>
+                <div class="user-menu" id="user-menu">
+                    <div class="user-menu__info">
+                        <strong id="menu-nome">—</strong>
+                        <small id="menu-email">—</small>
+                        <small id="menu-papel" class="menu-papel">—</small>
+                    </div>
+                    <div id="menu-conta-itens"></div>
+                    <button type="button" class="danger" id="btn-sair">
+                        <span class="material-symbols-rounded">logout</span> Sair
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="page-container">
+
+        <section class="card card--hero">
+            <h2 id="titulo">Painel de aprovação</h2>
+            <p id="descricao">Carregando...</p>
+        </section>
+
+        <div class="kpi-grid">
+            <div class="kpi">
+                <div class="kpi-label"><span class="material-symbols-rounded">inbox</span> Total</div>
+                <div class="kpi-value" id="kpi-total">—</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label"><span class="material-symbols-rounded">schedule</span> Pendentes</div>
+                <div class="kpi-value" id="kpi-pendente">—</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label"><span class="material-symbols-rounded">check_circle</span> Aprovadas</div>
+                <div class="kpi-value" id="kpi-aprovado">—</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label"><span class="material-symbols-rounded">cancel</span> Reprovadas</div>
+                <div class="kpi-value" id="kpi-reprovado">—</div>
+            </div>
+        </div>
+
+        <section class="card">
+            <div class="card-header">
+                <h3><span class="material-symbols-rounded" style="color:var(--primary);vertical-align:-5px">list_alt</span> Solicitações recebidas</h3>
+                <button class="badge is-info" id="btn-atualizar" type="button" style="border:none;cursor:pointer">
+                    <span class="material-symbols-rounded" style="font-size:16px">refresh</span> Atualizar
+                </button>
+            </div>
+
+            <div class="table-wrap">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Data</th>
+                            <th>Solicitante</th>
+                            <th>Resumo</th>
+                            <th>Status</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabela-corpo">
+                        <tr><td colspan="5">
+                            <div class="empty-state">
+                                <span class="material-symbols-rounded">hourglass_empty</span>
+                                <h4>Carregando...</h4>
+                            </div>
+                        </td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <div class="toast" id="toast-novidade" role="status" aria-live="polite">
+        <span class="material-symbols-rounded">notifications_active</span>
+        <span class="toast-txt"></span>
+    </div>
+
+    <script src="/js/app.js"></script>
+    <script>
+        // O módulo vem da URL: /painel/<slug>
+        const SLUG = window.location.pathname.split('/').filter(Boolean)[1] || '';
+        const API = '/api/modulos/' + SLUG + '/solicitacoes';
+
+        const corpo = document.getElementById('tabela-corpo');
+        let lista = [];
+        let podeExcluir = false;
+
+        function esc(txt) {
+            const d = document.createElement('div');
+            d.textContent = txt == null ? '' : String(txt);
+            return d.innerHTML;
+        }
+
+        function formatarData(iso) {
+            if (!iso) return '—';
+            const d = String(iso).slice(0, 10).split('-');
+            return d.length === 3 ? `${d[2]}/${d[1]}/${d[0]}` : iso;
+        }
+
+        const BADGE = {
+            pendente:  '<span class="badge is-warning">Pendente</span>',
+            aprovado:  '<span class="badge is-success">Aprovado</span>',
+            reprovado: '<span class="badge is-danger">Reprovado</span>',
+        };
+
+        function linhaHtml(s) {
+            const acoes = s.status === 'pendente'
+                ? `<button class="badge is-success acao aprovar" data-id="${s.id}" style="border:none;cursor:pointer">Aprovar</button>
+                   <button class="badge is-danger acao reprovar" data-id="${s.id}" style="border:none;cursor:pointer;margin-left:4px">Reprovar</button>`
+                : `<span style="color:var(--text-secondary);font-size:0.82rem">por ${esc(s.revisado_por || '—')}</span>`;
+
+            const excluir = podeExcluir
+                ? `<button class="badge is-danger acao excluir" data-id="${s.id}" style="border:none;cursor:pointer;margin-left:4px" title="Excluir">
+                       <span class="material-symbols-rounded" style="font-size:15px">delete</span></button>`
+                : '';
+
+            return `<tr>
+                <td>${formatarData(s.criado_em)}</td>
+                <td>${esc(s.solicitante_nome)}<br><small style="color:var(--text-secondary)">${esc(s.solicitante_email)}</small></td>
+                <td>${esc(s.assunto)}${s.detalhes ? `<br><small style="color:var(--text-secondary)">${esc(String(s.detalhes).slice(0, 90))}${String(s.detalhes).length > 90 ? '…' : ''}</small>` : ''}</td>
+                <td>${BADGE[s.status] || esc(s.status)}${s.observacao ? `<br><small style="color:var(--text-secondary)">${esc(s.observacao)}</small>` : ''}</td>
+                <td>${acoes}${excluir}</td>
+            </tr>`;
+        }
+
+        function atualizarKpis(r) {
+            document.getElementById('kpi-total').textContent = r.total ?? 0;
+            document.getElementById('kpi-pendente').textContent = r.pendente ?? 0;
+            document.getElementById('kpi-aprovado').textContent = r.aprovado ?? 0;
+            document.getElementById('kpi-reprovado').textContent = r.reprovado ?? 0;
+        }
+
+        async function carregar() {
+            try {
+                const r = await fetch(API);
+                if (r.status === 401) { window.location.href = '/login'; return; }
+                const j = await r.json();
+                if (!j.ok) throw new Error(j.erro || 'falha');
+
+                atualizarKpis(j.resumo || {});
+                podeExcluir = !!j.podeExcluir;
+                lista = j.solicitacoes || [];
+
+                corpo.innerHTML = lista.length
+                    ? lista.map(linhaHtml).join('')
+                    : `<tr><td colspan="5"><div class="empty-state">
+                           <span class="material-symbols-rounded">database</span>
+                           <h4>Nenhuma solicitação ainda</h4>
+                           <p>As solicitações enviadas por este formulário aparecem aqui.</p>
+                       </div></td></tr>`;
+            } catch (e) {
+                corpo.innerHTML = `<tr><td colspan="5"><div class="empty-state">
+                        <span class="material-symbols-rounded">wifi_off</span>
+                        <h4>Erro ao carregar</h4>
+                        <p>Não foi possível falar com o servidor.</p>
+                    </div></td></tr>`;
+            }
+        }
+
+        async function decidir(id, status) {
+            const observacao = status === 'reprovado'
+                ? (prompt('Motivo da reprovação (opcional):') ?? '')
+                : (prompt('Observação (opcional):') ?? '');
+
+            const r = await fetch(`${API}/${id}/decisao`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status, observacao }),
+            });
+            if (!r.ok) {
+                const j = await r.json().catch(() => ({}));
+                alert(j.erro || 'Não foi possível registrar a decisão.');
+                return;
+            }
+            await carregar();
+            versaoConhecida = impressaoLocal();
+        }
+
+        async function excluir(id) {
+            if (!confirm('Excluir esta solicitação? A ação não pode ser desfeita.')) return;
+            const r = await fetch(`${API}/${id}`, { method: 'DELETE' });
+            if (!r.ok) {
+                const j = await r.json().catch(() => ({}));
+                alert(j.erro || 'Não foi possível excluir.');
+                return;
+            }
+            await carregar();
+            versaoConhecida = impressaoLocal();
+        }
+
+        corpo.addEventListener('click', (ev) => {
+            const btn = ev.target.closest('button.acao');
+            if (!btn) return;
+            const id = btn.dataset.id;
+            if (btn.classList.contains('excluir')) return excluir(id);
+            decidir(id, btn.classList.contains('aprovar') ? 'aprovado' : 'reprovado');
+        });
+
+        // Rótulos do módulo.
+        (async () => {
+            try {
+                const r = await fetch('/api/modulos/' + SLUG);
+                const j = await r.json();
+                if (j.ok) {
+                    document.getElementById('titulo').textContent = 'Painel — ' + j.modulo.rotulo;
+                    document.getElementById('descricao').textContent =
+                        'Acompanhe e decida as solicitações deste módulo. ' + j.modulo.descricao;
+                    document.title = 'Painel ' + j.modulo.rotuloCurto + ' — Tráfego | Jomed';
+                }
+            } catch (e) { /* mantém os textos padrão */ }
+        })();
+
+        // ---- Atualização automática (mesma técnica do painel de terceiro) ----
+        const INTERVALO_VERIFICACAO = 20000;
+        let versaoConhecida = null;
+        let verificando = false;
+
+        function impressaoLocal() {
+            let maxId = 0, maxRevisado = '';
+            for (const s of lista) {
+                if (s.id > maxId) maxId = s.id;
+                if (s.revisado_em && s.revisado_em > maxRevisado) maxRevisado = s.revisado_em;
+            }
+            return `${lista.length}:${maxId}:${maxRevisado}`;
+        }
+
+        async function verificarNovidades() {
+            if (document.visibilityState !== 'visible' || verificando) return;
+            verificando = true;
+            try {
+                const r = await fetch(API + '/versao');
+                if (!r.ok) return;
+                const j = await r.json();
+                if (!j.ok) return;
+                const versao = `${j.total}:${j.maxId}:${j.maxRevisado}`;
+                if (versao === versaoConhecida) return;
+
+                const maiorAntes = lista.reduce((m, s) => (s.id > m ? s.id : m), 0);
+                await carregar();
+                versaoConhecida = impressaoLocal();
+
+                const novas = lista.filter((s) => s.id > maiorAntes).length;
+                if (novas > 0) {
+                    const t = document.getElementById('toast-novidade');
+                    t.querySelector('.toast-txt').textContent =
+                        novas === 1 ? '1 nova solicitação' : `${novas} novas solicitações`;
+                    t.classList.add('visivel');
+                    setTimeout(() => t.classList.remove('visivel'), 6000);
+                }
+            } finally {
+                verificando = false;
+            }
+        }
+
+        setInterval(verificarNovidades, INTERVALO_VERIFICACAO);
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') verificarNovidades();
+        });
+
+        document.getElementById('btn-atualizar').addEventListener('click', async () => {
+            await carregar();
+            versaoConhecida = impressaoLocal();
+        });
+
+        (async () => {
+            await carregar();
+            versaoConhecida = impressaoLocal();
+        })();
+    </script>
+</body>
+</html>

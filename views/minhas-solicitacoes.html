@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minhas solicitações — Tráfego | Jomed</title>
+    <link rel="icon" type="image/png" href="/img/logo-jomed.png">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
+
+    <link rel="stylesheet" href="/css/base.css">
+    <link rel="stylesheet" href="/css/paginas.css">
+    <link rel="stylesheet" href="/css/cadastro.css">
+</head>
+<body class="has-header">
+
+    <header class="app-header">
+        <div class="app-header__inner">
+            <div class="brand">
+                <div class="brand-logo">
+                    <img src="/img/logo-jomed.png" alt="Jomed Transportes e Logística">
+                </div>
+                <div class="brand-text">
+                    <h1>Tráfego</h1>
+                    <span>Cadastro</span>
+                </div>
+            </div>
+
+            <nav class="main-nav" id="main-nav" aria-label="Menu principal"></nav>
+
+            <div class="header-actions">
+                <button class="user-chip" id="user-chip" type="button" title="Conta">
+                    <div class="user-avatar" id="user-avatar">··</div>
+                    <span class="user-name" id="user-name">Carregando...</span>
+                    <span class="material-symbols-rounded" style="font-size:18px;color:rgba(255,255,255,0.75)">expand_more</span>
+                </button>
+                <div class="user-menu" id="user-menu">
+                    <div class="user-menu__info">
+                        <strong id="menu-nome">—</strong>
+                        <small id="menu-email">—</small>
+                        <small id="menu-papel" class="menu-papel">—</small>
+                    </div>
+                    <div id="menu-conta-itens"></div>
+                    <button type="button" class="danger" id="btn-sair">
+                        <span class="material-symbols-rounded">logout</span> Sair
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="page-container">
+
+        <section class="card card--hero">
+            <h2>Minhas solicitações</h2>
+            <p>Acompanhe aqui tudo o que você enviou, de todos os formulários a que tem acesso, com o status de cada uma.</p>
+        </section>
+
+        <section class="card">
+            <div class="card-header">
+                <h3><span class="material-symbols-rounded" style="color:var(--primary);vertical-align:-5px">fact_check</span> Histórico</h3>
+                <button class="badge is-info" id="btn-atualizar" type="button" style="border:none;cursor:pointer">
+                    <span class="material-symbols-rounded" style="font-size:16px">refresh</span> Atualizar
+                </button>
+            </div>
+
+            <div class="table-wrap">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Data</th>
+                            <th>Formulário</th>
+                            <th>Resumo</th>
+                            <th>Status</th>
+                            <th>Observação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="corpo">
+                        <tr><td colspan="5">
+                            <div class="empty-state">
+                                <span class="material-symbols-rounded">hourglass_empty</span>
+                                <h4>Carregando...</h4>
+                            </div>
+                        </td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <script src="/js/app.js"></script>
+    <script>
+        const corpo = document.getElementById('corpo');
+
+        function esc(txt) {
+            const d = document.createElement('div');
+            d.textContent = txt == null ? '' : String(txt);
+            return d.innerHTML;
+        }
+
+        function formatarData(iso) {
+            if (!iso) return '—';
+            const d = String(iso).slice(0, 10).split('-');
+            return d.length === 3 ? `${d[2]}/${d[1]}/${d[0]}` : iso;
+        }
+
+        const BADGE = {
+            pendente:  '<span class="badge is-warning">Pendente</span>',
+            aprovado:  '<span class="badge is-success">Aprovado</span>',
+            reprovado: '<span class="badge is-danger">Reprovado</span>',
+            parcial:   '<span class="badge is-parcial">Parcial</span>',
+        };
+
+        async function carregar() {
+            try {
+                const r = await fetch('/api/minhas-solicitacoes');
+                if (r.status === 401) { window.location.href = '/login'; return; }
+                const j = await r.json();
+                const lista = j.solicitacoes || [];
+
+                if (!lista.length) {
+                    corpo.innerHTML = `<tr><td colspan="5"><div class="empty-state">
+                        <span class="material-symbols-rounded">inbox</span>
+                        <h4>Nenhuma solicitação enviada</h4>
+                        <p>Quando você enviar uma solicitação, ela aparece aqui com o status.</p>
+                    </div></td></tr>`;
+                    return;
+                }
+
+                corpo.innerHTML = lista.map((s) => {
+                    const st = s.status_geral || s.status;
+                    return `<tr>
+                        <td>${formatarData(s.criado_em)}</td>
+                        <td><span class="badge is-info">${esc(s.moduloRotulo || '—')}</span></td>
+                        <td>${esc(s.assunto)}</td>
+                        <td>${BADGE[st] || esc(st)}</td>
+                        <td>${esc(s.observacao || '—')}</td>
+                    </tr>`;
+                }).join('');
+            } catch (e) {
+                corpo.innerHTML = `<tr><td colspan="5"><div class="empty-state">
+                    <span class="material-symbols-rounded">wifi_off</span>
+                    <h4>Erro ao carregar</h4>
+                </div></td></tr>`;
+            }
+        }
+
+        document.getElementById('btn-atualizar').addEventListener('click', carregar);
+        carregar();
+    </script>
+</body>
+</html>

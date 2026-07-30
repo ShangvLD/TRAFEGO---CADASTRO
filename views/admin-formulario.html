@@ -30,11 +30,7 @@
                 </div>
             </div>
 
-            <nav class="main-nav" aria-label="Menu principal">
-                <a href="/cadastro">Novo cadastro</a>
-                <a href="/responsavel">Painel de aprovação</a>
-                <a href="/admin/formulario" class="active">Configurar</a>
-            </nav>
+            <nav class="main-nav" id="main-nav" aria-label="Menu principal"></nav>
 
             <div class="header-actions">
                 <button class="user-chip" id="user-chip" type="button" title="Conta">
@@ -46,11 +42,9 @@
                     <div class="user-menu__info">
                         <strong id="menu-nome">—</strong>
                         <small id="menu-email">—</small>
+                        <small id="menu-papel" class="menu-papel">—</small>
                     </div>
-                    <a href="/admin/formulario" data-admin-only hidden>
-                        <span class="material-symbols-rounded">tune</span> Configurar formulário
-                    </a>
-                    <div class="user-menu__sep" data-admin-only hidden></div>
+                    <div id="menu-conta-itens"></div>
                     <button type="button" class="danger" id="btn-sair">
                         <span class="material-symbols-rounded">logout</span> Sair
                     </button>

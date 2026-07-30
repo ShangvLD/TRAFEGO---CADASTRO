@@ -2,7 +2,12 @@
    Script compartilhado das páginas logadas.
 
    - Carrega o usuário atual (/api/eu) e preenche o cabeçalho.
+   - DESENHA O MENU a partir das permissões devolvidas pelo servidor.
    - Controla o menu do usuário e o logout.
+
+   O menu não é mais HTML fixo em cada página: o servidor diz quais itens o
+   usuário pode ver (src/menu.js) e aqui eles são desenhados. Assim um módulo
+   novo aparece em todas as páginas sem editar nenhuma view.
    ========================================================================== */
 
 (async function () {
@@ -13,7 +18,10 @@
   const menu = document.getElementById('user-menu');
   const menuNome = document.getElementById('menu-nome');
   const menuEmail = document.getElementById('menu-email');
+  const menuPapel = document.getElementById('menu-papel');
   const btnSair = document.getElementById('btn-sair');
+  const navEl = document.getElementById('main-nav');
+  const contaEl = document.getElementById('menu-conta-itens');
 
   // Gera as iniciais a partir do nome (ex.: "Victor Diniz" -> "VD").
   function iniciais(nome) {
@@ -23,7 +31,48 @@
     return (primeira + ultima).toUpperCase();
   }
 
-  // Busca o usuário logado e preenche o cabeçalho.
+  function esc(txt) {
+    const d = document.createElement('div');
+    d.textContent = txt == null ? '' : String(txt);
+    return d.innerHTML;
+  }
+
+  /** Marca como ativo o item cujo href corresponde à página aberta. */
+  function ehAtual(href) {
+    const atual = window.location.pathname;
+    if (href === atual) return true;
+    // /painel/terceiro deve ficar ativo também em /painel/terceiro/algo
+    return href !== '/' && atual.startsWith(href + '/');
+  }
+
+  function desenharMenu(itens) {
+    if (!navEl) return;
+    navEl.innerHTML = (itens || [])
+      .map(
+        (i) =>
+          `<a href="${esc(i.href)}"${ehAtual(i.href) ? ' class="active"' : ''}>${esc(i.rotulo)}</a>`
+      )
+      .join('');
+  }
+
+  function desenharMenuDaConta(itens) {
+    if (!contaEl) return;
+    if (!itens || !itens.length) {
+      contaEl.innerHTML = '';
+      return;
+    }
+    contaEl.innerHTML =
+      itens
+        .map(
+          (i) =>
+            `<a href="${esc(i.href)}">` +
+            `<span class="material-symbols-rounded">${esc(i.icone || 'chevron_right')}</span> ` +
+            `${esc(i.rotulo)}</a>`
+        )
+        .join('') + '<div class="user-menu__sep"></div>';
+  }
+
+  // Busca o usuário logado, o menu e preenche o cabeçalho.
   try {
     const resp = await fetch('/api/eu');
     if (resp.status === 401) {
@@ -37,14 +86,27 @@
       if (nomeEl) nomeEl.textContent = u.nome;
       if (menuNome) menuNome.textContent = u.nome;
       if (menuEmail) menuEmail.textContent = u.email;
+      if (menuPapel) menuPapel.textContent = dados.papelRotulo || u.papel;
 
-      // Admin enxerga as duas áreas (envio + aprovação): revela os links
-      // de navegação marcados como exclusivos de admin.
-      if (u.papel === 'admin') {
+      desenharMenu(dados.menu);
+      desenharMenuDaConta(dados.menuConta);
+
+      // Compatibilidade: elementos marcados como exclusivos de admin em
+      // páginas que ainda não usam o menu dinâmico.
+      if (dados.ehAdmin) {
         document.querySelectorAll('[data-admin-only]').forEach((el) => {
           el.hidden = false;
         });
       }
+
+      // Deixa os dados à disposição da página (ex.: o painel usa o papel).
+      window.usuarioAtual = u;
+      window.permissoes = {
+        ehAdmin: !!dados.ehAdmin,
+        formularios: dados.formularios || [],
+        paineis: dados.paineis || [],
+      };
+      document.dispatchEvent(new CustomEvent('usuario-carregado', { detail: dados }));
     }
   } catch (e) {
     // Sem conexão: não trava a página, apenas não popula o header.

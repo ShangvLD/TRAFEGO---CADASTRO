@@ -498,3 +498,12 @@ h1, h2, h3, h4 {
     .brand-text span { display: none; }
     .card { padding: var(--space-5); }
 }
+
+/* Papel do usuário, no menu da conta. */
+.user-menu .menu-papel {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--primary);
+}

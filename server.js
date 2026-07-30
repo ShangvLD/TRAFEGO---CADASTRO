@@ -26,7 +26,17 @@ const usuarios = require('./src/usuarios');
 const solicitacoes = require('./src/solicitacoes');
 const cadastros = require('./src/cadastros');
 const configFormulario = require('./src/config-formulario');
-const { exigirLogin, exigirPapel, paginaInicialPorPapel } = require('./src/auth');
+const { MODULOS, acharModulo, rotaFormulario, rotaPainel } = require('./src/modulos');
+const papeis = require('./src/papeis');
+const { dadosDe } = require('./src/modulo-servico');
+const { menuPara, menuDaConta } = require('./src/menu');
+const {
+  exigirLogin,
+  exigirAdmin,
+  exigirFormulario,
+  exigirPainel,
+  paginaInicialPorPapel,
+} = require('./src/auth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -149,10 +159,42 @@ app.post('/api/logout', (req, res) => {
   });
 });
 
-// Dados do usuário logado — o front usa para preencher o cabeçalho.
+// Dados do usuário logado + MENU montado a partir das permissões.
+// O front desenha o menu com isso (public/js/app.js), então acrescentar um
+// módulo não exige editar nenhuma view.
 app.get('/api/eu', exigirLogin, (req, res) => {
-  res.json({ ok: true, usuario: req.session.usuario });
+  const u = req.session.usuario;
+  res.json({
+    ok: true,
+    usuario: u,
+    papelRotulo: papeis.rotuloDoPapel(u.papel),
+    ehAdmin: papeis.ehAdmin(u.papel),
+    formularios: papeis.formulariosDoPapel(u.papel),
+    paineis: papeis.paineisDoPapel(u.papel),
+    menu: menuPara(u),
+    menuConta: menuDaConta(u),
+  });
 });
+
+// Metadados de um módulo — as telas genéricas usam para título e descrição.
+app.get(
+  '/api/modulos/:slug',
+  exigirLogin,
+  (req, res) => {
+    const m = acharModulo(req.params.slug);
+    if (!m) return res.status(404).json({ ok: false, erro: 'Módulo não encontrado.' });
+    res.json({
+      ok: true,
+      modulo: {
+        slug: m.slug,
+        rotulo: m.rotulo,
+        rotuloCurto: m.rotuloCurto,
+        icone: m.icone,
+        descricao: m.descricao,
+      },
+    });
+  }
+);
 
 // --------------------------------------------------------------------------
 // Páginas protegidas
@@ -166,29 +208,40 @@ app.get('/', (req, res) => {
   res.redirect('/login');
 });
 
-// Área do solicitante (formulário do Microsoft Forms embutido).
-app.get('/solicitante', exigirLogin, exigirPapel('solicitante', 'admin'), (req, res) => {
+// Área do solicitante (formulário do Microsoft Forms embutido). Pertence ao
+// fluxo de terceiro, então usa a mesma permissão do módulo.
+app.get('/solicitante', exigirLogin, exigirFormulario('terceiro'), (req, res) => {
   res.sendFile(path.join(VIEWS, 'solicitante.html'));
 });
 
-// Formulário NATIVO de cadastro — RESTRITO A ADMIN durante a validação.
-//
-// Convive com o /solicitante: as duas entradas gravam na mesma tabela. Enquanto
-// o upload de documentos não estiver liberado, o formulário nativo não substitui
-// o Forms, então só o admin o usa para validar. Para abrir aos solicitantes,
-// acrescente 'solicitante' aqui e na rota POST /api/cadastros, e remova o
-// data-admin-only do card em views/solicitante.html.
-app.get('/cadastro', exigirLogin, exigirPapel('admin'), (req, res) => {
-  res.sendFile(path.join(VIEWS, 'cadastro.html'));
+// Acompanhamento das próprias solicitações, de todos os módulos liberados.
+app.get('/minhas-solicitacoes', exigirLogin, (req, res) => {
+  res.sendFile(path.join(VIEWS, 'minhas-solicitacoes.html'));
 });
 
-// Painel do responsável.
-app.get('/responsavel', exigirLogin, exigirPapel('responsavel', 'admin'), (req, res) => {
-  res.sendFile(path.join(VIEWS, 'responsavel.html'));
-});
+// ---- Páginas dos módulos, geradas a partir do registro -------------------
+//
+// Cada módulo ganha /cadastro/<slug> e /painel/<slug>. O módulo com view
+// própria (terceiro) usa a dele; os demais usam as telas genéricas, que se
+// adaptam pelos metadados.
+for (const m of MODULOS) {
+  app.get(rotaFormulario(m.slug), exigirLogin, exigirFormulario(m.slug), (req, res) => {
+    res.sendFile(path.join(VIEWS, m.viewFormulario || 'modulo-formulario.html'));
+  });
+
+  app.get(rotaPainel(m.slug), exigirLogin, exigirPainel(m.slug), (req, res) => {
+    res.sendFile(path.join(VIEWS, m.viewPainel || 'modulo-painel.html'));
+  });
+}
+
+// ---- Endereços antigos, preservados -------------------------------------
+// /cadastro e /responsavel viraram rotas por módulo. Redirecionar em vez de
+// dar 404 mantém funcionando os favoritos e qualquer link já compartilhado.
+app.get('/cadastro', (req, res) => res.redirect(rotaFormulario('terceiro')));
+app.get('/responsavel', (req, res) => res.redirect(rotaPainel('terceiro')));
 
 // Configuração do formulário — SOMENTE admin.
-app.get('/admin/formulario', exigirLogin, exigirPapel('admin'), (req, res) => {
+app.get('/admin/formulario', exigirLogin, exigirAdmin, (req, res) => {
   res.sendFile(path.join(VIEWS, 'admin-formulario.html'));
 });
 
@@ -200,7 +253,7 @@ app.get('/admin/formulario', exigirLogin, exigirPapel('admin'), (req, res) => {
 app.get(
   '/api/solicitacoes',
   exigirLogin,
-  exigirPapel('responsavel', 'admin'),
+  exigirPainel('terceiro'),
   wrap(async (req, res) => {
     const [resumo, lista] = await Promise.all([
       solicitacoes.contarPorStatus(),
@@ -224,7 +277,7 @@ app.get(
 app.get(
   '/api/solicitacoes/versao',
   exigirLogin,
-  exigirPapel('responsavel', 'admin'),
+  exigirPainel('terceiro'),
   wrap(async (req, res) => {
     res.set('Cache-Control', 'no-store');
     res.json({ ok: true, ...(await solicitacoes.versao()) });
@@ -235,7 +288,7 @@ app.get(
 app.delete(
   '/api/solicitacoes/:id',
   exigirLogin,
-  exigirPapel('admin'),
+  exigirAdmin,
   wrap(async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) {
@@ -267,7 +320,7 @@ app.get(
 app.get(
   '/api/admin/formulario',
   exigirLogin,
-  exigirPapel('admin'),
+  exigirAdmin,
   wrap(async (req, res) => {
     res.json({ ok: true, ...(await configFormulario.paraAdmin()) });
   })
@@ -277,7 +330,7 @@ app.get(
 app.post(
   '/api/admin/operacoes',
   exigirLogin,
-  exigirPapel('admin'),
+  exigirAdmin,
   wrap(async (req, res) => {
     const r = await configFormulario.criarOperacao((req.body || {}).nome);
     if (!r.ok) return res.status(400).json({ ok: false, erro: r.erro });
@@ -289,7 +342,7 @@ app.post(
 app.patch(
   '/api/admin/operacoes/:id',
   exigirLogin,
-  exigirPapel('admin'),
+  exigirAdmin,
   wrap(async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
@@ -304,7 +357,7 @@ app.patch(
 app.post(
   '/api/admin/documentos',
   exigirLogin,
-  exigirPapel('admin'),
+  exigirAdmin,
   wrap(async (req, res) => {
     const { codigo, rotulo, temValidade } = req.body || {};
     const r = await configFormulario.criarDocumento({ codigo, rotulo, temValidade });
@@ -317,7 +370,7 @@ app.post(
 app.patch(
   '/api/admin/documentos/:id',
   exigirLogin,
-  exigirPapel('admin'),
+  exigirAdmin,
   wrap(async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
@@ -357,7 +410,7 @@ app.patch(
 app.post(
   '/api/cadastros',
   exigirLogin,
-  exigirPapel('admin'),
+  exigirAdmin,
   wrap(async (req, res) => {
     const resultado = await cadastros.validarECriar(req.body || {}, {
       nome: req.session.usuario.nome,
@@ -372,23 +425,173 @@ app.post(
   })
 );
 
-// Solicitações do próprio solicitante logado ("Minhas solicitações").
+// Solicitações do próprio usuário, de TODOS os módulos a que ele tem acesso.
+//
+// Junta os módulos em uma lista só, cada linha marcada com o módulo de origem —
+// para o agregado e o candidato acompanharem o que enviaram sem precisar de uma
+// tela por módulo.
 app.get(
   '/api/minhas-solicitacoes',
   exigirLogin,
   wrap(async (req, res) => {
-    res.json({
-      ok: true,
-      solicitacoes: await solicitacoes.listarPorEmail(req.session.usuario.email),
+    const u = req.session.usuario;
+    const slugs = papeis.formulariosDoPapel(u.papel);
+
+    const porModulo = await Promise.all(
+      slugs.map(async (slug) => {
+        const dados = dadosDe(slug);
+        const modulo = acharModulo(slug);
+        if (!dados || !modulo) return [];
+        const linhas = await dados.listarPorEmail(u.email);
+        return linhas.map((s) => ({
+          ...s,
+          modulo: slug,
+          moduloRotulo: modulo.rotuloCurto,
+        }));
+      })
+    );
+
+    // Mais recentes primeiro, misturando os módulos.
+    const lista = porModulo.flat().sort((a, b) => {
+      const d = String(b.criado_em).localeCompare(String(a.criado_em));
+      return d !== 0 ? d : b.id - a.id;
     });
+
+    res.json({ ok: true, solicitacoes: lista });
   })
 );
+
+// --------------------------------------------------------------------------
+// API GENÉRICA DOS MÓDULOS
+//
+// Um conjunto de rotas por módulo, geradas do registro. O módulo terceiro tem
+// as rotas antigas (/api/solicitacoes, /api/cadastros), que continuam
+// funcionando — as genéricas abaixo servem os módulos novos e qualquer um que
+// venha depois, sem escrever rota nova.
+//
+// A permissão é resolvida na REGISTRO (exigirFormulario/exigirPainel com o slug
+// fixo), não em tempo de requisição: não há como pedir dados de um módulo
+// passando outro slug na URL.
+// --------------------------------------------------------------------------
+for (const m of MODULOS) {
+  const base = `/api/modulos/${m.slug}/solicitacoes`;
+  const dados = dadosDe(m.slug);
+
+  // ---- Leitura do painel ----
+  app.get(
+    base,
+    exigirLogin,
+    exigirPainel(m.slug),
+    wrap(async (req, res) => {
+      const [resumo, lista] = await Promise.all([dados.contarPorStatus(), dados.listar()]);
+      res.json({
+        ok: true,
+        modulo: m.slug,
+        resumo,
+        solicitacoes: lista,
+        podeExcluir: papeis.ehAdmin(req.session.usuario.papel),
+      });
+    })
+  );
+
+  // ---- Impressão digital, para a atualização automática ----
+  app.get(
+    `${base}/versao`,
+    exigirLogin,
+    exigirPainel(m.slug),
+    wrap(async (req, res) => {
+      res.set('Cache-Control', 'no-store');
+      res.json({ ok: true, ...(await dados.versao()) });
+    })
+  );
+
+  // ---- Criação ----
+  // Só para os módulos SEM API própria: o terceiro grava por /api/cadastros,
+  // que preenche também as tabelas estruturadas. Expor a rota genérica nele
+  // permitiria criar solicitação sem passar pela validação do módulo.
+  if (!m.apiPropria) {
+    app.post(
+      base,
+      exigirLogin,
+      exigirFormulario(m.slug),
+      wrap(async (req, res) => {
+        const b = req.body || {};
+        const assunto = String(b.assunto || '').trim();
+
+        if (!assunto) {
+          return res.status(400).json({
+            ok: false,
+            erros: { assunto: 'Informe um resumo da solicitação.' },
+          });
+        }
+
+        // O solicitante vem SEMPRE da sessão, nunca do corpo — ninguém envia
+        // solicitação em nome de outra pessoa.
+        const criada = await dados.criar({
+          solicitante_nome: req.session.usuario.nome,
+          solicitante_email: req.session.usuario.email,
+          assunto,
+          detalhes: String(b.detalhes || '').trim() || null,
+          dados: b.dados && typeof b.dados === 'object' ? b.dados : null,
+          origem: 'portal',
+        });
+
+        res.status(201).json({ ok: true, id: criada.id });
+      })
+    );
+  }
+
+  // ---- Decisão do responsável ----
+  app.post(
+    `${base}/:id/decisao`,
+    exigirLogin,
+    exigirPainel(m.slug),
+    wrap(async (req, res) => {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id)) {
+        return res.status(400).json({ ok: false, erro: 'Id inválido.' });
+      }
+      const { status, observacao } = req.body || {};
+      if (!['aprovado', 'reprovado'].includes(status)) {
+        return res.status(400).json({ ok: false, erro: 'Status inválido.' });
+      }
+
+      const atualizada = await dados.registrarDecisao(id, {
+        status,
+        observacao,
+        revisadoPor: req.session.usuario.nome,
+      });
+      if (!atualizada) {
+        return res.status(404).json({ ok: false, erro: 'Solicitação não encontrada.' });
+      }
+      res.json({ ok: true, solicitacao: atualizada });
+    })
+  );
+
+  // ---- Exclusão — somente admin ----
+  app.delete(
+    `${base}/:id`,
+    exigirLogin,
+    exigirAdmin,
+    wrap(async (req, res) => {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id)) {
+        return res.status(400).json({ ok: false, erro: 'Id inválido.' });
+      }
+      const removido = await dados.excluir(id);
+      if (!removido) {
+        return res.status(404).json({ ok: false, erro: 'Solicitação não encontrada.' });
+      }
+      res.json({ ok: true });
+    })
+  );
+}
 
 // Registra a decisão (aprovar / reprovar) — apenas responsável/admin.
 app.post(
   '/api/solicitacoes/:id/decisao',
   exigirLogin,
-  exigirPapel('responsavel', 'admin'),
+  exigirPainel('terceiro'),
   wrap(async (req, res) => {
     const id = Number(req.params.id);
     const { status, observacao } = req.body;
@@ -415,7 +618,7 @@ app.post(
 app.post(
   '/api/solicitacoes/:id/cliente-decisao',
   exigirLogin,
-  exigirPapel('responsavel', 'admin'),
+  exigirPainel('terceiro'),
   wrap(async (req, res) => {
     const id = Number(req.params.id);
     const { cliente, status, observacao } = req.body;
@@ -445,7 +648,7 @@ app.post(
 app.post(
   '/api/solicitacoes/:id/decisao-todos',
   exigirLogin,
-  exigirPapel('responsavel', 'admin'),
+  exigirPainel('terceiro'),
   wrap(async (req, res) => {
     const id = Number(req.params.id);
     const { status, observacao } = req.body;
