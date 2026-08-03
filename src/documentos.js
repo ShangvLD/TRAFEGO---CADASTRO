@@ -120,7 +120,14 @@ async function urlDeLeitura(id, segundos = 600) {
   return armazenamento.provedor().urlDeLeitura(d.caminho, segundos);
 }
 
-/** Exclui o registro e o arquivo. */
+/**
+ * Exclui o registro e o arquivo.
+ *
+ * ATENÇÃO ao verificar a exclusão: a URL assinada é servida por CDN, e pode
+ * continuar entregando o arquivo em cache por alguns minutos DEPOIS de ele ter
+ * sido apagado. Para confirmar de verdade, consulte o objeto com a chave de
+ * serviço (que não passa pelo cache), não pela URL assinada.
+ */
 async function excluir(id) {
   const d = await db.prepare('SELECT caminho FROM documentos WHERE id = ?').get(id);
   if (!d) return { ok: false, erro: 'Documento não encontrado.' };

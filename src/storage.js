@@ -144,9 +144,24 @@ const supabase = {
     return !!(URL_BASE && CHAVE);
   },
 
-  /** Garante que o bucket existe. Idempotente; roda uma vez por processo. */
+  /**
+   * Garante que o bucket existe. Idempotente; roda uma vez por processo.
+   *
+   * Consulta ANTES de criar porque o Supabase responde "já existe" com HTTP
+   * 400 (e "statusCode":"409" no corpo), não com 409 no status — conferir só o
+   * status trataria o caso normal como erro.
+   */
   async prepararBucket() {
     if (this._pronto) return;
+
+    const existe = await fetch(`${URL_BASE}/storage/v1/bucket/${BUCKET}`, {
+      headers: cabecalhos(),
+    });
+    if (existe.ok) {
+      this._pronto = true;
+      return;
+    }
+
     const r = await fetch(`${URL_BASE}/storage/v1/bucket`, {
       method: 'POST',
       headers: cabecalhos({ 'Content-Type': 'application/json' }),
@@ -159,8 +174,15 @@ const supabase = {
         allowed_mime_types: Object.keys(TIPOS_ACEITOS),
       }),
     });
-    // 409 = já existe, que é o caso normal a partir da segunda vez.
-    if (!r.ok && r.status !== 409) await conferir(r, 'Criar bucket');
+
+    if (!r.ok) {
+      // Corrida entre duas instâncias criando ao mesmo tempo: se o motivo for
+      // "já existe", o objetivo foi alcançado de qualquer forma.
+      const corpo = await r.text().catch(() => '');
+      if (!/already exists|Duplicate|"409"/i.test(corpo)) {
+        throw new Error(`Criar bucket falhou (HTTP ${r.status}): ${corpo.slice(0, 300)}`);
+      }
+    }
     this._pronto = true;
   },
 
