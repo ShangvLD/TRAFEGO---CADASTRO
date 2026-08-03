@@ -45,12 +45,20 @@
     return href !== '/' && atual.startsWith(href + '/');
   }
 
+  /**
+   * Cada item vira ícone + rótulo. O `title` existe porque em tela estreita o
+   * CSS oculta o rótulo e sobra só o ícone — sem ele, o item ficaria sem
+   * identificação nenhuma.
+   */
   function desenharMenu(itens) {
     if (!navEl) return;
     navEl.innerHTML = (itens || [])
       .map(
         (i) =>
-          `<a href="${esc(i.href)}"${ehAtual(i.href) ? ' class="active"' : ''}>${esc(i.rotulo)}</a>`
+          `<a href="${esc(i.href)}"${ehAtual(i.href) ? ' class="active"' : ''} title="${esc(i.rotulo)}">` +
+          `<span class="material-symbols-rounded nav-icone">${esc(i.icone || 'chevron_right')}</span>` +
+          `<span class="nav-rotulo">${esc(i.rotulo)}</span>` +
+          `</a>`
       )
       .join('');
   }

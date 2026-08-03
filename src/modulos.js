@@ -25,6 +25,7 @@ const MODULOS = [
     rotulo: 'Cadastro Terceiro',
     rotuloCurto: 'Terceiro',
     icone: 'local_shipping',
+    iconePainel: 'monitoring',
     descricao: 'Cadastro de condutores, veículos e proprietários terceirizados.',
 
     // Tabela JÁ EXISTENTE, com os 52 registros de produção.
@@ -54,7 +55,8 @@ const MODULOS = [
     slug: 'agregado',
     rotulo: 'Cadastro Agregado',
     rotuloCurto: 'Agregado',
-    icone: 'handshake',
+    icone: 'groups',
+    iconePainel: 'query_stats',
     descricao: 'Cadastro de agregados. Campos específicos a definir.',
     tabela: 'solicitacoes_agregado',
     viewFormulario: null, // usa a tela genérica
@@ -68,7 +70,8 @@ const MODULOS = [
     slug: 'candidato',
     rotulo: 'Cadastro Candidato',
     rotuloCurto: 'Candidato',
-    icone: 'person_search',
+    icone: 'person',
+    iconePainel: 'leaderboard',
     descricao: 'Candidatos interessados em trabalhar na empresa.',
     tabela: 'solicitacoes_candidato',
     viewFormulario: null,

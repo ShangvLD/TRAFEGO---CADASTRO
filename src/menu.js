@@ -29,7 +29,7 @@ function menuPara(usuario) {
   // Pertence ao fluxo de terceiro, então só aparece para quem preenche esse
   // módulo. Agregado e candidato não têm nada a ver com ela.
   if (papeis.podeFormulario(papel, 'terceiro')) {
-    itens.push({ href: '/solicitante', rotulo: 'Solicitar', icone: 'send' });
+    itens.push({ href: '/solicitante', rotulo: 'Solicitar', icone: 'note_add' });
   }
 
   // ---- Um item por formulário liberado ------------------------------------
@@ -60,8 +60,11 @@ function menuPara(usuario) {
       href: rotaPainel(slug),
       // Com um painel só, "Painel de aprovação" é mais claro; com vários,
       // precisa dizer de qual módulo é.
-      rotulo: paineis.length === 1 ? 'Painel de aprovação' : `Painel — ${m.rotuloCurto}`,
-      icone: 'rule',
+      rotulo: paineis.length === 1 ? 'Painel de aprovação' : `Painel ${m.rotuloCurto}`,
+      // Ícone próprio do painel (definido no módulo): distingue "preencher o
+      // formulário de X" de "acompanhar o painel de X", que ficariam com o
+      // mesmo ícone se ambos usassem `icone`.
+      icone: m.iconePainel || 'rule',
     });
   }
 
