@@ -58,12 +58,17 @@
         <section class="card card--hero">
             <h2>Configurar o formulário</h2>
             <p>Defina quais operações aparecem no formulário e qual documento cada uma exige. As mudanças valem na hora, sem precisar de deploy — o formulário lê esta configuração a cada abertura.</p>
+
+            <div class=seletor-modulo>
+                <label for=sel-modulo>Configurando o formulário:</label>
+                <select id=sel-modulo></select>
+            </div>
         </section>
 
         <!-- ===================== MATRIZ ===================== -->
         <section class="card">
             <div class="card-header">
-                <h3><span class="material-symbols-rounded" style="color:var(--primary);vertical-align:-5px">grid_on</span> Documentos por operação</h3>
+                <h3><span class="material-symbols-rounded" style="color:var(--primary);vertical-align:-5px">grid_on</span> Documentos <span id=titulo-modulo></span></h3>
                 <span class="badge is-info" id="status-salvo">—</span>
             </div>
 
@@ -134,7 +139,9 @@
         const elStatus = document.getElementById('status-salvo');
         const elAviso = document.getElementById('aviso');
 
-        let cfg = { operacoes: [], documentos: [] };
+        const selModulo = document.getElementById('sel-modulo');
+        let MODULO = new URLSearchParams(location.search).get('modulo') || 'terceiro';
+        let cfg = { operacoes: [], operacoesDoModulo: [], documentos: [], modulos: [] };
 
         function esc(txt) {
             const d = document.createElement('div');
@@ -157,22 +164,54 @@
         // Carregamento
         // ------------------------------------------------------------------
         async function carregar() {
-            const r = await fetch('/api/admin/formulario');
+            const r = await fetch('/api/admin/formulario?modulo=' + encodeURIComponent(MODULO));
             if (!r.ok) {
                 elMatrizCorpo.innerHTML = '<tr><td class="carregando">Sem permissão ou falha ao carregar.</td></tr>';
                 return;
             }
             const j = await r.json();
-            cfg = { operacoes: j.operacoes, documentos: j.documentos };
+            cfg = {
+                operacoes: j.operacoes,
+                operacoesDoModulo: j.operacoesDoModulo || j.operacoes,
+                documentos: j.documentos,
+                modulos: j.modulos || [],
+            };
+            desenharSeletor();
             desenhar();
             marcarStatus('Carregado', 'is-info');
         }
+
+        /** Seletor de módulo — a configuração é por formulário. */
+        function desenharSeletor() {
+            if (selModulo.options.length !== cfg.modulos.length) {
+                selModulo.innerHTML = cfg.modulos
+                    .map((m) => `<option value="${esc(m.slug)}">${esc(m.rotulo)}</option>`)
+                    .join('');
+            }
+            selModulo.value = MODULO;
+
+            const atual = cfg.modulos.find((m) => m.slug === MODULO);
+            const titulo = document.getElementById('titulo-modulo');
+            if (titulo) {
+                titulo.textContent = cfg.operacoesDoModulo.length
+                    ? `por operação — ${atual ? atual.rotulo : MODULO}`
+                    : `— ${atual ? atual.rotulo : MODULO}`;
+            }
+        }
+
+        selModulo.addEventListener('change', () => {
+            MODULO = selModulo.value;
+            // Deixa o módulo na URL: recarregar ou compartilhar o link mantém
+            // a configuração que estava aberta.
+            history.replaceState(null, '', '?modulo=' + encodeURIComponent(MODULO));
+            carregar();
+        });
 
         // ------------------------------------------------------------------
         // Desenho da matriz
         // ------------------------------------------------------------------
         function desenhar() {
-            const ops = cfg.operacoes;
+            const ops = cfg.operacoesDoModulo;
 
             elMatrizCabeca.innerHTML =
                 '<tr><th class="col-doc">Documento</th><th class="col-todas">Todas</th>' +
@@ -181,6 +220,24 @@
                     '<span>' + esc(o.nome) + '</span></th>'
                 ).join('') +
                 '</tr>';
+
+            // Módulo sem clientes (candidato): a matriz não faz sentido, então
+            // mostra só a lista de documentos com o marcador de obrigatoriedade.
+            if (!ops.length) {
+                elMatrizCabeca.innerHTML = '<tr><th class=col-doc>Documento</th><th>Obrigatório</th></tr>';
+                elMatrizCorpo.innerHTML = cfg.documentos.length
+                    ? cfg.documentos.map((d) =>
+                        '<tr' + (d.ativo ? '' : ' class=linha-inativa') + '>' +
+                        '<td class=col-doc><strong>' + esc(d.rotulo) + '</strong>' +
+                        (d.temValidade ? '<span class=doc-tag>validade</span>' : '') +
+                        '<small>' + esc(d.codigo) + '</small></td>' +
+                        '<td><label class=switch><input type=checkbox class=chk-obrig data-id= + d.id + ' +
+                        (d.obrigatorio ? ' checked' : '') + '><span class=	rilho></span></label></td>' +
+                        '</tr>').join('')
+                    : '<tr><td class=carregando>Nenhum documento configurado.</td></tr>';
+                desenharListas();
+                return;
+            }
 
             if (!cfg.documentos.length) {
                 elMatrizCorpo.innerHTML = '<tr><td class="carregando">Nenhum documento configurado.</td></tr>';
@@ -211,6 +268,11 @@
                 '</tr>';
             }).join('');
 
+            desenharListas();
+        }
+
+        function desenharListas() {
+            const ops = cfg.operacoes;
             // ---- Listas laterais ----
             elListaOps.innerHTML = ops.map((o) =>
                 '<div class="item-cfg">' +
@@ -289,6 +351,11 @@
                 if (ok) await carregar();
                 return;
             }
+            if (el.classList.contains('chk-obrig')) {
+                const ok = await enviar('/api/admin/documentos/' + el.dataset.id, 'PATCH', { obrigatorio: el.checked });
+                if (ok) await carregar();
+                return;
+            }
             if (el.dataset.docAtivo) {
                 const ok = await enviar('/api/admin/documentos/' + el.dataset.docAtivo, 'PATCH', { ativo: el.checked });
                 if (ok) await carregar();
@@ -308,6 +375,7 @@
             const input = document.getElementById('novo-documento');
             const validade = document.getElementById('novo-documento-validade');
             const ok = await enviar('/api/admin/documentos', 'POST', {
+                modulo: MODULO,
                 codigo: input.value,
                 rotulo: input.value,
                 temValidade: validade.checked,

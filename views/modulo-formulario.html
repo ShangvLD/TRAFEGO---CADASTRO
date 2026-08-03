@@ -29,7 +29,6 @@
                 </div>
             </div>
 
-            <!-- Desenhado por /js/app.js a partir das permissões do usuário. -->
             <nav class="main-nav" id="main-nav" aria-label="Menu principal"></nav>
 
             <div class="header-actions">
@@ -61,39 +60,9 @@
         </section>
 
         <section class="card" id="painel-form">
-
-            <div class="docs-aviso" style="margin-bottom:var(--space-6)">
-                <span class="material-symbols-rounded">construction</span>
-                <div>
-                    <strong>Estrutura base.</strong> Os campos específicos deste módulo
-                    ainda serão definidos. Por enquanto o formulário aceita um resumo e
-                    uma descrição — o suficiente para o fluxo de envio, acompanhamento e
-                    aprovação já funcionar de ponta a ponta.
-                </div>
-            </div>
-
+            <!-- Formulário inteiro desenhado a partir de /api/modulos/<slug>/formulario -->
             <form id="form-modulo" novalidate autocomplete="off">
-                <div class="form-secao">
-                    <div class="form-secao__titulo">
-                        <span class="material-symbols-rounded">edit_note</span> Dados da solicitação
-                    </div>
-
-                    <div class="campos">
-                        <div class="campo campo-largo" data-campo="assunto">
-                            <label for="assunto">Resumo <span class="obrigatorio">*</span></label>
-                            <input type="text" id="assunto" name="assunto" maxlength="200"
-                                   placeholder="Identifique a solicitação em uma linha">
-                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
-                        </div>
-
-                        <div class="campo campo-largo" data-campo="detalhes">
-                            <label for="detalhes">Detalhes</label>
-                            <textarea id="detalhes" name="detalhes" maxlength="4000"
-                                      placeholder="Descreva as informações relevantes"></textarea>
-                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
-                        </div>
-                    </div>
-                </div>
+                <div id="secoes"></div>
 
                 <div class="form-acoes">
                     <span class="aviso-erros" id="aviso-erros">
@@ -127,57 +96,320 @@
     </main>
 
     <script src="/js/app.js"></script>
+    <!-- MESMO módulo de validação usado no servidor. -->
+    <script src="/js/validacao.js"></script>
     <script>
-        // O módulo vem da própria URL: /cadastro/<slug>
+        const V = window.Validacao;
         const SLUG = window.location.pathname.split('/').filter(Boolean)[1] || '';
 
         const form = document.getElementById('form-modulo');
+        const elSecoes = document.getElementById('secoes');
         const painelEnviado = document.getElementById('painel-enviado');
         const btnEnviar = document.getElementById('btn-enviar');
         const avisoErros = document.getElementById('aviso-erros');
         const avisoErrosTxt = document.getElementById('aviso-erros-txt');
 
-        function caixa(campo) { return form.querySelector('[data-campo="' + campo + '"]'); }
+        let ESPEC = null; // { modulo, secoes, operacoes, documentos, operacoesObrigatorias }
 
-        function marcarErro(campo, mensagem) {
+        function esc(t) {
+            const d = document.createElement('div');
+            d.textContent = t == null ? '' : String(t);
+            return d.innerHTML;
+        }
+
+        // ------------------------------------------------------------------
+        // Desenho do formulário a partir da especificação
+        // ------------------------------------------------------------------
+        function campoHtml(c) {
+            const obrig = c.obrigatorio ? ' <span class="obrigatorio">*</span>' : '';
+            const larga = c.largura === 'larga' ? ' campo-largo' : '';
+            const dica = c.dica ? `<span class="dica">${esc(c.dica)}</span>` : '';
+            const ph = c.placeholder ? ` placeholder="${esc(c.placeholder)}"` : '';
+            const erro = `<span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>`;
+
+            let controle;
+            if (c.tipo === 'selecao') {
+                const opts = (c.opcoes || []).map((o) => `<option value="${esc(o)}">${esc(o)}</option>`).join('');
+                controle = `<select id="${esc(c.id)}" name="${esc(c.id)}"><option value="">Selecione...</option>${opts}</select>`;
+            } else {
+                // Atributos que ajudam o teclado do celular e limitam o tamanho.
+                const modo = { cpf: 'numeric', cpf_cnpj: 'numeric', telefone: 'tel' }[c.tipo];
+                const maxLen = { cpf: 14, cpf_cnpj: 18, telefone: 20, placa: 8, email: 254 }[c.tipo] || c.max || 200;
+                const tipoHtml = c.tipo === 'email' ? 'email' : 'text';
+                const caixaAlta = c.tipo === 'placa' ? ' style="text-transform:uppercase"' : '';
+                controle =
+                    `<input type="${tipoHtml}" id="${esc(c.id)}" name="${esc(c.id)}" maxlength="${maxLen}"` +
+                    (modo ? ` inputmode="${modo}"` : '') + caixaAlta + ph + '>';
+            }
+
+            return `<div class="campo${larga}" data-campo="${esc(c.id)}" data-tipo="${esc(c.tipo)}">
+                <label for="${esc(c.id)}">${esc(c.rotulo)}${obrig}</label>
+                ${controle}${dica}${erro}
+            </div>`;
+        }
+
+        function desenhar() {
+            const partes = [];
+
+            // ---- Clientes/operações, quando o módulo usa ----
+            if (ESPEC.operacoes.length) {
+                partes.push(`<div class="form-secao">
+                    <div class="form-secao__titulo">
+                        <span class="material-symbols-rounded">checklist</span> Clientes
+                    </div>
+                    <p class="form-secao__ajuda">Marque os clientes para os quais este cadastro está sendo solicitado.${ESPEC.operacoesObrigatorias ? ' Pelo menos um é obrigatório.' : ''}</p>
+                    <div class="campo" data-campo="operacoes">
+                        <div class="operacoes">${ESPEC.operacoes.map((o) =>
+                            `<label class="operacao-chip">
+                                <input type="checkbox" name="operacoes" value="${esc(o)}">
+                                <span class="material-symbols-rounded">check_circle</span>
+                                <span>${esc(o)}</span>
+                            </label>`).join('')}</div>
+                        <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
+                    </div>
+                </div>`);
+            }
+
+            // ---- Seções de campos ----
+            for (const s of ESPEC.secoes) {
+                partes.push(`<div class="form-secao">
+                    <div class="form-secao__titulo">
+                        <span class="material-symbols-rounded">${esc(s.icone || 'edit_note')}</span> ${esc(s.secao)}
+                    </div>
+                    <div class="campos">${s.campos.map(campoHtml).join('')}</div>
+                </div>`);
+            }
+
+            // ---- Documentos (checklist; o upload ainda não está ligado) ----
+            if (ESPEC.documentos.length) {
+                partes.push(`<div class="form-secao">
+                    <div class="form-secao__titulo">
+                        <span class="material-symbols-rounded">attach_file</span> Documentos
+                    </div>
+                    <div class="docs-aviso" style="margin-bottom:var(--space-4)">
+                        <span class="material-symbols-rounded">construction</span>
+                        <div>
+                            <strong>O envio de arquivos ainda não está ligado.</strong><br>
+                            Estes são os documentos que serão exigidos. Por enquanto, envie-os
+                            pelo canal que você já usa e registre aqui os dados do cadastro.
+                        </div>
+                    </div>
+                    <div class="docs-lista" id="docs-lista"></div>
+                </div>`);
+            }
+
+            elSecoes.innerHTML = partes.join('');
+            ligarEventos();
+            desenharDocumentos();
+        }
+
+        /** Documentos aplicáveis: filtra pelas operações marcadas e pela condição. */
+        function desenharDocumentos() {
+            const lista = document.getElementById('docs-lista');
+            if (!lista) return;
+
+            const marcadas = [...form.querySelectorAll('input[name=operacoes]:checked')].map((c) => c.value);
+
+            const aplicaveis = ESPEC.documentos.filter((d) => {
+                if (d.operacoes && !d.operacoes.some((o) => marcadas.includes(o))) return false;
+                return true;
+            });
+
+            lista.innerHTML = aplicaveis.map((d) => {
+                // Documento condicionado a um campo: só é exigido se o campo
+                // estiver preenchido (ex.: CRLV da carreta, se houver carreta).
+                const campoCond = d.condicionadoA ? document.getElementById(d.condicionadoA) : null;
+                const condicaoAtiva = campoCond ? !!campoCond.value.trim() : true;
+                const rotuloCond = d.condicionadoA
+                    ? `<span class="doc-tag" style="background:var(--primary-soft);color:var(--primary-darker)">só com ${esc(nomeDoCampo(d.condicionadoA))}</span>`
+                    : '';
+
+                const marca = d.obrigatorio && condicaoAtiva
+                    ? '<span class="doc-tag" style="background:var(--danger-soft);color:var(--danger)">obrigatório</span>'
+                    : '<span class="doc-tag">opcional</span>';
+
+                return `<div class="doc-item"${condicaoAtiva ? '' : ' style="opacity:.55"'}>
+                    <span class="material-symbols-rounded">description</span>
+                    <span class="doc-rotulo">${esc(d.rotulo)}</span>
+                    ${marca}${rotuloCond}
+                    ${d.temValidade ? '<span class="doc-tag">validade</span>' : ''}
+                </div>`;
+            }).join('');
+        }
+
+        function nomeDoCampo(id) {
+            for (const s of ESPEC.secoes) {
+                const c = s.campos.find((x) => x.id === id);
+                if (c) return c.rotulo.toLowerCase();
+            }
+            return id;
+        }
+
+        // ------------------------------------------------------------------
+        // Coleta / validação
+        // ------------------------------------------------------------------
+        function coletar() {
+            const d = {};
+            for (const s of ESPEC.secoes) {
+                for (const c of s.campos) {
+                    const el = document.getElementById(c.id);
+                    d[c.id] = el ? el.value : '';
+                }
+            }
+            d.operacoes = [...form.querySelectorAll('input[name=operacoes]:checked')].map((c) => c.value);
+            return d;
+        }
+
+        function caixa(campo) { return form.querySelector(`[data-campo="${campo}"]`); }
+
+        function marcarErro(campo, msg) {
             const c = caixa(campo);
             if (!c) return;
             c.classList.add('com-erro');
+            c.classList.remove('ok');
             const t = c.querySelector('.erro-txt');
-            if (t) t.textContent = mensagem;
+            if (t) t.textContent = msg;
         }
 
-        function limparErros() {
-            for (const c of form.querySelectorAll('.campo')) c.classList.remove('com-erro');
+        function limparErro(campo, valido) {
+            const c = caixa(campo);
+            if (!c) return;
+            c.classList.remove('com-erro');
+            if (valido) c.classList.add('ok');
+        }
+
+        function limparTodosOsErros() {
+            for (const c of form.querySelectorAll('.campo')) c.classList.remove('com-erro', 'ok');
             avisoErros.classList.remove('visivel');
         }
 
-        // Rótulos do módulo (título, descrição, aba do navegador).
-        (async () => {
-            try {
-                const r = await fetch('/api/modulos/' + SLUG);
-                if (!r.ok) return;
-                const j = await r.json();
-                if (!j.ok) return;
-                document.getElementById('titulo').textContent = j.modulo.rotulo;
-                document.getElementById('descricao').textContent = j.modulo.descricao;
-                document.title = j.modulo.rotulo + ' — Tráfego | Jomed';
-            } catch (e) { /* mantém os textos padrão */ }
-        })();
+        /**
+         * Valida um campo no navegador usando o MESMO validacao.js do servidor.
+         * A especificação diz o tipo; aqui só se despacha para a função certa.
+         */
+        function validarUm(campo) {
+            const el = document.getElementById(campo.id);
+            if (!el) return { ok: true, valor: null };
+            const valor = el.value;
+            const obrigatorio = !!campo.obrigatorio;
 
+            switch (campo.tipo) {
+                case 'nome':     return V.validarNome(valor, { obrigatorio, rotulo: `O campo "${campo.rotulo}"` });
+                case 'cpf':      return V.validarCpf(valor, { obrigatorio });
+                case 'cpf_cnpj': return V.validarCpfOuCnpj(valor, { obrigatorio });
+                case 'telefone': return V.validarTelefone(valor, { obrigatorio, rotulo: `O campo "${campo.rotulo}"` });
+                case 'email':    return V.validarEmail(valor, { obrigatorio });
+                case 'placa':    return V.validarPlaca(valor, { obrigatorio, rotulo: `A ${campo.rotulo.toLowerCase()}` });
+                case 'selecao':
+                    return V.vazio(valor) && obrigatorio
+                        ? { ok: false, erro: `Selecione ${campo.rotulo.toLowerCase()}.` }
+                        : { ok: true, valor: valor || null };
+                default:
+                    return V.validarTexto(valor, { obrigatorio, rotulo: `O campo "${campo.rotulo}"`, max: campo.max || 500 });
+            }
+        }
+
+        function validarTudo() {
+            const erros = {};
+            for (const s of ESPEC.secoes) {
+                for (const c of s.campos) {
+                    const r = validarUm(c);
+                    if (!r.ok) erros[c.id] = r.erro;
+                }
+            }
+            if (ESPEC.operacoes.length && ESPEC.operacoesObrigatorias) {
+                const n = form.querySelectorAll('input[name=operacoes]:checked').length;
+                if (n === 0) erros.operacoes = 'Selecione pelo menos um cliente.';
+            }
+            return erros;
+        }
+
+        // ------------------------------------------------------------------
+        // Eventos (religados a cada redesenho)
+        // ------------------------------------------------------------------
+        function ligarEventos() {
+            for (const s of ESPEC.secoes) {
+                for (const c of s.campos) {
+                    const el = document.getElementById(c.id);
+                    if (!el) continue;
+
+                    // Só acusa erro depois que a pessoa sai do campo, para não
+                    // brigar com ela enquanto ainda está digitando.
+                    el.addEventListener('blur', () => {
+                        const r = validarUm(c);
+                        if (r.ok) limparErro(c.id, r.valor != null);
+                        else marcarErro(c.id, r.erro);
+                    });
+
+                    el.addEventListener('input', () => {
+                        const cx = caixa(c.id);
+                        if (cx && cx.classList.contains('com-erro')) {
+                            const r = validarUm(c);
+                            if (r.ok) limparErro(c.id, true);
+                        }
+                        // Campo que condiciona documento: a lista muda com ele.
+                        if (ESPEC.documentos.some((d) => d.condicionadoA === c.id)) desenharDocumentos();
+                    });
+
+                    aplicarMascara(el, c.tipo);
+                }
+            }
+
+            const ops = form.querySelector('.operacoes');
+            if (ops) {
+                ops.addEventListener('change', () => {
+                    limparErro('operacoes', true);
+                    desenharDocumentos();
+                });
+            }
+        }
+
+        /** Máscaras: formatam enquanto digita, sem impedir a digitação. */
+        function aplicarMascara(el, tipo) {
+            const fmt = {
+                cpf: (v) => {
+                    const d = V.apenasDigitos(v).slice(0, 11);
+                    if (d.length <= 3) return d;
+                    if (d.length <= 6) return d.slice(0, 3) + '.' + d.slice(3);
+                    if (d.length <= 9) return d.slice(0, 3) + '.' + d.slice(3, 6) + '.' + d.slice(6);
+                    return d.slice(0, 3) + '.' + d.slice(3, 6) + '.' + d.slice(6, 9) + '-' + d.slice(9);
+                },
+                telefone: (v) => {
+                    const d = V.apenasDigitos(v).slice(0, 11);
+                    if (d.length <= 2) return d;
+                    if (d.length <= 6) return '(' + d.slice(0, 2) + ') ' + d.slice(2);
+                    if (d.length <= 10) return '(' + d.slice(0, 2) + ') ' + d.slice(2, 6) + '-' + d.slice(6);
+                    return '(' + d.slice(0, 2) + ') ' + d.slice(2, 7) + '-' + d.slice(7);
+                },
+                placa: (v) => V.normalizarPlaca(v).slice(0, 7),
+            }[tipo];
+            if (!fmt) return;
+
+            el.addEventListener('input', () => {
+                const noFim = el.selectionStart === el.value.length;
+                const novo = fmt(el.value);
+                if (novo !== el.value) {
+                    el.value = novo;
+                    if (noFim) el.setSelectionRange(novo.length, novo.length);
+                }
+            });
+        }
+
+        // ------------------------------------------------------------------
+        // Envio
+        // ------------------------------------------------------------------
         form.addEventListener('submit', async (ev) => {
             ev.preventDefault();
-            limparErros();
+            limparTodosOsErros();
 
-            const corpo = {
-                assunto: document.getElementById('assunto').value,
-                detalhes: document.getElementById('detalhes').value,
-            };
-
-            if (!corpo.assunto.trim()) {
-                marcarErro('assunto', 'Informe um resumo da solicitação.');
-                avisoErrosTxt.textContent = '1 campo precisa de atenção.';
+            const erros = validarTudo();
+            if (Object.keys(erros).length) {
+                for (const c of Object.keys(erros)) marcarErro(c, erros[c]);
+                const n = Object.keys(erros).length;
+                avisoErrosTxt.textContent = n === 1 ? '1 campo precisa de atenção.' : `${n} campos precisam de atenção.`;
                 avisoErros.classList.add('visivel');
+                const primeiro = form.querySelector('.campo.com-erro');
+                if (primeiro) primeiro.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 return;
             }
 
@@ -185,10 +417,10 @@
             btnEnviar.innerHTML = '<span class="material-symbols-rounded">hourglass_top</span> Enviando...';
 
             try {
-                const r = await fetch('/api/modulos/' + SLUG + '/solicitacoes', {
+                const r = await fetch(`/api/modulos/${SLUG}/solicitacoes`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(corpo),
+                    body: JSON.stringify(coletar()),
                 });
                 const j = await r.json().catch(() => ({}));
 
@@ -206,6 +438,7 @@
                 document.getElementById('protocolo').textContent = '#' + j.id;
                 form.style.display = 'none';
                 painelEnviado.classList.add('visivel');
+                painelEnviado.scrollIntoView({ behavior: 'smooth', block: 'center' });
             } catch (e) {
                 avisoErrosTxt.textContent = 'Falha de conexão. Tente de novo.';
                 avisoErros.classList.add('visivel');
@@ -217,15 +450,38 @@
 
         document.getElementById('btn-limpar').addEventListener('click', () => {
             form.reset();
-            limparErros();
+            limparTodosOsErros();
+            desenharDocumentos();
         });
 
         document.getElementById('btn-novo').addEventListener('click', () => {
             form.reset();
-            limparErros();
+            limparTodosOsErros();
+            desenharDocumentos();
             painelEnviado.classList.remove('visivel');
             form.style.display = '';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         });
+
+        // ------------------------------------------------------------------
+        // Início
+        // ------------------------------------------------------------------
+        (async () => {
+            try {
+                const r = await fetch(`/api/modulos/${SLUG}/formulario`);
+                if (!r.ok) {
+                    elSecoes.innerHTML = '<p class="form-secao__ajuda">Não foi possível carregar o formulário.</p>';
+                    return;
+                }
+                ESPEC = await r.json();
+                document.getElementById('titulo').textContent = ESPEC.modulo.rotulo;
+                document.getElementById('descricao').textContent = ESPEC.modulo.descricao;
+                document.title = ESPEC.modulo.rotulo + ' — Tráfego | Jomed';
+                desenhar();
+            } catch (e) {
+                elSecoes.innerHTML = '<p class="form-secao__ajuda">Falha de conexão ao carregar o formulário.</p>';
+            }
+        })();
     </script>
 </body>
 </html>

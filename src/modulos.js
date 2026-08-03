@@ -49,6 +49,10 @@ const MODULOS = [
     // rota genérica de criação — ela gravaria uma solicitação sem os dados
     // estruturados, contornando toda a validação do módulo.
     apiPropria: true,
+
+    // null = oferece TODAS as operações ativas da configuração.
+    operacoesPermitidas: null,
+    operacoesObrigatorias: true,
   },
 
   {
@@ -64,6 +68,28 @@ const MODULOS = [
     dominioExigido: null, // agregado é externo: qualquer domínio
     somenteAdmin: false,
     apiPropria: false,
+
+    // Agregado atende apenas estes três clientes, e ao menos um é obrigatório.
+    operacoesPermitidas: ['MERCADO LIVRE', 'SHOPEE', 'AMAZON'],
+    operacoesObrigatorias: true,
+
+    // Documentos exigidos, semeados na primeira inicialização. Depois passam a
+    // ser editáveis em /admin/formulario (a configuração no banco manda).
+    documentosIniciais: [
+      { codigo: 'CNH', rotulo: 'CNH do condutor', temValidade: true, obrigatorio: true },
+      { codigo: 'CRLV_CAVALO', rotulo: 'CRLV do cavalo', temValidade: true, obrigatorio: true },
+      {
+        codigo: 'CRLV_CARRETA',
+        rotulo: 'CRLV da carreta',
+        temValidade: true,
+        obrigatorio: true,
+        // Exigido apenas quando houver carreta: a placa dela é opcional.
+        condicionadoA: 'placa_carreta',
+      },
+      { codigo: 'CURSO_DIRECAO_SEGURA', rotulo: 'Curso de Direção Segura', temValidade: true, obrigatorio: true },
+      { codigo: 'CURSO_ACIDENTE_RODOVIA', rotulo: 'Curso de Acidente em Rodovia', temValidade: true, obrigatorio: true },
+      { codigo: 'COMPROVANTE_RESIDENCIA', rotulo: 'Comprovante de residência do motorista', temValidade: false, obrigatorio: true },
+    ],
   },
 
   {
@@ -79,6 +105,18 @@ const MODULOS = [
     dominioExigido: null, // candidato é externo
     somenteAdmin: false,
     apiPropria: false,
+
+    // Candidato não se vincula a cliente: é alguém se oferecendo para
+    // trabalhar, não um cadastro para operar em uma conta específica.
+    operacoesPermitidas: [],
+    operacoesObrigatorias: false,
+
+    documentosIniciais: [
+      { codigo: 'CNH', rotulo: 'CNH', temValidade: true, obrigatorio: true },
+      { codigo: 'MOPP', rotulo: 'MOPP', temValidade: true, obrigatorio: true },
+      { codigo: 'COMPROVANTE_RESIDENCIA', rotulo: 'Comprovante de residência', temValidade: false, obrigatorio: true },
+      { codigo: 'FOTO_CONDUTOR_CNH', rotulo: 'Foto segurando a CNH', temValidade: false, obrigatorio: true },
+    ],
   },
 ];
 

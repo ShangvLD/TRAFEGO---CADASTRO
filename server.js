@@ -30,6 +30,7 @@ const { MODULOS, acharModulo, rotaFormulario, rotaPainel } = require('./src/modu
 const papeis = require('./src/papeis');
 const { dadosDe } = require('./src/modulo-servico');
 const { menuPara, menuDaConta } = require('./src/menu');
+const campos = require('./src/campos');
 const {
   exigirLogin,
   exigirAdmin,
@@ -395,11 +396,33 @@ app.delete(
 // A LEITURA é liberada a qualquer usuário logado — o formulário precisa dela
 // para montar os campos. A ESCRITA é só do admin.
 // --------------------------------------------------------------------------
+// Configuração do módulo TERCEIRO (rota histórica, usada por views/cadastro.html).
 app.get(
   '/api/config-formulario',
   exigirLogin,
   wrap(async (req, res) => {
-    res.json({ ok: true, ...(await configFormulario.paraFormulario()) });
+    res.json({ ok: true, ...(await configFormulario.paraFormulario('terceiro')) });
+  })
+);
+
+// Especificação COMPLETA do formulário de um módulo: campos, operações e
+// documentos. A tela genérica se desenha inteira a partir daqui — acrescentar
+// campo em src/campos.js aparece na tela sem tocar em HTML.
+app.get(
+  '/api/modulos/:slug/formulario',
+  exigirLogin,
+  wrap(async (req, res) => {
+    const m = acharModulo(req.params.slug);
+    if (!m) return res.status(404).json({ ok: false, erro: 'Módulo não encontrado.' });
+
+    // O spread vem PRIMEIRO: paraFormulario() também devolve um campo "modulo"
+    // (só o slug), e se viesse depois sobrescreveria o objeto com os rótulos.
+    res.json({
+      ok: true,
+      ...(await configFormulario.paraFormulario(m.slug)),
+      secoes: campos.secoesDe(m.slug),
+      modulo: { slug: m.slug, rotulo: m.rotulo, rotuloCurto: m.rotuloCurto, descricao: m.descricao },
+    });
   })
 );
 
@@ -409,7 +432,9 @@ app.get(
   exigirLogin,
   exigirAdmin,
   wrap(async (req, res) => {
-    res.json({ ok: true, ...(await configFormulario.paraAdmin()) });
+    const slug = String(req.query.modulo || 'terceiro');
+    if (!acharModulo(slug)) return res.status(404).json({ ok: false, erro: 'Módulo não encontrado.' });
+    res.json({ ok: true, ...(await configFormulario.paraAdmin(slug)) });
   })
 );
 
@@ -446,8 +471,14 @@ app.post(
   exigirLogin,
   exigirAdmin,
   wrap(async (req, res) => {
-    const { codigo, rotulo, temValidade } = req.body || {};
-    const r = await configFormulario.criarDocumento({ codigo, rotulo, temValidade });
+    const { modulo, codigo, rotulo, temValidade, obrigatorio } = req.body || {};
+    const r = await configFormulario.criarDocumento({
+      modulo: modulo || 'terceiro',
+      codigo,
+      rotulo,
+      temValidade,
+      obrigatorio: obrigatorio !== false,
+    });
     if (!r.ok) return res.status(400).json({ ok: false, erro: r.erro });
     res.status(201).json(r);
   })
@@ -470,6 +501,9 @@ app.patch(
     }
     if (typeof b.rotulo === 'string') {
       mexeu = (await configFormulario.renomearDocumento(id, b.rotulo)) || mexeu;
+    }
+    if (typeof b.obrigatorio === 'boolean') {
+      mexeu = (await configFormulario.definirDocumentoObrigatorio(id, b.obrigatorio)) || mexeu;
     }
     if (typeof b.todas === 'boolean') {
       const ids = Array.isArray(b.operacaoIds) ? b.operacaoIds.map(Number).filter(Number.isInteger) : [];
@@ -603,23 +637,59 @@ for (const m of MODULOS) {
       exigirFormulario(m.slug),
       wrap(async (req, res) => {
         const b = req.body || {};
-        const assunto = String(b.assunto || '').trim();
 
-        if (!assunto) {
-          return res.status(400).json({
-            ok: false,
-            erros: { assunto: 'Informe um resumo da solicitação.' },
-          });
+        // ---- Campos, validados pela especificação de src/campos.js ----
+        // A validação do navegador é conveniência; esta é a que vale — dá para
+        // enviar um POST direto, sem passar pela tela.
+        const { ok, dados: valores, erros } = campos.validarModulo(m.slug, b);
+
+        // ---- Operações (clientes) ----
+        // Cada módulo define quais oferece; candidato não usa nenhuma.
+        const cfg = await configFormulario.paraFormulario(m.slug);
+        let operacoes = [];
+
+        if (cfg.operacoes.length) {
+          const enviadas = Array.isArray(b.operacoes) ? b.operacoes : [];
+          const permitidas = cfg.operacoes.map((o) => o.toUpperCase());
+          const vistas = new Set();
+
+          for (const item of enviadas) {
+            const nome = String(item || '').trim().toUpperCase();
+            if (!nome || vistas.has(nome)) continue;
+            if (!permitidas.includes(nome)) {
+              erros.operacoes = `Operação não disponível neste formulário: "${nome}".`;
+              break;
+            }
+            vistas.add(nome);
+            operacoes.push(nome);
+          }
+
+          if (!erros.operacoes && cfg.operacoesObrigatorias && operacoes.length === 0) {
+            erros.operacoes = 'Selecione pelo menos um cliente.';
+          }
         }
+
+        if (!ok || Object.keys(erros).length) {
+          return res.status(400).json({ ok: false, erros });
+        }
+
+        // O resumo aparece na lista do painel; os detalhes, no formato
+        // "Rótulo: valor | ..." que as telas já sabem exibir campo a campo.
+        const detalhes = [
+          operacoes.length ? `Operações: ${operacoes.join(', ')}` : null,
+          campos.detalhesDe(m.slug, valores),
+        ]
+          .filter(Boolean)
+          .join(' | ');
 
         // O solicitante vem SEMPRE da sessão, nunca do corpo — ninguém envia
         // solicitação em nome de outra pessoa.
         const criada = await dados.criar({
           solicitante_nome: req.session.usuario.nome,
           solicitante_email: req.session.usuario.email,
-          assunto,
-          detalhes: String(b.detalhes || '').trim() || null,
-          dados: b.dados && typeof b.dados === 'object' ? b.dados : null,
+          assunto: campos.resumoDe(m.slug, valores),
+          detalhes,
+          dados: { ...valores, operacoes },
           origem: 'portal',
         });
 
