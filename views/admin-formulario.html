@@ -88,6 +88,33 @@
             </div>
         </section>
 
+        <!-- ===================== PERGUNTAS ===================== -->
+        <section class="card" id="card-perguntas" style="margin-top:var(--space-6)">
+            <div class="card-header">
+                <h3><span class="material-symbols-rounded" style="color:var(--primary);vertical-align:-5px">quiz</span> Perguntas do formulário</h3>
+            </div>
+            <p class="form-secao__ajuda" id="ajuda-perguntas">
+                As perguntas que aparecem para quem preenche. O <strong>tipo</strong> define como o
+                valor é conferido — CPF confere o dígito verificador, placa aceita o formato antigo
+                e o Mercosul, e assim por diante.
+            </p>
+
+            <div class="lista-cfg" id="lista-perguntas"></div>
+
+            <form class="add-linha" id="form-pergunta">
+                <input type="text" id="nova-pergunta" placeholder="Texto da pergunta (ex.: Número do RNTRC)" maxlength="80" required>
+                <select id="nova-pergunta-tipo"></select>
+                <input type="text" id="nova-pergunta-secao" placeholder="Seção (ex.: Condutor)" maxlength="40">
+                <input type="text" id="nova-pergunta-opcoes" placeholder="Opções separadas por vírgula" maxlength="200" hidden>
+                <label class="check-inline">
+                    <input type="checkbox" id="nova-pergunta-obrig"> obrigatória
+                </label>
+                <button type="submit" class="btn btn--primario">
+                    <span class="material-symbols-rounded">add</span> Adicionar
+                </button>
+            </form>
+        </section>
+
         <div class="admin-grid">
             <!-- ===================== OPERAÇÕES ===================== -->
             <section class="card">
@@ -139,9 +166,29 @@
         const elStatus = document.getElementById('status-salvo');
         const elAviso = document.getElementById('aviso');
 
+        const elListaPerg = document.getElementById('lista-perguntas');
+        const selTipo = document.getElementById('nova-pergunta-tipo');
+        const inpOpcoes = document.getElementById('nova-pergunta-opcoes');
         const selModulo = document.getElementById('sel-modulo');
         let MODULO = new URLSearchParams(location.search).get('modulo') || 'terceiro';
         let cfg = { operacoes: [], operacoesDoModulo: [], documentos: [], modulos: [] };
+
+
+        /** Rótulo legível de um tipo de campo. */
+        function rotuloDoTipo(tipo) {
+            const t = (cfg.tiposDeCampo || []).find((x) => x.valor === tipo);
+            return t ? t.rotulo : tipo;
+        }
+
+        /**
+         * Botão de excluir. Excluir é permanente, diferente de desativar —
+         * por isso pede confirmação dizendo exatamente o que acontece.
+         */
+        function botaoExcluir(recurso, id, nome, artigo) {
+            return '<button type="button" class="btn-excluir" data-excluir="' + recurso + '" data-id="' + id +
+                   '" data-nome="' + esc(nome) + '" data-artigo="' + esc(artigo) + '" title="Excluir">' +
+                   '<span class="material-symbols-rounded">delete</span></button>';
+        }
 
         function esc(txt) {
             const d = document.createElement('div');
@@ -177,6 +224,7 @@
                 modulos: j.modulos || [],
             };
             desenharSeletor();
+            desenharTipos();
             desenhar();
             marcarStatus('Carregado', 'is-info');
         }
@@ -281,6 +329,7 @@
                         '<span class="trilho"></span>' +
                     '</label>' +
                     '<span class="item-nome' + (o.ativo ? '' : ' apagado') + '">' + esc(o.nome) + '</span>' +
+                    botaoExcluir('operacoes', o.id, o.nome, 'o cliente') +
                 '</div>'
             ).join('');
 
@@ -291,8 +340,28 @@
                         '<span class="trilho"></span>' +
                     '</label>' +
                     '<span class="item-nome' + (d.ativo ? '' : ' apagado') + '">' + esc(d.rotulo) + '</span>' +
+                    botaoExcluir('documentos', d.id, d.rotulo, 'o anexo') +
                 '</div>'
             ).join('');
+
+            // ---- Perguntas ----
+            elListaPerg.innerHTML = (cfg.perguntas || []).length
+                ? cfg.perguntas.map((p) =>
+                    '<div class="item-cfg">' +
+                        '<label class="switch">' +
+                            '<input type="checkbox" data-perg-ativo="' + p.id + '"' + (p.ativo ? ' checked' : '') + '>' +
+                            '<span class="trilho"></span>' +
+                        '</label>' +
+                        '<span class="item-nome' + (p.ativo ? '' : ' apagado') + '">' + esc(p.rotulo) + '</span>' +
+                        '<span class="perg-meta">' + esc(p.secao) + ' · ' + esc(rotuloDoTipo(p.tipo)) +
+                            (p.opcoes ? ' (' + esc(p.opcoes.join(', ')) + ')' : '') + '</span>' +
+                        '<label class="check-inline perg-obrig" title="Obrigatória">' +
+                            '<input type="checkbox" data-perg-obrig="' + p.id + '"' + (p.obrigatorio ? ' checked' : '') + '> obrig.' +
+                        '</label>' +
+                        botaoExcluir('perguntas', p.id, p.rotulo, 'a pergunta') +
+                    '</div>'
+                ).join('')
+                : '<p class="form-secao__ajuda">Este formulário não usa perguntas configuráveis.</p>';
         }
 
         // ------------------------------------------------------------------
@@ -356,6 +425,16 @@
                 if (ok) await carregar();
                 return;
             }
+            if (el.dataset.pergAtivo) {
+                const ok = await enviar('/api/admin/perguntas/' + el.dataset.pergAtivo, 'PATCH', { ativo: el.checked });
+                if (ok) await carregar();
+                return;
+            }
+            if (el.dataset.pergObrig) {
+                const ok = await enviar('/api/admin/perguntas/' + el.dataset.pergObrig, 'PATCH', { obrigatorio: el.checked });
+                if (ok) await carregar();
+                return;
+            }
             if (el.dataset.docAtivo) {
                 const ok = await enviar('/api/admin/documentos/' + el.dataset.docAtivo, 'PATCH', { ativo: el.checked });
                 if (ok) await carregar();
@@ -381,6 +460,66 @@
                 temValidade: validade.checked,
             });
             if (ok) { input.value = ''; validade.checked = false; await carregar(); }
+        });
+
+        // ---- Tipos de pergunta no seletor ----
+        function desenharTipos() {
+            if (selTipo.options.length || !(cfg.tiposDeCampo || []).length) return;
+            selTipo.innerHTML = cfg.tiposDeCampo
+                .map((tp) => '<option value="' + esc(tp.valor) + '">' + esc(tp.rotulo) + '</option>')
+                .join('');
+        }
+
+        // Só o tipo "seleção" precisa de opções — o campo aparece quando ele é
+        // escolhido, para não poluir o formulário nos outros casos.
+        selTipo.addEventListener('change', () => {
+            inpOpcoes.hidden = selTipo.value !== 'selecao';
+            if (inpOpcoes.hidden) inpOpcoes.value = '';
+        });
+
+        document.getElementById('form-pergunta').addEventListener('submit', async (ev) => {
+            ev.preventDefault();
+            const rotulo = document.getElementById('nova-pergunta');
+            const secao = document.getElementById('nova-pergunta-secao');
+            const obrig = document.getElementById('nova-pergunta-obrig');
+
+            const ok = await enviar('/api/admin/perguntas', 'POST', {
+                modulo: MODULO,
+                rotulo: rotulo.value,
+                tipo: selTipo.value,
+                secao: secao.value,
+                obrigatorio: obrig.checked,
+                opcoes: inpOpcoes.value,
+            });
+            if (ok) {
+                rotulo.value = '';
+                secao.value = '';
+                inpOpcoes.value = '';
+                obrig.checked = false;
+                await carregar();
+            }
+        });
+
+        // ---- Exclusões (cliente, anexo, pergunta) ----
+        document.addEventListener('click', async (ev) => {
+            const btn = ev.target.closest('[data-excluir]');
+            if (!btn) return;
+
+            const { excluir, id, nome, artigo } = btn.dataset;
+            const aviso = {
+                operacoes: 'As solicitações que já citam este cliente continuam intactas.',
+                documentos: 'Os arquivos já enviados NÃO são apagados.',
+                perguntas: 'As respostas já enviadas continuam gravadas, mas deixam de aparecer.',
+            }[excluir];
+
+            if (!confirm('Excluir ' + artigo + ' "' + nome + '"?\n\n' + aviso +
+                         '\n\nPara apenas tirar do formulário, use o interruptor — é reversível.')) return;
+
+            const ok = await enviar('/api/admin/' + excluir + '/' + id, 'DELETE');
+            if (ok) {
+                avisar('"' + nome + '" foi excluído.', 'ok');
+                await carregar();
+            }
         });
 
         carregar();

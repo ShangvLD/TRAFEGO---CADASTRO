@@ -22,6 +22,7 @@
 const db = require('./db');
 const { OPERACOES, TIPOS_DOCUMENTO, limparTexto, vazio } = require('./validacao');
 const { MODULOS, acharModulo } = require('./modulos');
+const campos = require('./campos');
 
 // ---------------------------------------------------------------------------
 // Semeadura
@@ -67,6 +68,40 @@ async function semear() {
          ON CONFLICT (nome) DO NOTHING`,
         [OPERACOES[i], i + 1]
       );
+    }
+
+    // ---- Perguntas, a partir da especificação em src/campos.js ----
+    // O código continua sendo a origem: o que muda é que agora ele é apenas a
+    // SEMENTE. Depois da primeira inicialização, a tela de configuração manda.
+    for (const modulo of MODULOS) {
+      let ordem = 0;
+      for (const secao of campos.secoesDe(modulo.slug)) {
+        for (const c of secao.campos) {
+          ordem += 1;
+          await q(
+            `INSERT INTO cfg_campos
+               (modulo, campo_id, rotulo, tipo, secao, icone, obrigatorio, ativo,
+                ordem, largura, dica, placeholder, opcoes, max_tamanho)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT (modulo, campo_id) DO NOTHING`,
+            [
+              modulo.slug,
+              c.id,
+              c.rotulo,
+              c.tipo,
+              secao.secao,
+              secao.icone || null,
+              c.obrigatorio ? 1 : 0,
+              ordem,
+              c.largura || null,
+              c.dica || null,
+              c.placeholder || null,
+              c.opcoes ? JSON.stringify(c.opcoes) : null,
+              c.max || null,
+            ]
+          );
+        }
+      }
     }
 
     // ---- Documentos, por módulo ----
@@ -185,13 +220,15 @@ async function documentos(slug, { apenasAtivos = true } = {}) {
 /** O que o formulário de um módulo precisa saber. */
 async function paraFormulario(slug) {
   const modulo = acharModulo(slug);
-  const [ops, docs] = await Promise.all([
+  const [ops, docs, secoes] = await Promise.all([
     operacoesDoModulo(slug),
     documentos(slug, { apenasAtivos: true }),
+    secoesDoModulo(slug),
   ]);
 
   return {
     modulo: slug,
+    secoes,
     operacoes: ops.map((o) => o.nome),
     operacoesObrigatorias: modulo ? modulo.operacoesObrigatorias !== false : true,
     documentos: docs.map((d) => ({
@@ -216,10 +253,11 @@ async function paraFormulario(slug) {
  *                      sugeriria que ele pode ser vinculado a qualquer um.
  */
 async function paraAdmin(slug) {
-  const [todas, doModulo, docs] = await Promise.all([
+  const [todas, doModulo, docs, perg] = await Promise.all([
     todasAsOperacoes(),
     operacoesDoModulo(slug),
     documentos(slug, { apenasAtivos: false }),
+    perguntas(slug, { apenasAtivas: false }),
   ]);
 
   return {
@@ -227,8 +265,214 @@ async function paraAdmin(slug) {
     operacoes: todas,
     operacoesDoModulo: doModulo,
     documentos: docs,
+    perguntas: perg,
+    tiposDeCampo: TIPOS_DE_CAMPO,
     modulos: MODULOS.map((m) => ({ slug: m.slug, rotulo: m.rotulo })),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Perguntas (campos)
+// ---------------------------------------------------------------------------
+
+/** Perguntas de um módulo, em ordem. */
+async function perguntas(slug, { apenasAtivas = true } = {}) {
+  await garantirSemeado();
+
+  const linhas = await db
+    .prepare(
+      `SELECT id, campo_id, rotulo, tipo, secao, icone, obrigatorio, ativo,
+              ordem, largura, dica, placeholder, opcoes, max_tamanho
+         FROM cfg_campos
+        WHERE modulo = ?
+          ${apenasAtivas ? 'AND ativo = 1' : ''}
+        ORDER BY ordem, id`
+    )
+    .all(slug);
+
+  return linhas.map((l) => ({
+    id: l.id,
+    campoId: l.campo_id,
+    rotulo: l.rotulo,
+    tipo: l.tipo,
+    secao: l.secao,
+    icone: l.icone,
+    obrigatorio: l.obrigatorio === 1,
+    ativo: l.ativo === 1,
+    ordem: l.ordem,
+    largura: l.largura,
+    dica: l.dica,
+    placeholder: l.placeholder,
+    opcoes: l.opcoes ? JSON.parse(l.opcoes) : null,
+    max: l.max_tamanho,
+  }));
+}
+
+/**
+ * As perguntas no formato que a tela e o validador consomem — agrupadas em
+ * seções, preservando a ordem em que aparecem.
+ */
+async function secoesDoModulo(slug) {
+  const lista = await perguntas(slug, { apenasAtivas: true });
+  const porSecao = new Map();
+
+  for (const p of lista) {
+    if (!porSecao.has(p.secao)) {
+      porSecao.set(p.secao, { secao: p.secao, icone: p.icone || 'edit_note', campos: [] });
+    }
+    porSecao.get(p.secao).campos.push({
+      id: p.campoId,
+      rotulo: p.rotulo,
+      tipo: p.tipo,
+      obrigatorio: p.obrigatorio,
+      largura: p.largura || undefined,
+      dica: p.dica || undefined,
+      placeholder: p.placeholder || undefined,
+      opcoes: p.opcoes || undefined,
+      max: p.max || undefined,
+    });
+  }
+
+  return [...porSecao.values()];
+}
+
+const TIPOS_DE_CAMPO = [
+  { valor: 'texto', rotulo: 'Texto livre' },
+  { valor: 'nome', rotulo: 'Nome completo' },
+  { valor: 'cpf', rotulo: 'CPF' },
+  { valor: 'cpf_cnpj', rotulo: 'CPF ou CNPJ' },
+  { valor: 'telefone', rotulo: 'Telefone' },
+  { valor: 'email', rotulo: 'E-mail' },
+  { valor: 'placa', rotulo: 'Placa de veículo' },
+  { valor: 'selecao', rotulo: 'Escolha entre opções' },
+];
+
+/** Transforma o rótulo em identificador técnico (mesma regra dos documentos). */
+function idTecnico(texto) {
+  return limparTexto(texto)
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+/** Cria uma pergunta em um módulo. */
+async function criarPergunta({ modulo, rotulo, tipo = 'texto', secao, obrigatorio = false, opcoes = null }) {
+  await garantirSemeado();
+
+  if (!acharModulo(modulo)) return { ok: false, erro: 'Módulo inválido.' };
+  if (!TIPOS_DE_CAMPO.some((t) => t.valor === tipo)) return { ok: false, erro: 'Tipo de campo inválido.' };
+
+  const rot = limparTexto(rotulo);
+  if (!rot) return { ok: false, erro: 'Informe o texto da pergunta.' };
+
+  const campoId = idTecnico(rot);
+  if (!campoId) return { ok: false, erro: 'O texto da pergunta precisa ter letras ou números.' };
+
+  // Tipo "seleção" sem opções não daria escolha nenhuma a quem preenche.
+  let opcoesLimpas = null;
+  if (tipo === 'selecao') {
+    const lista = (Array.isArray(opcoes) ? opcoes : String(opcoes || '').split(','))
+      .map((o) => limparTexto(o).toUpperCase())
+      .filter(Boolean);
+    if (!lista.length) return { ok: false, erro: 'Informe as opções, separadas por vírgula.' };
+    opcoesLimpas = JSON.stringify([...new Set(lista)]);
+  }
+
+  const existente = await db
+    .prepare('SELECT id FROM cfg_campos WHERE modulo = ? AND campo_id = ?')
+    .get(modulo, campoId);
+  if (existente) return { ok: false, erro: `Este formulário já tem a pergunta "${rot}".` };
+
+  const ordem = (
+    await db.prepare('SELECT COALESCE(max(ordem), 0) + 1 AS n FROM cfg_campos WHERE modulo = ?').get(modulo)
+  ).n;
+
+  const r = await db
+    .prepare(
+      `INSERT INTO cfg_campos (modulo, campo_id, rotulo, tipo, secao, obrigatorio, ativo, ordem, opcoes)
+       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?) RETURNING id`
+    )
+    .run(modulo, campoId, rot, tipo, limparTexto(secao) || 'Dados', obrigatorio ? 1 : 0, ordem, opcoesLimpas);
+
+  return { ok: true, id: r.lastInsertRowid, campoId, rotulo: rot };
+}
+
+/** Atualiza uma pergunta: rótulo, obrigatoriedade ou estado. */
+async function atualizarPergunta(id, { rotulo, obrigatorio, ativo }) {
+  await garantirSemeado();
+  let mexeu = false;
+
+  if (typeof rotulo === 'string') {
+    const rot = limparTexto(rotulo);
+    if (rot) {
+      // O campo_id NÃO muda junto: ele é a chave dos dados já gravados, e
+      // renomear a chave desligaria as respostas antigas da pergunta.
+      const r = await db.prepare('UPDATE cfg_campos SET rotulo = ? WHERE id = ?').run(rot, id);
+      mexeu = r.changes > 0 || mexeu;
+    }
+  }
+  if (typeof obrigatorio === 'boolean') {
+    const r = await db.prepare('UPDATE cfg_campos SET obrigatorio = ? WHERE id = ?').run(obrigatorio ? 1 : 0, id);
+    mexeu = r.changes > 0 || mexeu;
+  }
+  if (typeof ativo === 'boolean') {
+    const r = await db.prepare('UPDATE cfg_campos SET ativo = ? WHERE id = ?').run(ativo ? 1 : 0, id);
+    mexeu = r.changes > 0 || mexeu;
+  }
+  return mexeu;
+}
+
+// ---------------------------------------------------------------------------
+// Exclusões
+//
+// Excluir é diferente de desativar: desativar tira do formulário e é
+// reversível com um clique; excluir apaga a configuração para sempre.
+//
+// Em nenhum dos três casos as solicitações já enviadas são alteradas — os
+// dados ficam gravados no histórico. O que se perde é a configuração.
+// ---------------------------------------------------------------------------
+
+/**
+ * Exclui um cliente. Os vínculos com documentos saem junto (ON DELETE CASCADE).
+ * As solicitações antigas que o citam continuam intactas: o nome do cliente
+ * está gravado como texto nelas, não como referência.
+ */
+async function excluirOperacao(id) {
+  await garantirSemeado();
+  const alvo = await db.prepare('SELECT nome FROM cfg_operacoes WHERE id = ?').get(id);
+  if (!alvo) return { ok: false, erro: 'Cliente não encontrado.' };
+
+  const r = await db.prepare('DELETE FROM cfg_operacoes WHERE id = ?').run(id);
+  return { ok: r.changes > 0, nome: alvo.nome };
+}
+
+/**
+ * Exclui um tipo de documento da configuração. Arquivos já enviados NÃO são
+ * apagados — a tabela "documentos" guarda o tipo como texto.
+ */
+async function excluirDocumento(id) {
+  await garantirSemeado();
+  const alvo = await db.prepare('SELECT rotulo FROM cfg_documentos WHERE id = ?').get(id);
+  if (!alvo) return { ok: false, erro: 'Documento não encontrado.' };
+
+  const r = await db.prepare('DELETE FROM cfg_documentos WHERE id = ?').run(id);
+  return { ok: r.changes > 0, rotulo: alvo.rotulo };
+}
+
+/**
+ * Exclui uma pergunta. As respostas já enviadas continuam gravadas na coluna
+ * "dados" das solicitações, mas deixam de ser exibidas — sem a pergunta na
+ * configuração, não há rótulo para mostrá-las.
+ */
+async function excluirPergunta(id) {
+  await garantirSemeado();
+  const alvo = await db.prepare('SELECT rotulo FROM cfg_campos WHERE id = ?').get(id);
+  if (!alvo) return { ok: false, erro: 'Pergunta não encontrada.' };
+
+  const r = await db.prepare('DELETE FROM cfg_campos WHERE id = ?').run(id);
+  return { ok: r.changes > 0, rotulo: alvo.rotulo };
 }
 
 /** Documentos aplicáveis às operações escolhidas. */
@@ -326,7 +570,10 @@ async function criarDocumento({ modulo, codigo, rotulo, temValidade = false, obr
   if (!acharModulo(modulo)) return { ok: false, erro: 'Módulo inválido.' };
 
   // O código é identificador técnico (vira nome de pasta e chave no banco):
-  // maiúsculas, sem acento e sem espaço.
+  // maiúsculas, sem acento e sem espaço. O NFD separa a letra do acento
+  // ("á" -> "a" + U+0301) e o replace seguinte apaga os acentos soltos, para
+  // "Currículo" e "curriculo" darem o MESMO código e a checagem de duplicado
+  // pegá-los.
   const cod = limparTexto(codigo)
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
@@ -372,6 +619,9 @@ module.exports = {
   todasAsOperacoes,
   operacoesDoModulo,
   documentos,
+  perguntas,
+  secoesDoModulo,
+  TIPOS_DE_CAMPO,
   documentosPara,
   paraFormulario,
   paraAdmin,
@@ -383,4 +633,10 @@ module.exports = {
   definirDocumentoAtivo,
   definirDocumentoObrigatorio,
   definirOperacoesDoDocumento,
+  criarPergunta,
+  atualizarPergunta,
+  // exclusões
+  excluirOperacao,
+  excluirDocumento,
+  excluirPergunta,
 };

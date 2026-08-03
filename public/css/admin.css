@@ -342,3 +342,75 @@
     outline: none;
     box-shadow: 0 0 0 3px var(--primary-soft);
 }
+
+/* --------------------------------------------------------------------------
+   Perguntas do formulário
+   -------------------------------------------------------------------------- */
+.item-cfg .perg-meta {
+    font-size: 0.76rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.item-cfg .perg-obrig {
+    margin-left: auto;
+    font-size: 0.78rem;
+}
+
+/* Excluir fica visualmente discreto e à direita: é permanente, então não deve
+   competir por atenção com o interruptor, que é a ação reversível do dia a dia. */
+.btn-excluir {
+    margin-left: var(--space-2);
+    border: none;
+    background: transparent;
+    color: #b9c2cc;
+    display: inline-flex;
+    align-items: center;
+    padding: 4px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: color var(--transition), background var(--transition);
+}
+
+.item-cfg .perg-obrig + .btn-excluir {
+    margin-left: var(--space-2);
+}
+
+.item-cfg .item-nome + .btn-excluir,
+.item-cfg .perg-meta + .btn-excluir {
+    margin-left: auto;
+}
+
+.btn-excluir:hover {
+    color: var(--danger);
+    background: var(--danger-soft);
+}
+
+.btn-excluir .material-symbols-rounded {
+    font-size: 18px;
+}
+
+/* O formulário de nova pergunta tem mais controles que os outros. */
+#form-pergunta select,
+#form-pergunta input[type="text"] {
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font: inherit;
+    font-size: 0.92rem;
+    background: var(--surface-muted);
+}
+
+#form-pergunta #nova-pergunta { flex: 2; min-width: 180px; }
+#form-pergunta #nova-pergunta-secao { flex: 1; min-width: 130px; }
+#form-pergunta #nova-pergunta-opcoes { flex: 1; min-width: 160px; }
+
+#form-pergunta select:focus,
+#form-pergunta input[type="text"]:focus {
+    outline: none;
+    border-color: var(--primary);
+    background: var(--surface);
+    box-shadow: 0 0 0 3px var(--primary-soft);
+}

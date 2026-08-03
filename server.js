@@ -420,7 +420,6 @@ app.get(
     res.json({
       ok: true,
       ...(await configFormulario.paraFormulario(m.slug)),
-      secoes: campos.secoesDe(m.slug),
       modulo: { slug: m.slug, rotulo: m.rotulo, rotuloCurto: m.rotuloCurto, descricao: m.descricao },
     });
   })
@@ -512,6 +511,97 @@ app.patch(
 
     if (!mexeu) return res.status(404).json({ ok: false, erro: 'Documento não encontrado ou nada a alterar.' });
     res.json({ ok: true });
+  })
+);
+
+// --------------------------------------------------------------------------
+// PERGUNTAS (campos) do formulário — somente admin
+//
+// Valem para os módulos que usam a tela genérica (agregado, candidato). O
+// módulo terceiro tem formulário próprio, escrito à mão, e não é montado a
+// partir desta configuração.
+// --------------------------------------------------------------------------
+app.post(
+  '/api/admin/perguntas',
+  exigirLogin,
+  exigirAdmin,
+  wrap(async (req, res) => {
+    const { modulo, rotulo, tipo, secao, obrigatorio, opcoes } = req.body || {};
+    const r = await configFormulario.criarPergunta({
+      modulo: modulo || 'agregado',
+      rotulo,
+      tipo,
+      secao,
+      obrigatorio: !!obrigatorio,
+      opcoes,
+    });
+    if (!r.ok) return res.status(400).json({ ok: false, erro: r.erro });
+    res.status(201).json(r);
+  })
+);
+
+app.patch(
+  '/api/admin/perguntas/:id',
+  exigirLogin,
+  exigirAdmin,
+  wrap(async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
+
+    const b = req.body || {};
+    const mexeu = await configFormulario.atualizarPergunta(id, {
+      rotulo: b.rotulo,
+      obrigatorio: b.obrigatorio,
+      ativo: b.ativo,
+    });
+    if (!mexeu) return res.status(404).json({ ok: false, erro: 'Pergunta não encontrada ou nada a alterar.' });
+    res.json({ ok: true });
+  })
+);
+
+// --------------------------------------------------------------------------
+// EXCLUSÕES na configuração — somente admin
+//
+// Excluir é diferente de desativar: desativar tira do formulário e volta com
+// um clique; excluir apaga a configuração para sempre. Em nenhum dos casos as
+// solicitações já enviadas são alteradas.
+// --------------------------------------------------------------------------
+app.delete(
+  '/api/admin/operacoes/:id',
+  exigirLogin,
+  exigirAdmin,
+  wrap(async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
+    const r = await configFormulario.excluirOperacao(id);
+    if (!r.ok) return res.status(404).json({ ok: false, erro: r.erro || 'Não foi possível excluir.' });
+    res.json({ ok: true, nome: r.nome });
+  })
+);
+
+app.delete(
+  '/api/admin/documentos/:id',
+  exigirLogin,
+  exigirAdmin,
+  wrap(async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
+    const r = await configFormulario.excluirDocumento(id);
+    if (!r.ok) return res.status(404).json({ ok: false, erro: r.erro || 'Não foi possível excluir.' });
+    res.json({ ok: true, rotulo: r.rotulo });
+  })
+);
+
+app.delete(
+  '/api/admin/perguntas/:id',
+  exigirLogin,
+  exigirAdmin,
+  wrap(async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
+    const r = await configFormulario.excluirPergunta(id);
+    if (!r.ok) return res.status(404).json({ ok: false, erro: r.erro || 'Não foi possível excluir.' });
+    res.json({ ok: true, rotulo: r.rotulo });
   })
 );
 
@@ -641,11 +731,12 @@ for (const m of MODULOS) {
         // ---- Campos, validados pela especificação de src/campos.js ----
         // A validação do navegador é conveniência; esta é a que vale — dá para
         // enviar um POST direto, sem passar pela tela.
-        const { ok, dados: valores, erros } = campos.validarModulo(m.slug, b);
+        const cfgForm = await configFormulario.paraFormulario(m.slug);
+        const { ok, dados: valores, erros } = campos.validarSecoes(cfgForm.secoes, b);
 
         // ---- Operações (clientes) ----
         // Cada módulo define quais oferece; candidato não usa nenhuma.
-        const cfg = await configFormulario.paraFormulario(m.slug);
+        const cfg = cfgForm;
         let operacoes = [];
 
         if (cfg.operacoes.length) {
@@ -677,7 +768,7 @@ for (const m of MODULOS) {
         // "Rótulo: valor | ..." que as telas já sabem exibir campo a campo.
         const detalhes = [
           operacoes.length ? `Operações: ${operacoes.join(', ')}` : null,
-          campos.detalhesDe(m.slug, valores),
+          campos.detalhesDeSecoes(cfgForm.secoes, valores),
         ]
           .filter(Boolean)
           .join(' | ');

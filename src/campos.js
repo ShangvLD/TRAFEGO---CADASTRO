@@ -178,25 +178,44 @@ function validarCampo(campo, valor) {
 }
 
 /**
- * Valida a entrada de um módulo contra a especificação dele.
+ * Valida uma entrada contra uma LISTA de campos.
+ *
+ * Recebe a lista em vez de ler a constante porque a especificação real vive no
+ * banco (tabela cfg_campos, editável em /admin/formulario) — as constantes
+ * deste arquivo são só a semente inicial. Se lesse daqui, uma pergunta criada
+ * pela tela seria ignorada na validação.
  *
  * @returns { ok, dados, erros }
  *   dados — valores já normalizados (CPF só com dígitos, placa em maiúsculas...)
  *   erros — { idDoCampo: mensagem }, para a tela destacar cada campo
  */
-function validarModulo(slug, entrada) {
-  const campos = camposDe(slug);
+function validarCampos(lista, entrada) {
   const e = entrada || {};
   const dados = {};
   const erros = {};
 
-  for (const campo of campos) {
+  for (const campo of lista || []) {
     const r = validarCampo(campo, e[campo.id]);
     if (r.ok) dados[campo.id] = r.valor;
     else erros[campo.id] = r.erro;
   }
 
   return { ok: Object.keys(erros).length === 0, dados, erros };
+}
+
+/** Achata as seções em uma lista de campos. */
+function camposDasSecoes(secoes) {
+  return (secoes || []).flatMap((s) => s.campos || []);
+}
+
+/** Valida contra as SEÇÕES vindas do banco. */
+function validarSecoes(secoes, entrada) {
+  return validarCampos(camposDasSecoes(secoes), entrada);
+}
+
+/** Valida usando a semente do código (uso em teste e como reserva). */
+function validarModulo(slug, entrada) {
+  return validarCampos(camposDe(slug), entrada);
 }
 
 /**
@@ -225,11 +244,11 @@ function resumoDe(slug, dados) {
  * sabe exibir campo a campo (o modal do módulo terceiro faz isso). Reaproveitar
  * o formato evita escrever um leitor de detalhes por módulo.
  */
-function detalhesDe(slug, dados) {
+function detalhesDeCampos(lista, dados) {
   const d = dados || {};
   const partes = [];
 
-  for (const campo of camposDe(slug)) {
+  for (const campo of lista || []) {
     let valor = d[campo.id];
     if (valor == null || valor === '') continue;
 
@@ -244,12 +263,27 @@ function detalhesDe(slug, dados) {
   return partes.join(' | ');
 }
 
+/** Mesma coisa, a partir das seções vindas do banco. */
+function detalhesDeSecoes(secoes, dados) {
+  return detalhesDeCampos(camposDasSecoes(secoes), dados);
+}
+
+/** Versão que lê a semente do código (uso em teste). */
+function detalhesDe(slug, dados) {
+  return detalhesDeCampos(camposDe(slug), dados);
+}
+
 module.exports = {
   CAMPOS_POR_MODULO,
   secoesDe,
   camposDe,
   validarCampo,
+  validarCampos,
+  validarSecoes,
   validarModulo,
+  camposDasSecoes,
   resumoDe,
+  detalhesDeCampos,
+  detalhesDeSecoes,
   detalhesDe,
 };
