@@ -81,15 +81,22 @@
         <section class="card">
             <div class="card-header">
                 <h3><span class="material-symbols-rounded" style="color:var(--primary);vertical-align:-5px">list_alt</span> Solicitações recebidas</h3>
-                <button class="badge is-info" id="btn-atualizar" type="button" style="border:none;cursor:pointer">
-                    <span class="material-symbols-rounded" style="font-size:16px">refresh</span> Atualizar
-                </button>
+                <div class="acoes-painel">
+                    <button class="btn btn--secundario btn-exportar" id="btn-exportar" type="button" disabled>
+                        <span class="material-symbols-rounded">folder_zip</span>
+                        <span id="btn-exportar-txt">Exportar documentos</span>
+                    </button>
+                    <button class="badge is-info" id="btn-atualizar" type="button" style="border:none;cursor:pointer">
+                        <span class="material-symbols-rounded" style="font-size:16px">refresh</span> Atualizar
+                    </button>
+                </div>
             </div>
 
             <div class="table-wrap">
                 <table class="data-table">
                     <thead>
                         <tr>
+                            <th class="col-sel"><input type="checkbox" id="sel-todos" title="Selecionar todos"></th>
                             <th>Data</th>
                             <th>Solicitante</th>
                             <th>Resumo</th>
@@ -98,7 +105,7 @@
                         </tr>
                     </thead>
                     <tbody id="tabela-corpo">
-                        <tr><td colspan="5">
+                        <tr><td colspan="6">
                             <div class="empty-state">
                                 <span class="material-symbols-rounded">hourglass_empty</span>
                                 <h4>Carregando...</h4>
@@ -116,6 +123,8 @@
     </div>
 
     <script src="/js/app.js"></script>
+    <script src="/js/zip.js"></script>
+    <script src="/js/exportar.js"></script>
     <script>
         // O módulo vem da URL: /painel/<slug>
         const SLUG = window.location.pathname.split('/').filter(Boolean)[1] || '';
@@ -154,8 +163,12 @@
                        <span class="material-symbols-rounded" style="font-size:15px">delete</span></button>`
                 : '';
 
+            const anexos = (contagemAnexos[s.id] || 0);
             return `<tr>
-                <td>${formatarData(s.criado_em)}</td>
+                <td class="col-sel"><input type="checkbox" class="sel-linha" data-id="${s.id}"></td>
+                <td>${formatarData(s.criado_em)}
+                    ${anexos ? `<br><small class="anexos-tag"><span class="material-symbols-rounded">attach_file</span>${anexos}</small>` : ''}
+                </td>
                 <td>${esc(s.solicitante_nome)}<br><small style="color:var(--text-secondary)">${esc(s.solicitante_email)}</small></td>
                 <td>${esc(s.assunto)}${s.detalhes ? `<br><small style="color:var(--text-secondary)">${esc(String(s.detalhes).slice(0, 90))}${String(s.detalhes).length > 90 ? '…' : ''}</small>` : ''}</td>
                 <td>${BADGE[s.status] || esc(s.status)}${s.observacao ? `<br><small style="color:var(--text-secondary)">${esc(s.observacao)}</small>` : ''}</td>
@@ -179,17 +192,19 @@
 
                 atualizarKpis(j.resumo || {});
                 podeExcluir = !!j.podeExcluir;
+                contagemAnexos = j.anexos || {};
                 lista = j.solicitacoes || [];
 
                 corpo.innerHTML = lista.length
                     ? lista.map(linhaHtml).join('')
-                    : `<tr><td colspan="5"><div class="empty-state">
+                    : `<tr><td colspan="6"><div class="empty-state">
                            <span class="material-symbols-rounded">database</span>
                            <h4>Nenhuma solicitação ainda</h4>
                            <p>As solicitações enviadas por este formulário aparecem aqui.</p>
                        </div></td></tr>`;
+                atualizarBotaoExportar();
             } catch (e) {
-                corpo.innerHTML = `<tr><td colspan="5"><div class="empty-state">
+                corpo.innerHTML = `<tr><td colspan="6"><div class="empty-state">
                         <span class="material-symbols-rounded">wifi_off</span>
                         <h4>Erro ao carregar</h4>
                         <p>Não foi possível falar com o servidor.</p>
@@ -300,6 +315,61 @@
         document.getElementById('btn-atualizar').addEventListener('click', async () => {
             await carregar();
             versaoConhecida = impressaoLocal();
+        });
+
+        // ------------------------------------------------------------------
+        // Seleção e exportação em ZIP
+        // ------------------------------------------------------------------
+        let contagemAnexos = {};
+
+        function selecionados() {
+            return [...document.querySelectorAll('.sel-linha:checked')].map((c) => Number(c.dataset.id));
+        }
+
+        function atualizarBotaoExportar() {
+            const n = selecionados().length;
+            const btn = document.getElementById('btn-exportar');
+            btn.disabled = n === 0;
+            document.getElementById('btn-exportar-txt').textContent =
+                n === 0 ? 'Exportar documentos'
+                : n === 1 ? 'Exportar 1 cadastro'
+                : `Exportar ${n} cadastros`;
+        }
+
+        document.getElementById('sel-todos').addEventListener('change', (ev) => {
+            for (const c of document.querySelectorAll('.sel-linha')) c.checked = ev.target.checked;
+            atualizarBotaoExportar();
+        });
+
+        corpo.addEventListener('change', (ev) => {
+            if (ev.target.classList.contains('sel-linha')) atualizarBotaoExportar();
+        });
+
+        document.getElementById('btn-exportar').addEventListener('click', async () => {
+            const ids = selecionados();
+            if (!ids.length) return;
+
+            const btn = document.getElementById('btn-exportar');
+            const txt = document.getElementById('btn-exportar-txt');
+            const original = txt.textContent;
+            btn.disabled = true;
+
+            try {
+                const r = await exportarDocumentos(SLUG, ids, (feitos, total, msg) => {
+                    txt.textContent = total ? `${feitos}/${total} — ${msg}` : msg;
+                });
+
+                if (!r.ok) {
+                    alert(r.erro);
+                } else if (r.falhas.length) {
+                    alert(`ZIP gerado com ${r.arquivos} arquivo(s).\n\nNão foi possível baixar:\n` + r.falhas.join('\n'));
+                }
+            } catch (e) {
+                alert('Falha ao exportar: ' + e.message);
+            } finally {
+                txt.textContent = original;
+                atualizarBotaoExportar();
+            }
         });
 
         (async () => {

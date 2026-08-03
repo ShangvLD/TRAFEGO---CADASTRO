@@ -21,7 +21,7 @@ const solicitacoes = require('./solicitacoes');
 const camadas = new Map();
 
 for (const m of MODULOS) {
-  camadas.set(m.slug, m.slug === 'terceiro' ? solicitacoes : criarCamada(m.tabela));
+  camadas.set(m.slug, m.slug === 'terceiro' ? solicitacoes : criarCamada(m.tabela, m.slug));
 }
 
 /** Camada de dados do módulo. null se o slug não existir. */

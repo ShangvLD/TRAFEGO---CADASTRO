@@ -31,6 +31,7 @@ const papeis = require('./src/papeis');
 const { dadosDe } = require('./src/modulo-servico');
 const { menuPara, menuDaConta } = require('./src/menu');
 const campos = require('./src/campos');
+const documentos = require('./src/documentos');
 const {
   exigirLogin,
   exigirAdmin,
@@ -343,15 +344,17 @@ app.get(
   exigirLogin,
   exigirPainel('terceiro'),
   wrap(async (req, res) => {
-    const [resumo, lista] = await Promise.all([
+    const [resumo, lista, anexos] = await Promise.all([
       solicitacoes.contarPorStatus(),
       solicitacoes.listar(),
+      documentos.contarPorSolicitacao('terceiro'),
     ]);
     res.json({
       ok: true,
       papel: req.session.usuario.papel, // o front usa para mostrar o botão de excluir só ao admin
       resumo,
       solicitacoes: lista,
+      anexos,
     });
   })
 );
@@ -513,6 +516,184 @@ app.patch(
     res.json({ ok: true });
   })
 );
+
+// --------------------------------------------------------------------------
+// DOCUMENTOS — upload nativo e exportação
+//
+// O arquivo NÃO passa pelo servidor: o navegador pede uma URL assinada, envia
+// direto ao storage e depois avisa o portal para registrar. Motivo prático — a
+// função do Vercel tem limite de ~4,5 MB no corpo da requisição, e um PDF de
+// CRLV passa disso com facilidade.
+//
+// Quem pode: quem preenche o formulário do módulo (envia os seus) e quem
+// acompanha o painel (lê e exporta).
+// --------------------------------------------------------------------------
+
+/** Deixa passar quem preenche o formulário OU quem acompanha o painel. */
+function exigirAcessoAoModulo(slug) {
+  const doFormulario = exigirFormulario(slug);
+  const doPainel = exigirPainel(slug);
+  return (req, res, next) => {
+    const u = req.session && req.session.usuario;
+    if (u && papeis.podePainel(u.papel, slug)) return doPainel(req, res, next);
+    return doFormulario(req, res, next);
+  };
+}
+
+for (const m of MODULOS) {
+  const base = `/api/modulos/${m.slug}/solicitacoes/:id/documentos`;
+  const dados = dadosDe(m.slug);
+
+  /** Dono do cadastro: define o nome da pasta (NOME_CPF). */
+  async function donoDaSolicitacao(id) {
+    const s = await dados.buscarPorId(id);
+    if (!s) return null;
+
+    // Cada módulo guarda o condutor num lugar: o terceiro nas tabelas
+    // estruturadas, os demais no JSON "dados".
+    if (m.slug === 'terceiro') {
+      const e = await cadastros.buscarPorSolicitacao(id);
+      if (e) return { nome: e.condutor_nome, cpf: e.condutor_cpf };
+      return { nome: s.solicitante_nome, cpf: '' };
+    }
+    const d = s.dados || {};
+    return { nome: d.condutor_nome || s.solicitante_nome, cpf: d.condutor_cpf || d.cpf || '' };
+  }
+
+  // ---- Lista os documentos ----
+  app.get(
+    base,
+    exigirLogin,
+    exigirAcessoAoModulo(m.slug),
+    wrap(async (req, res) => {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
+      res.json({ ok: true, documentos: await documentos.listar(m.slug, id) });
+    })
+  );
+
+  // ---- Pede a URL assinada para enviar ----
+  app.post(
+    `${base}/preparar`,
+    exigirLogin,
+    exigirAcessoAoModulo(m.slug),
+    wrap(async (req, res) => {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
+
+      const dono = await donoDaSolicitacao(id);
+      if (!dono) return res.status(404).json({ ok: false, erro: 'Solicitação não encontrada.' });
+
+      const { tipo, nomeArquivo, contentType, tamanho } = req.body || {};
+      if (!tipo) return res.status(400).json({ ok: false, erro: 'Informe o tipo do documento.' });
+
+      const r = await documentos.prepararEnvio({
+        modulo: m.slug,
+        solicitacaoId: id,
+        tipo,
+        nomeArquivo,
+        contentType,
+        tamanho,
+        dono,
+      });
+      if (!r.ok) return res.status(400).json({ ok: false, erro: r.erro });
+      res.json({ ok: true, ...r });
+    })
+  );
+
+  // ---- Confirma que o arquivo chegou ao storage ----
+  app.post(
+    `${base}/registrar`,
+    exigirLogin,
+    exigirAcessoAoModulo(m.slug),
+    wrap(async (req, res) => {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
+
+      const { tipo, caminho, nomeOriginal, contentType, tamanho, provedor, validade } = req.body || {};
+      if (!tipo || !caminho) return res.status(400).json({ ok: false, erro: 'Dados incompletos.' });
+
+      const r = await documentos.registrar({
+        modulo: m.slug,
+        solicitacaoId: id,
+        tipo,
+        caminho,
+        nomeOriginal,
+        contentType,
+        tamanho,
+        provedor,
+        validade,
+      });
+      res.status(201).json(r);
+    })
+  );
+
+  // ---- URL temporária para abrir/baixar um documento ----
+  app.get(
+    `${base}/:docId/url`,
+    exigirLogin,
+    exigirAcessoAoModulo(m.slug),
+    wrap(async (req, res) => {
+      const docId = Number(req.params.docId);
+      if (!Number.isInteger(docId)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
+
+      const url = await documentos.urlDeLeitura(docId);
+      if (!url) return res.status(404).json({ ok: false, erro: 'Documento não encontrado.' });
+      res.json({ ok: true, url });
+    })
+  );
+
+  // ---- Exclui um documento ----
+  app.delete(
+    `${base}/:docId`,
+    exigirLogin,
+    exigirAcessoAoModulo(m.slug),
+    wrap(async (req, res) => {
+      const docId = Number(req.params.docId);
+      if (!Number.isInteger(docId)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
+
+      const r = await documentos.excluir(docId);
+      if (!r.ok) return res.status(400).json({ ok: false, erro: r.erro });
+      res.json({ ok: true });
+    })
+  );
+
+  // ---- Manifesto para exportação em ZIP ----
+  //
+  // Devolve a lista de arquivos com URL temporária de cada um. O ZIP é montado
+  // NO NAVEGADOR: a função do Vercel tem limite de tempo e memória, e baixar
+  // dezenas de arquivos para compactar do lado do servidor estouraria os dois.
+  app.post(
+    `/api/modulos/${m.slug}/exportar`,
+    exigirLogin,
+    exigirPainel(m.slug),
+    wrap(async (req, res) => {
+      const ids = Array.isArray((req.body || {}).ids) ? req.body.ids : [];
+      if (!ids.length) return res.status(400).json({ ok: false, erro: 'Selecione ao menos um cadastro.' });
+
+      const arquivos = await documentos.listarDeVarias(m.slug, ids);
+      const prov = require('./src/storage').provedor();
+
+      // A pasta de cada cadastro vem do caminho já gravado, não é remontada:
+      // assim a exportação reflete exatamente como os arquivos foram salvos.
+      const itens = [];
+      for (const a of arquivos) {
+        if (!a.caminho) continue;
+        const partes = a.caminho.split('/');
+        itens.push({
+          solicitacaoId: a.solicitacao_id,
+          pasta: partes[partes.length - 2] || 'CADASTRO',
+          nome: partes[partes.length - 1],
+          tamanho: a.tamanho,
+          // 30 min: tempo de sobra para baixar tudo, sem deixar link vivo à toa.
+          url: await prov.urlDeLeitura(a.caminho, 1800),
+        });
+      }
+
+      res.json({ ok: true, total: itens.length, itens });
+    })
+  );
+}
 
 // --------------------------------------------------------------------------
 // PERGUNTAS (campos) do formulário — somente admin
@@ -694,12 +875,19 @@ for (const m of MODULOS) {
     exigirLogin,
     exigirPainel(m.slug),
     wrap(async (req, res) => {
-      const [resumo, lista] = await Promise.all([dados.contarPorStatus(), dados.listar()]);
+      const [resumo, lista, anexos] = await Promise.all([
+        dados.contarPorStatus(),
+        dados.listar(),
+        documentos.contarPorSolicitacao(m.slug),
+      ]);
       res.json({
         ok: true,
         modulo: m.slug,
         resumo,
         solicitacoes: lista,
+        // Quantos anexos cada solicitação tem — o painel usa para o marcador
+        // na lista e para o usuário saber o que a exportação vai trazer.
+        anexos,
         podeExcluir: papeis.ehAdmin(req.session.usuario.papel),
       });
     })

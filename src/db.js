@@ -331,8 +331,24 @@ const SCHEMA_SQL = `
     enviado_em      text NOT NULL DEFAULT ${AGORA_SQL}
   );
 
+  -- Documentos passam a servir os TRÊS módulos, não só o terceiro.
+  ALTER TABLE documentos ADD COLUMN IF NOT EXISTS modulo   text NOT NULL DEFAULT 'terceiro';
+  ALTER TABLE documentos ADD COLUMN IF NOT EXISTS caminho  text;   -- caminho no storage
+  ALTER TABLE documentos ADD COLUMN IF NOT EXISTS provedor text;   -- supabase | sharepoint | memoria
+  ALTER TABLE documentos ADD COLUMN IF NOT EXISTS nome_original text;
+
+  -- A chave estrangeira apontava só para "solicitacoes", o que impedia
+  -- documento de agregado e de candidato. Como não dá para uma FK apontar para
+  -- três tabelas, ela sai e a exclusão em cascata passa a ser feita em código
+  -- (ver excluir() em src/modulo-dados.js e src/solicitacoes.js).
+  ALTER TABLE documentos DROP CONSTRAINT IF EXISTS documentos_solicitacao_id_fkey;
+
   CREATE INDEX IF NOT EXISTS idx_documentos_solicitacao
-    ON documentos (solicitacao_id);
+    ON documentos (modulo, solicitacao_id);
+
+  -- Um arquivo por caminho: reenviar o mesmo tipo substitui em vez de duplicar.
+  DROP INDEX IF EXISTS idx_documentos_caminho;
+  CREATE UNIQUE INDEX idx_documentos_caminho ON documentos (caminho) WHERE caminho IS NOT NULL;
 
   -- ======================================================================
   -- CONFIGURAÇÃO DO FORMULÁRIO (editável pelo admin, sem deploy)

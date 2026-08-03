@@ -364,3 +364,151 @@
     font-weight: 700;
     font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
 }
+
+/* --------------------------------------------------------------------------
+   Envio de documentos
+   -------------------------------------------------------------------------- */
+.up-item {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: var(--space-3) var(--space-4);
+    margin-bottom: var(--space-2);
+    background: var(--surface-muted);
+    transition: border-color var(--transition), background var(--transition);
+}
+
+.up-item.up-ok {
+    border-color: var(--success);
+    background: var(--success-soft);
+}
+
+.up-cabeca {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+}
+
+.up-cabeca .up-icone {
+    font-size: 22px;
+    color: var(--text-secondary);
+}
+
+.up-item.up-ok .up-icone {
+    color: var(--success);
+}
+
+.up-rotulo {
+    font-weight: 600;
+    font-size: 0.92rem;
+    color: var(--text);
+}
+
+.up-escolher {
+    margin-left: auto;
+    padding: 7px 14px;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+/* Arquivo já enviado */
+.up-arquivo {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+    padding: 6px var(--space-3);
+    background: var(--surface);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+}
+
+.up-arquivo .material-symbols-rounded {
+    font-size: 18px;
+    color: var(--primary);
+}
+
+.up-arquivo a {
+    font-weight: 600;
+    color: var(--primary);
+    text-decoration: none;
+}
+
+.up-arquivo a:hover { text-decoration: underline; }
+
+.up-arquivo .up-tam {
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+}
+
+.up-arquivo .up-remover {
+    margin-left: auto;
+    border: none;
+    background: transparent;
+    color: #b9c2cc;
+    cursor: pointer;
+    display: inline-flex;
+    padding: 2px;
+    border-radius: var(--radius-sm);
+}
+
+.up-arquivo .up-remover:hover {
+    color: var(--danger);
+    background: var(--danger-soft);
+}
+
+.up-arquivo .up-remover .material-symbols-rounded {
+    font-size: 16px;
+    color: inherit;
+}
+
+/* Progresso */
+.up-barra {
+    height: 5px;
+    margin-top: var(--space-2);
+    background: var(--border);
+    border-radius: var(--radius-pill);
+    overflow: hidden;
+}
+
+.up-barra__preenchida {
+    height: 100%;
+    width: 0;
+    background: var(--primary);
+    transition: width 0.15s linear;
+}
+
+.up-erro {
+    margin-top: var(--space-2);
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--danger);
+}
+
+/* Área de upload, exibida após o envio da solicitação */
+.area-upload {
+    text-align: left;
+    margin-top: var(--space-6);
+    padding-top: var(--space-6);
+    border-top: 1px solid var(--border);
+}
+
+.area-upload h4 {
+    font-size: 1rem;
+    margin-bottom: var(--space-1);
+}
+
+.area-upload .up-ajuda {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: var(--space-4);
+}
+
+.up-pendentes {
+    margin-top: var(--space-3);
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--warning);
+}
+
+.up-pendentes.ok { color: var(--success); }

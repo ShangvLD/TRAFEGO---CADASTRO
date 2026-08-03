@@ -83,6 +83,16 @@
                 <h3>Solicitação enviada</h3>
                 <p>Sua solicitação foi registrada e já está disponível para análise.</p>
                 <p class="protocolo" id="protocolo">#—</p>
+
+                <!-- Documentos: só aparece depois do envio, porque o arquivo
+                     precisa de uma solicitação já criada para se prender. -->
+                <div id="area-upload" class="area-upload" hidden>
+                    <h4>Agora envie os documentos</h4>
+                    <p class="up-ajuda" id="up-ajuda">PDF, JPG ou PNG.</p>
+                    <div id="lista-upload"></div>
+                    <p class="up-pendentes" id="up-pendentes"></p>
+                </div>
+
                 <div style="margin-top:var(--space-6)">
                     <button type="button" class="btn btn--primario" id="btn-novo">
                         <span class="material-symbols-rounded">add</span> Enviar outra
@@ -98,6 +108,7 @@
     <script src="/js/app.js"></script>
     <!-- MESMO módulo de validação usado no servidor. -->
     <script src="/js/validacao.js"></script>
+    <script src="/js/upload.js"></script>
     <script>
         const V = window.Validacao;
         const SLUG = window.location.pathname.split('/').filter(Boolean)[1] || '';
@@ -395,6 +406,50 @@
             });
         }
 
+
+        /**
+         * Monta o envio de documentos para a solicitação recém-criada.
+         *
+         * A lista respeita as mesmas regras da tela: documento de um cliente
+         * específico só aparece se o cliente foi marcado, e documento
+         * condicionado a um campo só aparece se o campo foi preenchido.
+         */
+        let ultimoEnvio = null;
+
+        function prepararUpload(solicitacaoId) {
+            const area = document.getElementById('area-upload');
+            if (!ESPEC || !ESPEC.documentos.length) return;
+
+            const marcadas = ultimoEnvio ? ultimoEnvio.operacoes || [] : [];
+            const aplicaveis = ESPEC.documentos.filter((d) => {
+                if (d.operacoes && !d.operacoes.some((o) => marcadas.includes(o))) return false;
+                if (d.condicionadoA && ultimoEnvio && !String(ultimoEnvio[d.condicionadoA] || '').trim()) return false;
+                return true;
+            });
+            if (!aplicaveis.length) return;
+
+            area.hidden = false;
+            document.getElementById('up-ajuda').textContent =
+                aplicaveis.length + ' documento(s) para esta solicitação. PDF, JPG ou PNG.';
+
+            const upload = montarUpload(document.getElementById('lista-upload'), {
+                modulo: SLUG,
+                solicitacaoId,
+                documentos: aplicaveis,
+                aoMudar() {
+                    const faltam = upload.pendentes();
+                    const el = document.getElementById('up-pendentes');
+                    if (!faltam.length) {
+                        el.textContent = 'Todos os documentos obrigatórios foram enviados.';
+                        el.className = 'up-pendentes ok';
+                    } else {
+                        el.textContent = 'Ainda faltam: ' + faltam.join(', ') + '.';
+                        el.className = 'up-pendentes';
+                    }
+                },
+            });
+        }
+
         // ------------------------------------------------------------------
         // Envio
         // ------------------------------------------------------------------
@@ -420,7 +475,7 @@
                 const r = await fetch(`/api/modulos/${SLUG}/solicitacoes`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(coletar()),
+                    body: JSON.stringify((ultimoEnvio = coletar())),
                 });
                 const j = await r.json().catch(() => ({}));
 
@@ -439,6 +494,7 @@
                 form.style.display = 'none';
                 painelEnviado.classList.add('visivel');
                 painelEnviado.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                prepararUpload(j.id);
             } catch (e) {
                 avisoErrosTxt.textContent = 'Falha de conexão. Tente de novo.';
                 avisoErros.classList.add('visivel');

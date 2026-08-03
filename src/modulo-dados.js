@@ -58,7 +58,7 @@ function hidratar(linha) {
   };
 }
 
-function criarCamada(tabelaBruta) {
+function criarCamada(tabelaBruta, slugDoModulo) {
   const tabela = validarNomeDeTabela(tabelaBruta);
 
   /** Lista tudo, mais recente primeiro. */
@@ -147,6 +147,12 @@ function criarCamada(tabelaBruta) {
   }
 
   async function excluir(id) {
+    // Os documentos não têm mais chave estrangeira para esta tabela (a coluna
+    // serve os três módulos), então a cascata é feita aqui. Sem isso, excluir
+    // uma solicitação deixaria os arquivos órfãos no storage, pagos e invisíveis.
+    if (slugDoModulo) {
+      await require('./documentos').excluirDaSolicitacao(slugDoModulo, id);
+    }
     const info = await db.prepare(`DELETE FROM ${tabela} WHERE id = ?`).run(id);
     return info.changes > 0;
   }

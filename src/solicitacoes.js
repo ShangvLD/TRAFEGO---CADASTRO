@@ -303,6 +303,11 @@ async function importar({ solicitante_nome, solicitante_email, assunto, detalhes
 
 /** Exclui uma solicitação pelo id. Retorna true se removeu algo. */
 async function excluir(id) {
+  // Os anexos enviados pelo portal ficam na tabela "documentos", que perdeu a
+  // chave estrangeira ao passar a servir os três módulos — a cascata é feita
+  // aqui, senão os arquivos ficariam órfãos no storage.
+  await require('./documentos').excluirDaSolicitacao('terceiro', id);
+
   const info = await db.prepare('DELETE FROM solicitacoes WHERE id = ?').run(id);
   return info.changes > 0;
 }

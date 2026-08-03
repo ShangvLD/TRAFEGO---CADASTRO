@@ -272,6 +272,15 @@
                 <h3>Cadastro enviado</h3>
                 <p>A solicitação foi registrada e já está disponível para o time responsável.</p>
                 <p class="protocolo" id="protocolo">#—</p>
+
+                <!-- Documentos: só depois do envio, porque o arquivo precisa
+                     de uma solicitação já criada para se prender a ela. -->
+                <div id="area-upload" class="area-upload" hidden>
+                    <h4>Agora envie os documentos</h4>
+                    <p class="up-ajuda" id="up-ajuda">PDF, JPG ou PNG.</p>
+                    <div id="lista-upload"></div>
+                    <p class="up-pendentes" id="up-pendentes"></p>
+                </div>
                 <div style="margin-top:var(--space-6)">
                     <button type="button" class="btn btn--primario" id="btn-novo">
                         <span class="material-symbols-rounded">add</span> Fazer outro cadastro
@@ -284,6 +293,7 @@
     <script src="/js/app.js"></script>
     <!-- MESMO módulo de validação usado no servidor (uma só fonte de verdade). -->
     <script src="/js/validacao.js"></script>
+    <script src="/js/upload.js"></script>
     <script>
         const V = window.Validacao;
 
@@ -495,6 +505,44 @@
         // ------------------------------------------------------------------
         // Envio
         // ------------------------------------------------------------------
+
+        /**
+         * Monta o envio de documentos da solicitação recém-criada.
+         * A lista respeita as mesmas regras da tela: documento de um cliente
+         * específico só aparece se o cliente foi marcado.
+         */
+        function prepararUpload(solicitacaoId, enviado) {
+            const area = document.getElementById('area-upload');
+            if (!CONFIG.documentos || !CONFIG.documentos.length) return;
+
+            const marcadas = (enviado && enviado.operacoes) || [];
+            const aplicaveis = CONFIG.documentos.filter(
+                (d) => !d.operacoes || d.operacoes.some((o) => marcadas.includes(o))
+            );
+            if (!aplicaveis.length) return;
+
+            area.hidden = false;
+            document.getElementById('up-ajuda').textContent =
+                aplicaveis.length + ' documento(s) para esta solicitação. PDF, JPG ou PNG.';
+
+            const upload = montarUpload(document.getElementById('lista-upload'), {
+                modulo: 'terceiro',
+                solicitacaoId,
+                documentos: aplicaveis,
+                aoMudar() {
+                    const faltam = upload.pendentes();
+                    const el = document.getElementById('up-pendentes');
+                    if (!faltam.length) {
+                        el.textContent = 'Todos os documentos obrigatórios foram enviados.';
+                        el.className = 'up-pendentes ok';
+                    } else {
+                        el.textContent = 'Ainda faltam: ' + faltam.join(', ') + '.';
+                        el.className = 'up-pendentes';
+                    }
+                },
+            });
+        }
+
         form.addEventListener('submit', async (ev) => {
             ev.preventDefault();
             limparTodosOsErros();
@@ -538,6 +586,7 @@
                 }
 
                 document.getElementById('protocolo').textContent = '#' + json.id;
+                prepararUpload(json.id, entrada);
                 form.style.display = 'none';
                 painelEnviado.classList.add('visivel');
                 painelEnviado.scrollIntoView({ behavior: 'smooth', block: 'center' });
