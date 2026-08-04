@@ -228,11 +228,26 @@
         }
 
         // Resumo do anexo para a coluna da tabela (só a contagem).
-        function anexosResumo(anexos) {
-            const n = Array.isArray(anexos) ? anexos.length : 0;
-            if (!n) return '<span style="color:var(--text-secondary)">—</span>';
-            const icone = '<span class="material-symbols-rounded" style="font-size:18px;color:var(--primary);vertical-align:-4px">attach_file</span>';
-            return `${icone} ${n} ${n === 1 ? 'arquivo' : 'arquivos'}`;
+        function anexosResumo(anexos, nativos) {
+            const doForms = Array.isArray(anexos) ? anexos.length : 0;
+            const doPortal = nativos || 0;
+            const partes = [];
+
+            // As duas origens aparecem separadas de propósito: só os do portal
+            // podem ser baixados no ZIP. Os do Forms estão no SharePoint e
+            // exigem login M365 — mostrar um número só faria a exportação
+            // parecer quebrada.
+            if (doPortal) {
+                partes.push('<span class="anexo-portal" title="Enviados pelo portal — entram no ZIP">' +
+                    '<span class="material-symbols-rounded">cloud_done</span>' + doPortal + ' no portal</span>');
+            }
+            if (doForms) {
+                partes.push('<span class="anexo-forms" title="Enviados pelo Microsoft Forms — ficam no SharePoint">' +
+                    '<span class="material-symbols-rounded">link</span>' + doForms + ' no Forms</span>');
+            }
+            return partes.length
+                ? '<div class="anexo-origens">' + partes.join('') + '</div>'
+                : '<span style="color:var(--text-secondary)">—</span>';
         }
 
         // O anexo é uma imagem? (para mostrar miniatura em vez de ícone genérico)
@@ -445,7 +460,7 @@
                 <td>${formatarData(s.criado_em)}</td>
                 <td>${esc(s.solicitante_nome)}<br><small style="color:var(--text-secondary)">${esc(s.solicitante_email)}</small></td>
                 <td>${clientesChips(s.assunto)}</td>
-                <td>${anexosResumo(s.anexos)}</td>
+                <td>${anexosResumo(s.anexos, contagemAnexos[s.id])}</td>
                 <td>${BADGE[s.status_geral] || esc(s.status_geral || s.status)}</td>
                 <td><div style="display:flex;gap:6px;align-items:center">${verBtn}${excluirBtn}</div></td>
             </tr>`;
@@ -729,9 +744,27 @@
                 const r = await exportarDocumentos('terceiro', ids, (feitos, total, msg) => {
                     txt.textContent = total ? `${feitos}/${total} — ${msg}` : msg;
                 });
-                if (!r.ok) alert(r.erro);
-                else if (r.falhas.length) {
-                    alert(`ZIP gerado com ${r.arquivos} arquivo(s).\n\nNão foi possível baixar:\n` + r.falhas.join('\n'));
+                if (!r.ok) {
+                    alert(r.erro);
+                } else {
+                    // Explica o que entrou no ZIP: arquivo do portal vem
+                    // baixado; anexo do Forms vem apenas como link, porque está
+                    // no SharePoint e exige login M365.
+                    const partes = [];
+                    if (r.arquivos) partes.push(`${r.arquivos} arquivo(s) do portal`);
+                    if (r.legados) partes.push(`${r.legados} anexo(s) do Forms, como LISTA DE LINKS`);
+                    let msg = 'ZIP gerado com ' + (partes.join(' e ') || 'nenhum arquivo') + '.';
+
+                    if (r.legados && !r.arquivos) {
+                        msg += '\n\nEstes cadastros só têm anexos do Microsoft Forms, que ficam no' +
+                               '\nSharePoint e não podem ser baixados automaticamente. O ZIP traz o' +
+                               '\narquivo ANEXOS_NO_FORMS_SHAREPOINT.txt com os links — abra-os' +
+                               '\njá logado no Microsoft 365.';
+                    }
+                    if (r.falhas.length) {
+                        msg += '\n\nNão foi possível baixar:\n' + r.falhas.join('\n');
+                    }
+                    if (r.legados || r.falhas.length) alert(msg);
                 }
             } catch (e) {
                 alert('Falha ao exportar: ' + e.message);

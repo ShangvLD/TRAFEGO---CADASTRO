@@ -48,13 +48,52 @@
     const j = await r.json().catch(() => ({}));
 
     if (!r.ok || !j.ok) return { ok: false, erro: j.erro || 'Não foi possível listar os documentos.' };
-    if (!j.itens.length) {
-      return { ok: false, erro: 'Nenhum documento anexado nos cadastros selecionados.' };
+
+    const legados = j.legados || [];
+
+    // Nada enviado pelo portal E nada no Forms: aí realmente não há o que levar.
+    if (!j.itens.length && !legados.length) {
+      return { ok: false, erro: 'Os cadastros selecionados não têm nenhum documento.' };
     }
 
     const zip = new window.ZipSimples();
     const falhas = [];
     let feitos = 0;
+
+    // ---- Anexos antigos do Forms: vão como lista de links ----
+    //
+    // Não dá para baixá-los aqui: estão no SharePoint, exigem login M365 e a
+    // requisição do navegador bateria em CORS. Um arquivo de texto com os links
+    // é o que a exportação pode entregar de útil para os cadastros antigos.
+    if (legados.length) {
+      const linhas = [
+        'ANEXOS NO MICROSOFT FORMS / SHAREPOINT',
+        '',
+        'Estes arquivos NÃO estão no portal: foram enviados pelo Microsoft Forms',
+        'e ficam no SharePoint. Não é possível baixá-los automaticamente porque',
+        'exigem login no Microsoft 365 — abra os links abaixo já autenticado.',
+        '',
+        '='.repeat(72),
+        '',
+      ];
+
+      for (const c of legados) {
+        linhas.push(`SOLICITAÇÃO #${c.solicitacaoId}   ${c.criadoEm || ''}`);
+        linhas.push(`Solicitante: ${c.solicitante || '—'}`);
+        if (c.assunto) linhas.push(`Assunto: ${c.assunto}`);
+        linhas.push(`Arquivos: ${c.arquivos.length}`);
+        linhas.push('');
+        c.arquivos.forEach((a, i) => {
+          linhas.push(`  ${i + 1}. ${a.nome}`);
+          linhas.push(`     ${a.url}`);
+        });
+        linhas.push('');
+        linhas.push('-'.repeat(72));
+        linhas.push('');
+      }
+
+      zip.adicionar('ANEXOS_NO_FORMS_SHAREPOINT.txt', new TextEncoder().encode(linhas.join('\r\n')));
+    }
 
     for (const item of j.itens) {
       avisar(feitos, j.itens.length, `Baixando ${item.nome}...`);
@@ -79,7 +118,13 @@
         : `cadastros_${dataDeHoje()}.zip`;
 
     window.baixarBlob(zip.gerar(), nome);
-    return { ok: true, arquivos: zip.quantidade, falhas, nome };
+    return {
+      ok: true,
+      arquivos: j.itens.length,        // baixados do portal
+      legados: j.totalLegados || 0,    // apenas listados (estão no SharePoint)
+      falhas,
+      nome,
+    };
   }
 
   window.exportarDocumentos = exportarDocumentos;

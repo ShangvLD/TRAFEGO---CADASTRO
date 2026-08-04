@@ -670,3 +670,27 @@ a.anexo-card:hover {
 .anexos-tag .material-symbols-rounded {
     font-size: 14px;
 }
+
+/* Origem dos anexos: portal (baixável no ZIP) x Forms (link no SharePoint).
+   Separar as duas evita a exportação parecer quebrada quando o cadastro só tem
+   anexo antigo, que o navegador não consegue baixar. */
+.anexo-origens {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.anexo-portal,
+.anexo-forms {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.anexo-portal { color: var(--success); }
+.anexo-forms  { color: var(--text-secondary); font-weight: 600; }
+
+.anexo-origens .material-symbols-rounded { font-size: 15px; }

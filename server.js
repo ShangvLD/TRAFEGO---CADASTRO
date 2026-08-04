@@ -690,7 +690,32 @@ for (const m of MODULOS) {
         });
       }
 
-      res.json({ ok: true, total: itens.length, itens });
+      // ---- Anexos ANTIGOS, do Microsoft Forms ----
+      //
+      // Ficam no SharePoint e o navegador NÃO consegue baixá-los: exigem
+      // autenticação M365 e a requisição bateria em CORS. Mas ignorá-los faria
+      // a exportação de um cadastro antigo devolver nada, sem explicar por quê.
+      // Então vão como LISTA DE LINKS, que o analista abre logado no M365.
+      const legados = [];
+      for (const id of ids.map(Number).filter(Number.isInteger)) {
+        const s = await dados.buscarPorId(id);
+        if (!s || !Array.isArray(s.anexos) || !s.anexos.length) continue;
+        legados.push({
+          solicitacaoId: id,
+          solicitante: s.solicitante_email,
+          criadoEm: s.criado_em,
+          assunto: s.assunto,
+          arquivos: s.anexos.filter((a) => a && a.url).map((a) => ({ nome: a.nome, url: a.url })),
+        });
+      }
+
+      res.json({
+        ok: true,
+        total: itens.length,
+        itens,
+        legados,
+        totalLegados: legados.reduce((n, l) => n + l.arquivos.length, 0),
+      });
     })
   );
 }
