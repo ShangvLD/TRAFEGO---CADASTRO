@@ -302,6 +302,9 @@ app.get(
       ok: true,
       emUso: emUso.nome,
       funcionando: emUso.disponivel() && escrita.ok,
+      // Quando não está funcionando, diz o que falta em vez de deixar
+      // adivinhar entre "chave ausente" e "URL do projeto ausente".
+      falta: emUso.disponivel() ? [] : (emUso.oQueFalta ? emUso.oQueFalta() : ['configuração']),
       escolhaExplicita: process.env.STORAGE_PROVEDOR || null,
       provedores,
       escrita,

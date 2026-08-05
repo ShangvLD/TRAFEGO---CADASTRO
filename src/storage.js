@@ -27,14 +27,31 @@ require('dotenv').config();
 
 const BUCKET = process.env.SUPABASE_BUCKET || 'cadastros';
 
-// A URL do projeto pode ser deduzida da string de conexão do banco, que já
-// existe: o host do pooler carrega a referência do projeto.
+/**
+ * URL do projeto no Supabase.
+ *
+ * Pode ser deduzida da string de conexão do banco, que já existe — a
+ * referência do projeto aparece nela. Mas em DOIS lugares diferentes,
+ * conforme o tipo de conexão:
+ *
+ *   pooler:  postgresql://postgres.<REF>:senha@aws-1-....pooler.supabase.com
+ *   direta:  postgresql://postgres:senha@db.<REF>.supabase.co
+ *
+ * Só a primeira forma era reconhecida. Com a conexão direta, a URL ficava
+ * nula e o storage se dava por não configurado — mesmo com a chave presente,
+ * porque disponivel() exige as duas. O sintoma era "Armazenamento não
+ * configurado" sem nenhuma pista de que faltava a URL, e não a chave.
+ */
 function urlDoProjeto() {
   if (process.env.SUPABASE_URL) return process.env.SUPABASE_URL.replace(/\/+$/, '');
 
-  const conn = process.env.DATABASE_URL || '';
-  const m = conn.match(/postgres\.([a-z0-9]{20})/i);
-  return m ? `https://${m[1]}.supabase.co` : null;
+  const conn = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.SUPABASE_DB_URL || '';
+
+  const ref =
+    (conn.match(/postgres\.([a-z0-9]{20})/i) || [])[1] || // pooler
+    (conn.match(/db\.([a-z0-9]{20})\.supabase\./i) || [])[1]; // conexão direta
+
+  return ref ? `https://${ref}.supabase.co` : null;
 }
 
 const URL_BASE = urlDoProjeto();
@@ -167,6 +184,24 @@ const supabase = {
 
   disponivel() {
     return !!(URL_BASE && CHAVE);
+  },
+
+  /**
+   * O que falta, quando não está disponível.
+   *
+   * São duas exigências (URL do projeto e chave) e o sintoma das duas é
+   * idêntico: "armazenamento não configurado". Sem separar, a única saída é
+   * adivinhar — foi o que aconteceu aqui, com a variável criada mas vazia.
+   */
+  oQueFalta() {
+    const faltas = [];
+    if (!URL_BASE) {
+      faltas.push('a URL do projeto (defina SUPABASE_URL, ou confira a DATABASE_URL)');
+    }
+    if (!CHAVE) {
+      faltas.push('a chave SUPABASE_SERVICE_KEY (a variável existe mas está vazia?)');
+    }
+    return faltas;
   },
 
   /**
