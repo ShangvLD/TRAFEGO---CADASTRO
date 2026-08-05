@@ -416,12 +416,19 @@ app.get(
       solicitacoes.listar(),
       documentos.contarPorSolicitacao('terceiro'),
     ]);
+    // O resultado do RDO é restrito a admin. Filtrar AQUI, e não só na tela:
+    // esconder no HTML deixaria o dado viajando na resposta, visível a quem
+    // abrisse o inspetor do navegador.
+    const podeVerRdo = papeis.ehAdmin(req.session.usuario.papel);
+    const visiveis = podeVerRdo ? lista : lista.map(semRdo);
+
     res.json({
       ok: true,
       papel: req.session.usuario.papel, // o front usa para mostrar o botão de excluir só ao admin
       usuarioId: req.session.usuario.id, // para saber se ele mesmo já está no atendimento
+      podeVerRdo,
       resumo,
-      solicitacoes: lista,
+      solicitacoes: visiveis,
       anexos,
       atendimentos: await atendimentos.resumoDeVarias('terceiro', lista.map((s) => s.id)),
     });
@@ -704,7 +711,14 @@ for (const m of MODULOS) {
       const id = Number(req.params.id);
       if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
 
-      const lista = await documentos.listar(m.slug, id);
+      let lista = await documentos.listar(m.slug, id);
+
+      // O comprovante da reprovação no RDO é parte do RDO, e o RDO é restrito
+      // a admin. Sem esta linha, o arquivo apareceria na lista de anexos e o
+      // resultado vazaria pelo nome do documento.
+      if (!papeis.ehAdmin(req.session.usuario.papel)) {
+        lista = lista.filter((d) => String(d.tipo).toUpperCase() !== fluxo.DOC_RDO);
+      }
 
       // A URL vem junto: sem ela o painel precisaria de uma requisição por
       // documento só para conseguir abrir cada um — e a miniatura da foto,
@@ -1113,6 +1127,19 @@ app.post(
   })
 );
 
+/**
+ * Remove o resultado da pesquisa RDO de uma solicitação.
+ *
+ * A SITUAÇÃO continua: quem conduz o cadastro precisa saber que ele está
+ * parado ou encerrado, senão fica cobrando um andamento que não vai vir. O que
+ * sai é o CONTEÚDO — se aprovou, quem respondeu, a observação e o comprovante.
+ */
+function semRdo(s) {
+  const copia = { ...s };
+  copia.rdo = { aprovado: null, por: null, em: null, obs: null, restrito: true };
+  return copia;
+}
+
 // Solicitações do próprio usuário, de TODOS os módulos a que ele tem acesso.
 //
 // Junta os módulos em uma lista só, cada linha marcada com o módulo de origem —
@@ -1422,7 +1449,10 @@ app.post(
 app.post(
   '/api/solicitacoes/:id/rdo',
   exigirLogin,
-  exigirPainel('terceiro'),
+  // Só admin responde a pesquisa RDO. exigirAdmin vem DEPOIS de exigirLogin
+  // para quem não está logado receber 401, e não 403 — a diferença importa
+  // para o front decidir entre mandar para o login ou avisar sem permissão.
+  exigirAdmin,
   wrap(async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
