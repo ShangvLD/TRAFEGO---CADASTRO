@@ -50,10 +50,15 @@
     if (!r.ok || !j.ok) return { ok: false, erro: j.erro || 'Não foi possível listar os documentos.' };
 
     const legados = j.legados || [];
+    const indisponiveis = j.indisponiveis || [];
 
     // Nada enviado pelo portal E nada no Forms: aí realmente não há o que levar.
-    if (!j.itens.length && !legados.length) {
+    if (!j.itens.length && !legados.length && !indisponiveis.length) {
       return { ok: false, erro: 'Os cadastros selecionados não têm nenhum documento.' };
+    }
+
+    if (!j.itens.length && indisponiveis.length && !legados.length) {
+      return { ok: false, erro: indisponiveis[0].motivo };
     }
 
     const zip = new window.ZipSimples();
@@ -95,6 +100,28 @@
       zip.adicionar('ANEXOS_NO_FORMS_SHAREPOINT.txt', new TextEncoder().encode(linhas.join('\r\n')));
     }
 
+    // ---- Documentos que este ambiente não alcança ----
+    //
+    // Existem, mas estão num armazenamento fora do alcance de quem está
+    // exportando (na pasta do canal, com o portal rodando no Vercel). Omitir
+    // faria o ZIP parecer completo sem ser.
+    if (indisponiveis.length) {
+      const linhas = [
+        'DOCUMENTOS NÃO INCLUÍDOS NESTE ZIP',
+        '',
+        `${indisponiveis.length} arquivo(s) estão cadastrados mas não puderam ser baixados:`,
+        '',
+        '='.repeat(72),
+        '',
+      ];
+      for (const d of indisponiveis) {
+        linhas.push(`${d.pasta}/${d.nome}`);
+        linhas.push(`   ${d.motivo}`);
+        linhas.push('');
+      }
+      zip.adicionar('DOCUMENTOS_NAO_EXPORTADOS.txt', new TextEncoder().encode(linhas.join('\r\n')));
+    }
+
     for (const item of j.itens) {
       avisar(feitos, j.itens.length, `Baixando ${item.nome}...`);
       try {
@@ -120,8 +147,9 @@
     window.baixarBlob(zip.gerar(), nome);
     return {
       ok: true,
-      arquivos: j.itens.length,        // baixados do portal
-      legados: j.totalLegados || 0,    // apenas listados (estão no SharePoint)
+      arquivos: j.itens.length,          // baixados do portal
+      legados: j.totalLegados || 0,      // apenas listados (estão no SharePoint)
+      indisponiveis: indisponiveis.length, // fora do alcance deste ambiente
       falhas,
       nome,
     };

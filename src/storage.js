@@ -399,6 +399,24 @@ function provedor() {
   return supabase.disponivel() ? supabase : memoria;
 }
 
+/**
+ * Provedor pelo NOME gravado junto com o documento.
+ *
+ * O mesmo banco atende dois ambientes: a máquina local (que grava na pasta do
+ * canal) e o Vercel (que grava no Supabase). Um arquivo que está na pasta não
+ * está no Supabase. Ler sempre pelo provedor atual devolveria link assinado
+ * para um objeto inexistente — erro sem explicação, do tipo que faz perder
+ * tempo procurando.
+ *
+ * Devolve null quando aquele provedor não existe neste ambiente; quem chama
+ * transforma isso numa mensagem que diz o que houve.
+ */
+function provedorDe(nome) {
+  if (!nome) return provedor(); // registro antigo, sem provedor gravado
+  const p = PROVEDORES[nome];
+  return p && p.disponivel() ? p : null;
+}
+
 /** O upload passa pelo servidor (true) ou vai direto ao storage (false)? */
 function uploadPassaPeloServidor() {
   return provedor().uploadDireto === false;
@@ -406,6 +424,7 @@ function uploadPassaPeloServidor() {
 
 module.exports = {
   provedor,
+  provedorDe,
   uploadPassaPeloServidor,
   PROVEDORES,
   BUCKET,

@@ -664,8 +664,13 @@ for (const m of MODULOS) {
       const d = await documentos.buscarPorId(docId);
       if (!d || !d.caminho) return res.status(404).json({ ok: false, erro: 'Documento não encontrado.' });
 
+      const prov = documentos.armazenamentoDe(d);
+      if (!prov) return res.status(409).json({ ok: false, erro: documentos.motivoIndisponivel(d) });
+
       try {
-        const buffer = await require('./src/storage').provedor().baixar(d.caminho);
+        // Na pasta do canal a leitura pode demorar: o OneDrive guarda o arquivo
+        // só na nuvem e o baixa sob demanda quando alguém lê.
+        const buffer = await prov.baixar(d.caminho);
         res.type(d.content_type || 'application/octet-stream');
         res.set('Content-Disposition', `inline; filename="${d.nome_arquivo}"`);
         res.send(buffer);
@@ -714,6 +719,13 @@ for (const m of MODULOS) {
       const d = await documentos.buscarPorId(docId);
       if (!d) return res.status(404).json({ ok: false, erro: 'Documento não encontrado.' });
 
+      // O arquivo pode estar num armazenamento que este ambiente não alcança
+      // (gravado na pasta do canal, portal rodando no Vercel). Dizer isso vale
+      // mais que devolver um link que só falha depois de clicado.
+      if (!documentos.armazenamentoDe(d)) {
+        return res.status(409).json({ ok: false, erro: documentos.motivoIndisponivel(d) });
+      }
+
       // Com Supabase, devolve link assinado e o navegador baixa direto. Com
       // pasta em disco não existe link, então aponta para a rota deste
       // servidor, que lê o arquivo e devolve.
@@ -754,18 +766,29 @@ for (const m of MODULOS) {
       if (!ids.length) return res.status(400).json({ ok: false, erro: 'Selecione ao menos um cadastro.' });
 
       const arquivos = await documentos.listarDeVarias(m.slug, ids);
-      const prov = require('./src/storage').provedor();
 
       // A pasta de cada cadastro vem do caminho já gravado, não é remontada:
       // assim a exportação reflete exatamente como os arquivos foram salvos.
       const itens = [];
+      const indisponiveis = [];
       for (const a of arquivos) {
         if (!a.caminho) continue;
         const partes = a.caminho.split('/');
+        const pasta = partes[partes.length - 2] || 'CADASTRO';
+        const nome = partes[partes.length - 1];
+
+        // Cada arquivo é lido do armazenamento em que foi gravado. Um ZIP que
+        // simplesmente omite o que não alcançou parece completo e não é.
+        const prov = documentos.armazenamentoDe(a);
+        if (!prov) {
+          indisponiveis.push({ pasta, nome, motivo: documentos.motivoIndisponivel(a) });
+          continue;
+        }
+
         itens.push({
           solicitacaoId: a.solicitacao_id,
-          pasta: partes[partes.length - 2] || 'CADASTRO',
-          nome: partes[partes.length - 1],
+          pasta,
+          nome,
           tamanho: a.tamanho,
           // 30 min: tempo de sobra para baixar tudo, sem deixar link vivo à toa.
           // Sem link assinado (pasta em disco), aponta para a rota do servidor.
@@ -798,6 +821,7 @@ for (const m of MODULOS) {
         ok: true,
         total: itens.length,
         itens,
+        indisponiveis,
         legados,
         totalLegados: legados.reduce((n, l) => n + l.arquivos.length, 0),
       });

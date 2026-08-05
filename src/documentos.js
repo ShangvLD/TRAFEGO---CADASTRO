@@ -105,7 +105,8 @@ async function listarDeVarias(modulo, ids) {
   // sequência de "?" do tamanho da lista, que muda a cada chamada.
   return db
     .prepare(
-      `SELECT id, solicitacao_id, tipo, nome_arquivo, caminho, content_type, tamanho
+      `SELECT id, solicitacao_id, tipo, nome_arquivo, caminho, provedor,
+              content_type, tamanho
          FROM documentos
         WHERE modulo = ? AND solicitacao_id = ANY(?)
         ORDER BY solicitacao_id, tipo, id`
@@ -116,15 +117,37 @@ async function listarDeVarias(modulo, ids) {
 /** Um documento pelo id. */
 async function buscarPorId(id) {
   return db
-    .prepare('SELECT id, modulo, solicitacao_id, tipo, nome_arquivo, caminho, content_type, tamanho FROM documentos WHERE id = ?')
+    .prepare(
+      `SELECT id, modulo, solicitacao_id, tipo, nome_arquivo, caminho, provedor,
+              content_type, tamanho
+         FROM documentos WHERE id = ?`
+    )
     .get(id);
 }
 
-/** URL temporária para baixar um documento. */
+/**
+ * Onde o arquivo está DE FATO, pelo provedor gravado com ele — não pelo
+ * provedor em uso agora. Null quando esse provedor não existe neste ambiente
+ * (arquivo na pasta do canal, portal rodando no Vercel, por exemplo).
+ */
+function armazenamentoDe(d) {
+  return armazenamento.provedorDe(d && d.provedor);
+}
+
+/** Explicação para quando o arquivo existe, mas não é alcançável daqui. */
+function motivoIndisponivel(d) {
+  if (d && d.provedor === 'pasta') {
+    return 'Este arquivo está na pasta do canal do Teams. Só abre com o portal rodando na máquina que sincroniza essa pasta.';
+  }
+  return `Armazenamento "${d && d.provedor}" não está configurado neste ambiente.`;
+}
+
+/** URL temporária para baixar um documento (null quando não há link direto). */
 async function urlDeLeitura(id, segundos = 600) {
   const d = await db.prepare('SELECT caminho, provedor FROM documentos WHERE id = ?').get(id);
   if (!d || !d.caminho) return null;
-  return armazenamento.provedor().urlDeLeitura(d.caminho, segundos);
+  const prov = armazenamentoDe(d);
+  return prov ? prov.urlDeLeitura(d.caminho, segundos) : null;
 }
 
 /**
@@ -136,14 +159,18 @@ async function urlDeLeitura(id, segundos = 600) {
  * serviço (que não passa pelo cache), não pela URL assinada.
  */
 async function excluir(id) {
-  const d = await db.prepare('SELECT caminho FROM documentos WHERE id = ?').get(id);
+  const d = await db.prepare('SELECT caminho, provedor FROM documentos WHERE id = ?').get(id);
   if (!d) return { ok: false, erro: 'Documento não encontrado.' };
 
   // Primeiro o arquivo: se falhar, o registro fica e dá para tentar de novo.
   // Na ordem inversa, um erro deixaria arquivo órfão no storage, invisível.
   if (d.caminho) {
+    const prov = armazenamentoDe(d);
+    // Sem o provedor certo, apagar o registro esconderia um arquivo que
+    // continua existindo — e com CPF e CNH dentro. Melhor recusar.
+    if (!prov) return { ok: false, erro: motivoIndisponivel(d) };
     try {
-      await armazenamento.provedor().remover(d.caminho);
+      await prov.remover(d.caminho);
     } catch (e) {
       return { ok: false, erro: `Não foi possível remover o arquivo: ${e.message}` };
     }
@@ -160,14 +187,18 @@ async function excluir(id) {
  */
 async function excluirDaSolicitacao(modulo, solicitacaoId) {
   const lista = await db
-    .prepare('SELECT id, caminho FROM documentos WHERE modulo = ? AND solicitacao_id = ?')
+    .prepare('SELECT id, caminho, provedor FROM documentos WHERE modulo = ? AND solicitacao_id = ?')
     .all(modulo, solicitacaoId);
 
-  const prov = armazenamento.provedor();
   for (const d of lista) {
     if (!d.caminho) continue;
     // Um arquivo que não sai não deve impedir a exclusão dos outros nem da
     // solicitação; vira lixo no storage, que é menos grave que travar a operação.
+    const prov = armazenamentoDe(d);
+    if (!prov) {
+      console.error(`[documentos] ${d.caminho} ficou órfão: ${motivoIndisponivel(d)}`);
+      continue;
+    }
     try {
       await prov.remover(d.caminho);
     } catch (e) {
@@ -196,6 +227,8 @@ async function contarPorSolicitacao(modulo) {
 module.exports = {
   prepararEnvio,
   buscarPorId,
+  armazenamentoDe,
+  motivoIndisponivel,
   registrar,
   listar,
   listarDeVarias,
