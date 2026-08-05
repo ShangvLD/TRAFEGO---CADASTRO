@@ -89,9 +89,18 @@ const validacaoParaNavegador = (() => {
 
 app.get('/js/validacao.js', (req, res) => {
   res.type('application/javascript');
-  // Em produção o arquivo só muda com um deploy novo, então pode ser cacheado.
-  res.set('Cache-Control', EM_PRODUCAO ? 'public, max-age=3600' : 'no-store');
-  res.send(validacaoParaNavegador);
+
+  // "no-cache" NÃO é "não guarde": o navegador guarda e PERGUNTA se mudou,
+  // respondido com 304 quando não mudou. Custa uma requisição minúscula por
+  // carregamento e garante que a tela nunca fique com regra velha.
+  //
+  // Antes eram 3600s de cache fixo. Depois de um deploy, o formulário rodava
+  // até uma hora com a validação anterior — e o sintoma era silencioso: campo
+  // novo sem aparecer, lista sem opção, e nada de errado no servidor. Só as
+  // páginas HTML apontam para cá; guardar uma hora não economizava nada perto
+  // do custo de depurar isso.
+  res.set('Cache-Control', EM_PRODUCAO ? 'no-cache' : 'no-store');
+  res.send(validacaoParaNavegador); // o Express põe o ETag, que faz o 304
 });
 
 app.use(express.urlencoded({ extended: true })); // formulários HTML
