@@ -394,6 +394,18 @@
     transition: border-color var(--transition), background var(--transition), box-shadow var(--transition);
 }
 
+/* Documento registrado que este ambiente nao alcanca. Aparece apagado e sem
+   link: sumir da lista faria a lista parecer completa sem ser. */
+.anexo-card.is-indisponivel {
+    opacity: .6;
+    cursor: default;
+    border-style: dashed;
+}
+
+.anexo-card.is-indisponivel .anexo-card__icon {
+    color: var(--danger, #b91c1c);
+}
+
 a.anexo-card:hover {
     border-color: var(--primary);
     background: var(--primary-soft);

@@ -702,7 +702,32 @@ for (const m of MODULOS) {
     wrap(async (req, res) => {
       const id = Number(req.params.id);
       if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
-      res.json({ ok: true, documentos: await documentos.listar(m.slug, id) });
+
+      const lista = await documentos.listar(m.slug, id);
+
+      // A URL vem junto: sem ela o painel precisaria de uma requisição por
+      // documento só para conseguir abrir cada um — e a miniatura da foto,
+      // que é o que o analista olha primeiro, nem apareceria.
+      //
+      // Em paralelo porque cada assinatura é uma ida ao storage; em série,
+      // sete anexos seriam sete esperas encadeadas.
+      const comUrl = await Promise.all(
+        lista.map(async (d) => {
+          const prov = documentos.armazenamentoDe(d);
+          if (!prov) return { ...d, url: null, indisponivel: documentos.motivoIndisponivel(d) };
+          try {
+            const assinada = await prov.urlDeLeitura(d.caminho, 1800);
+            return {
+              ...d,
+              url: assinada || `${base.replace(':id', id)}/${d.id}/baixar`,
+            };
+          } catch (e) {
+            return { ...d, url: null, indisponivel: e.message.slice(0, 120) };
+          }
+        })
+      );
+
+      res.json({ ok: true, documentos: comUrl });
     })
   );
 

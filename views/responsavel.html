@@ -379,12 +379,71 @@
             return `<div class="cli-lista">${linhas}</div>`;
         }
 
+        /**
+         * Card de um documento enviado PELO PORTAL.
+         *
+         * Diferente do anexo antigo: aquele mora no SharePoint e abre no
+         * Microsoft 365; este mora no nosso storage e abre por URL assinada,
+         * com validade. Por isso os dois cards existem em separado, e a
+         * legenda diz de onde o arquivo veio — no meio de uma análise, saber
+         * a origem do documento importa.
+         */
+        function documentoCard(d) {
+            const nome = esc(d.tipo || d.nome_arquivo);
+            const tamanho = d.tamanho ? Math.max(1, Math.round(d.tamanho / 1024)) + ' KB' : '';
+
+            if (!d.url) {
+                return `<div class="anexo-card is-indisponivel">
+                    <span class="anexo-card__icon material-symbols-rounded">error</span>
+                    <span class="anexo-card__info"><strong>${nome}</strong>
+                        <small>${esc(d.indisponivel || 'Arquivo indisponível')}</small></span>
+                </div>`;
+            }
+
+            const icone = ehImagem(d.nome_arquivo, d.url) ? 'image' : 'description';
+            const visual = ehImagem(d.nome_arquivo, d.url)
+                ? `<span class="anexo-card__thumb">
+                       <img src="${esc(d.url)}" alt="" loading="lazy" onerror="this.remove()">
+                       <span class="material-symbols-rounded">${icone}</span>
+                   </span>`
+                : `<span class="anexo-card__icon material-symbols-rounded">${icone}</span>`;
+
+            return `<a class="anexo-card" href="${esc(d.url)}" target="_blank" rel="noopener">
+                ${visual}
+                <span class="anexo-card__info"><strong>${nome}</strong>
+                    <small>${esc(d.nome_original || d.nome_arquivo)}${tamanho ? ' · ' + tamanho : ''}</small></span>
+                <span class="anexo-card__open material-symbols-rounded">open_in_new</span>
+            </a>`;
+        }
+
         // Conteúdo do modal de detalhes.
         function detalheHtml(s) {
             const anexos = Array.isArray(s.anexos) ? s.anexos : [];
+            const doPortal = docsDoModal[s.id];
+
+            // Três estados, e vale distinguir: ainda carregando, nenhum
+            // documento, ou a lista. Mostrar "nenhum documento" enquanto a
+            // consulta está em curso foi exatamente o que fez parecer que o
+            // anexo tinha se perdido.
+            let blocoPortal;
+            if (doPortal === undefined) {
+                blocoPortal = '<p class="modal-vazio">Carregando os documentos...</p>';
+            } else if (!doPortal.length) {
+                blocoPortal = '';
+            } else {
+                blocoPortal =
+                    `<h4 class="detalhe-secao">
+                        <span class="material-symbols-rounded" style="vertical-align:-5px;color:var(--primary)">cloud_done</span>
+                        Enviados pelo portal (${doPortal.length})
+                    </h4>
+                    <div class="anexo-lista">${doPortal.map(documentoCard).join('')}</div>`;
+            }
+
             const anexosBloco = anexos.length
                 ? `<div class="anexo-lista">${anexos.map(anexoCard).join('')}</div>`
-                : '<p class="modal-vazio">Nenhum documento anexado nesta solicitação.</p>';
+                : (doPortal && doPortal.length)
+                    ? '<p class="modal-vazio">Nenhum anexo do Microsoft Forms — este cadastro veio pelo portal.</p>'
+                    : '<p class="modal-vazio">Nenhum documento anexado nesta solicitação.</p>';
 
             return `
                 <div class="detalhe-topo">
@@ -408,9 +467,10 @@
                     Detalhes
                 </h4>
                 ${detalhesCampos(s.detalhes, anexos)}
+                ${blocoPortal}
                 <h4 class="detalhe-secao">
                     <span class="material-symbols-rounded" style="vertical-align:-5px;color:var(--primary)">folder_open</span>
-                    Documentos anexados (${anexos.length})
+                    Anexos do Microsoft Forms (${anexos.length})
                 </h4>
                 ${anexosBloco}
             `;
@@ -442,6 +502,35 @@
             modalFooter.innerHTML = footerHtml(s);
             overlay.hidden = false;
             document.body.style.overflow = 'hidden';
+
+            carregarDocumentos(s);
+        }
+
+        /**
+         * Documentos enviados pelo portal, buscados ao abrir o modal.
+         *
+         * Não vêm na listagem: as URLs são assinadas e expiram, então gerá-las
+         * para a página inteira desperdiçaria quase todas — o analista abre um
+         * cadastro de cada vez.
+         */
+        const docsDoModal = {}; // id da solicitação -> array (undefined = carregando)
+
+        async function carregarDocumentos(s) {
+            if (docsDoModal[s.id]) return redesenharDetalhe(s); // já em memória
+            try {
+                const r = await fetch('/api/modulos/terceiro/solicitacoes/' + s.id + '/documentos');
+                const j = await r.json();
+                docsDoModal[s.id] = j.ok ? j.documentos || [] : [];
+            } catch (e) {
+                docsDoModal[s.id] = [];
+            }
+            // Só redesenha se o modal ainda é o mesmo: a resposta pode chegar
+            // depois de a pessoa fechar e abrir outro cadastro.
+            if (idAtual === s.id) redesenharDetalhe(s);
+        }
+
+        function redesenharDetalhe(s) {
+            modalBody.innerHTML = Atendimento.detalhe(atendimentoPorId[s.id]) + detalheHtml(s);
         }
 
         function fecharModal() {
