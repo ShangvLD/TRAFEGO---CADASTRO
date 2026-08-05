@@ -626,9 +626,17 @@ for (const m of MODULOS) {
       const armazenamento = require('./src/storage');
 
       // O caminho foi calculado por /preparar, mas volta pelo navegador e pode
-      // ter sido trocado. Revalidar aqui importa mais que no Supabase: a pasta
-      // é sincronizada pelo OneDrive para a equipe, e um .lnk ou .exe gravado
-      // ali chegaria na máquina de todo mundo.
+      // ter sido trocado. A forma é conferida aqui, e não no provedor: gravando
+      // em disco um caminho torto escreve fora da pasta do canal; no Supabase
+      // escreve em qualquer lugar do bucket, porque lá toda chave é válida.
+      try {
+        armazenamento.validarCaminhoLogico(caminho);
+      } catch (e) {
+        return res.status(400).json({ ok: false, erro: e.message });
+      }
+
+      // Extensão e tipo também: a pasta é sincronizada pelo OneDrive para a
+      // equipe, e um .lnk ou .exe gravado ali chegaria na máquina de todo mundo.
       const valido = armazenamento.validarArquivo({
         nome: caminho,
         contentType: req.get('content-type'),
@@ -692,17 +700,26 @@ for (const m of MODULOS) {
       const { tipo, caminho, nomeOriginal, contentType, tamanho, provedor, validade } = req.body || {};
       if (!tipo || !caminho) return res.status(400).json({ ok: false, erro: 'Dados incompletos.' });
 
-      const r = await documentos.registrar({
-        modulo: m.slug,
-        solicitacaoId: id,
-        tipo,
-        caminho,
-        nomeOriginal,
-        contentType,
-        tamanho,
-        provedor,
-        validade,
-      });
+      let r;
+      try {
+        r = await documentos.registrar({
+          modulo: m.slug,
+          solicitacaoId: id,
+          tipo,
+          caminho,
+          nomeOriginal,
+          contentType,
+          tamanho,
+          provedor,
+          validade,
+        });
+      } catch (e) {
+        // Caminho recusado é erro do pedido, não falha do servidor.
+        if (/Caminho inválido/.test(e.message)) {
+          return res.status(400).json({ ok: false, erro: e.message });
+        }
+        throw e;
+      }
       res.status(201).json(r);
     })
   );

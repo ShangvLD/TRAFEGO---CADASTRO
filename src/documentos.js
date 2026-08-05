@@ -39,9 +39,9 @@ async function prepararEnvio({ modulo, solicitacaoId, tipo, nomeArquivo, content
     .get(modulo, solicitacaoId, tipo);
 
   const caminho = armazenamento.caminhoDoArquivo(pasta, tipo, nomeArquivo, jaTem ? jaTem.n : 0);
-  const { url, metodo } = await prov.urlDeUpload(caminho, contentType);
+  const { url, metodo, cabecalhos } = await prov.urlDeUpload(caminho, contentType);
 
-  return { ok: true, caminho, url, metodo, provedor: prov.nome };
+  return { ok: true, caminho, url, metodo, cabecalhos: cabecalhos || null, provedor: prov.nome };
 }
 
 /**
@@ -49,6 +49,11 @@ async function prepararEnvio({ modulo, solicitacaoId, tipo, nomeArquivo, content
  * Reenvio do mesmo caminho atualiza o registro em vez de duplicar.
  */
 async function registrar({ modulo, solicitacaoId, tipo, caminho, nomeOriginal, contentType, tamanho, provedor, validade }) {
+  // O caminho volta pelo navegador. Sem conferir, um caminho trocado criaria um
+  // registro apontando para o arquivo de OUTRO cadastro — e o painel mostraria
+  // a CNH de alguém no cadastro errado.
+  caminho = armazenamento.validarCaminhoLogico(caminho);
+
   // Os parâmetros vão em .run(), não em .prepare() — prepare() recebe só o SQL.
   const r = await db
     .prepare(

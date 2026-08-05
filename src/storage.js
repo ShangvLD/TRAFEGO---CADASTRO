@@ -87,6 +87,31 @@ function caminhoDoArquivo(pasta, tipo, nomeOriginal, sufixo = 0) {
   return `${pasta}/${base}${numero}${ext ? '.' + ext : ''}`;
 }
 
+/**
+ * Valida um caminho lógico e devolve a forma normalizada.
+ *
+ * Fica AQUI, e não dentro de um provedor, porque o caminho volta pelo navegador
+ * na hora de gravar e de registrar — e cada provedor "confia" de um jeito. O
+ * Supabase aceita qualquer chave: sem esta conferência, um caminho trocado
+ * escreve na raiz do bucket. Em disco, escreve fora da pasta do canal.
+ *
+ * Forma aceita, e só ela: CADASTROS/<pasta do cadastro>/<arquivo>
+ */
+function validarCaminhoLogico(logico) {
+  const limpo = String(logico == null ? '' : logico).replace(/\\/g, '/');
+
+  if (!/^CADASTROS\/[^/]+\/[^/]+$/.test(limpo)) {
+    throw new Error(`Caminho inválido: "${logico}"`);
+  }
+  // ".." nunca aparece num caminho que nós geramos (higienizar() remove ponto
+  // das pontas), então a presença dele significa caminho adulterado.
+  if (limpo.split('/').some((p) => p === '.' || p === '..')) {
+    throw new Error(`Caminho inválido: "${logico}"`);
+  }
+  return limpo;
+}
+
+
 // ---------------------------------------------------------------------------
 // Tipos e tamanho aceitos
 // ---------------------------------------------------------------------------
@@ -192,19 +217,28 @@ const supabase = {
    * Por que direto: a função do Vercel tem limite de ~4,5 MB no corpo da
    * requisição. Passando o arquivo por ela, um PDF grande falharia — e ainda
    * gastaria tempo de execução à toa.
+   *
+   * upsert: sem isso o Supabase recusa com 409 quando a chave já existe, e o
+   * envio quebra para sempre naquele caminho. Acontece com objeto órfão (o
+   * registro do banco sumiu e o arquivo ficou), e aí a tela mostra "Erro
+   * interno" sem que ninguém consiga consertar pelo portal. Sobrescrever é o
+   * comportamento certo: chegar no mesmo caminho significa reenviar o mesmo
+   * documento — envio de um tipo repetido já ganha sufixo antes de chegar aqui.
    */
   async urlDeUpload(caminho) {
     await this.prepararBucket();
     const r = await conferir(
       await fetch(`${URL_BASE}/storage/v1/object/upload/sign/${BUCKET}/${encodeURI(caminho)}`, {
         method: 'POST',
-        headers: cabecalhos({ 'Content-Type': 'application/json' }),
+        // O upsert vai no CABEÇALHO; no corpo o Supabase ignora e responde 409.
+        headers: cabecalhos({ 'Content-Type': 'application/json', 'x-upsert': 'true' }),
         body: JSON.stringify({ expiresIn: 60 * 10 }),
       }),
       'Assinar upload'
     );
     const j = await r.json();
-    return { url: `${URL_BASE}/storage/v1${j.url}`, metodo: 'PUT' };
+    // O token traz o upsert, mas o PUT também precisa do cabeçalho.
+    return { url: `${URL_BASE}/storage/v1${j.url}`, metodo: 'PUT', cabecalhos: { 'x-upsert': 'true' } };
   },
 
   async enviar(caminho, buffer, contentType) {
@@ -287,10 +321,7 @@ const PASTA_BASE = process.env.PASTA_CANAL || '';
  * pasta. O resultado é conferido para estar DENTRO da base.
  */
 function caminhoEmDisco(logico) {
-  const limpo = String(logico || '').replace(/\\/g, '/');
-  if (!/^CADASTROS\//.test(limpo) || limpo.includes('..')) {
-    throw new Error(`Caminho inválido: "${logico}"`);
-  }
+  const limpo = validarCaminhoLogico(logico);
   const relativo = limpo.replace(/^CADASTROS\//, '');
   const destino = caminhoDeSistema.resolve(PASTA_BASE, ...relativo.split('/'));
   const base = caminhoDeSistema.resolve(PASTA_BASE);
@@ -385,18 +416,20 @@ const PROVEDORES = { supabase, pasta, memoria };
  * Provedor em uso.
  *
  * STORAGE_PROVEDOR manda, quando definido — mas só se estiver DISPONÍVEL: pedir
- * "pasta" em produção não pode fazer o upload gravar em lugar nenhum, então
- * nesse caso cai para o Supabase. Sem escolha explícita, tenta pasta (mais
- * próximo do destino final), depois Supabase, e por fim memória.
+ * "pasta" em produção não faria o upload gravar em lugar nenhum.
+ *
+ * Na dúvida, Supabase. É o único que o site alcança rodando no Vercel; gravar
+ * na pasta por engano deixaria o documento sem abrir em produção, e isso só
+ * aparece depois, quando alguém precisa do arquivo.
  */
 function provedor() {
   const escolhido = process.env.STORAGE_PROVEDOR;
   if (escolhido && PROVEDORES[escolhido] && PROVEDORES[escolhido].disponivel()) {
     return PROVEDORES[escolhido];
   }
-  if (escolhido === 'pasta' && supabase.disponivel()) return supabase;
+  if (supabase.disponivel()) return supabase;
   if (pasta.disponivel()) return pasta;
-  return supabase.disponivel() ? supabase : memoria;
+  return memoria;
 }
 
 /**
@@ -436,5 +469,6 @@ module.exports = {
   extensaoDe,
   pastaDoCadastro,
   caminhoDoArquivo,
+  validarCaminhoLogico,
   validarArquivo,
 };

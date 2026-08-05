@@ -34,12 +34,19 @@
     return (bytes / 1024 / 1024).toFixed(1) + ' MB';
   }
 
-  /** Envia o arquivo pela URL assinada, reportando o progresso. */
-  function enviarArquivo(url, metodo, arquivo, aoProgredir) {
+  /**
+   * Envia o arquivo, reportando o progresso.
+   *
+   * O destino vem do /preparar: URL assinada do storage (Supabase) ou uma rota
+   * do próprio portal (quando o arquivo tem que passar pelo servidor). Os
+   * cabeçalhos extras também vêm de lá — cada storage pede os seus.
+   */
+  function enviarArquivo(url, metodo, arquivo, extras, aoProgredir) {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open(metodo || 'PUT', url, true);
       xhr.setRequestHeader('Content-Type', arquivo.type || 'application/octet-stream');
+      for (const [k, v] of Object.entries(extras || {})) xhr.setRequestHeader(k, v);
 
       xhr.upload.onprogress = (ev) => {
         if (ev.lengthComputable && aoProgredir) aoProgredir(Math.round((ev.loaded / ev.total) * 100));
@@ -144,7 +151,7 @@
         if (!rPrep.ok || !prep.ok) throw new Error(prep.erro || 'Não foi possível preparar o envio.');
 
         // 2) enviar direto ao armazenamento
-        await enviarArquivo(prep.url, prep.metodo, arquivo, (pct) => {
+        await enviarArquivo(prep.url, prep.metodo, arquivo, prep.cabecalhos, (pct) => {
           preenchida.style.width = pct + '%';
         });
 
