@@ -106,6 +106,19 @@ conferir('4 rastreadores', v.RASTREADORES.length === 4);
 conferir('3 TAGs', v.TAGS_PEDAGIO.length === 3);
 
 // --------------------------------------------------------------------------
+console.log('=== Grau de importancia ===');
+aceita('prioridade valida', v.validarPrioridade('urgente'), 'urgente');
+aceita('aceita maiusculas', v.validarPrioridade('IMEDIATO'), 'imediato');
+rejeita('prioridade vazia e obrigatoria', v.validarPrioridade(''));
+rejeita('valor fora da lista', v.validarPrioridade('muito_urgente'));
+aceita('opcional quando pedido', v.validarPrioridade('', { obrigatorio: false }), null);
+conferir('3 graus', v.PRIORIDADES.length === 3);
+conferir('o primeiro e o mais urgente', v.PRIORIDADES[0].id === 'imediato');
+conferir('ordem imediato < urgente', v.ordemDaPrioridade('imediato') < v.ordemDaPrioridade('urgente'));
+conferir('ordem urgente < pode_aguardar', v.ordemDaPrioridade('urgente') < v.ordemDaPrioridade('pode_aguardar'));
+conferir('cadastro antigo vai para o fim', v.ordemDaPrioridade(null) > v.ordemDaPrioridade('pode_aguardar'));
+
+// --------------------------------------------------------------------------
 console.log('=== Placa ===');
 aceita('placa antiga', v.validarPlaca('ABC1234'), 'ABC1234');
 aceita('placa antiga com hífen', v.validarPlaca('abc-1234'), 'ABC1234');
@@ -242,6 +255,7 @@ const cadastroBom = {
   proprietario_telefone: '11 96304-0076',
   placa_cavalo: 'ABC1D23',
   placa_carreta: 'XYZ4321',
+  prioridade: 'urgente',
   tag: 'SEM PARAR',
   rastreador: 'SASCAR',
   rastreador_id: 'RST-998',

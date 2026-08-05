@@ -1,0 +1,151 @@
+/* ============================================================================
+   Painel de acompanhamento — "Minhas solicitações"
+
+   Cards de indicadores, barra de filtros e a tabela larga do ciclo completo.
+   ========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   Cards
+   -------------------------------------------------------------------------- */
+.acomp-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: var(--space-3);
+    margin-bottom: var(--space-5);
+}
+
+.acomp-card {
+    padding: var(--space-4);
+    border-radius: var(--radius);
+    background: var(--surface, #fff);
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--borda, var(--primary));
+}
+
+/* Card clicável: clicar filtra por aquele status. O cursor avisa. */
+.acomp-card[data-filtro] { cursor: pointer; transition: border-color .15s, transform .1s; }
+.acomp-card[data-filtro]:hover { border-color: var(--primary); }
+.acomp-card[data-filtro]:active { transform: translateY(1px); }
+.acomp-card.ativo { border-color: var(--primary); background: var(--primary-soft); }
+
+.acomp-card__rot {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.74rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: var(--text-secondary);
+}
+
+.acomp-card__rot .material-symbols-rounded { font-size: 16px; }
+
+.acomp-card__val {
+    margin-top: 4px;
+    font-size: 1.6rem;
+    font-weight: 800;
+    line-height: 1.1;
+}
+
+/* Cards de tempo mostram texto ("1 h 20 min"), não um número solto. */
+.acomp-card--tempo .acomp-card__val { font-size: 1.15rem; }
+
+.acomp-card--aprovado  { --borda: var(--success, #15803d); }
+.acomp-card--reprovado { --borda: var(--danger, #b91c1c); }
+.acomp-card--espera    { --borda: var(--warning, #d97706); }
+.acomp-card--andamento { --borda: var(--primary); }
+.acomp-card--externo   { --borda: #7c3aed; }
+.acomp-card--tempo     { --borda: var(--text-secondary); }
+
+/* ---------------------------------------------------------------------------
+   Filtros
+   -------------------------------------------------------------------------- */
+.acomp-filtros {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: var(--space-3);
+    padding: var(--space-4);
+    margin-bottom: var(--space-4);
+    border-radius: var(--radius);
+    background: var(--surface-muted, #f1f5f9);
+}
+
+.acomp-filtro label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 0.74rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.acomp-filtro input,
+.acomp-filtro select {
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: #fff;
+    font: inherit;
+    font-size: 0.85rem;
+}
+
+.acomp-filtro--acao { display: flex; align-items: flex-end; }
+
+.acomp-limpar {
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: #fff;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.acomp-limpar:hover { background: var(--surface-muted, #f1f5f9); }
+
+.acomp-contagem {
+    margin-bottom: var(--space-2);
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+/* ---------------------------------------------------------------------------
+   Tabela
+   -------------------------------------------------------------------------- */
+.acomp-tabela { font-size: 0.84rem; }
+.acomp-tabela th { white-space: nowrap; }
+.acomp-tabela td { vertical-align: top; }
+
+.acomp-sub {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.acomp-placa {
+    display: inline-block;
+    margin: 1px 2px 1px 0;
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-muted, #f1f5f9);
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 0.76rem;
+}
+
+/* Tempo que passou da previsão. Vermelho porque é a informação que faz
+   alguém agir — o resto da linha é só acompanhamento. */
+.acomp-atrasado { color: var(--danger, #b91c1c); font-weight: 700; }
+.acomp-nada { color: var(--text-secondary); }
+
+.acomp-externo {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.72rem;
+    color: #7c3aed;
+}
+
+/* Bolinha do grau de importância. Grande o bastante para se ler de relance —
+   a coluna existe para varrer a fila com o olho, não para ser lida palavra a
+   palavra; o rótulo fica no title. */
+.acomp-prio { font-size: 1.1rem; line-height: 1; cursor: default; }

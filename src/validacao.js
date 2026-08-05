@@ -456,6 +456,43 @@ function validarDaLista(valor, lista, { rotulo = 'O valor', obrigatorio = false 
 }
 
 // ---------------------------------------------------------------------------
+// Grau de importância do cadastro
+//
+// Quem envia sabe se o motorista vai carregar em seguida; a fila de
+// atendimento não tem como adivinhar. O campo é OBRIGATÓRIO de propósito: com
+// um padrão silencioso, todo mundo deixa no padrão e a informação some.
+//
+// A ordem do array É a ordem da fila — o primeiro é o mais urgente.
+// ---------------------------------------------------------------------------
+
+const PRIORIDADES = [
+  { id: 'imediato', rotulo: 'Vai carregar em instantes', cor: 'vermelho', bolinha: '🔴', ordem: 0,
+    ajuda: 'Prioridade máxima: o motorista tem carregamento iminente.' },
+  { id: 'urgente', rotulo: 'Urgente', cor: 'amarelo', bolinha: '🟡', ordem: 1,
+    ajuda: 'Cadastro prioritário, à frente da fila normal.' },
+  { id: 'pode_aguardar', rotulo: 'Pode aguardar', cor: 'verde', bolinha: '🟢', ordem: 2,
+    ajuda: 'Sem urgência: segue a fila normal.' },
+];
+
+function acharPrioridade(id) {
+  return PRIORIDADES.find((p) => p.id === String(id || '').trim().toLowerCase()) || null;
+}
+
+/** Posição na fila. Cadastro antigo, sem o campo, entra como "pode aguardar". */
+function ordemDaPrioridade(id) {
+  const p = acharPrioridade(id);
+  return p ? p.ordem : PRIORIDADES.length;
+}
+
+function validarPrioridade(valor, { obrigatorio = true } = {}) {
+  if (vazio(valor)) {
+    return obrigatorio ? erro('Informe o grau de importância do cadastro.') : ok(null);
+  }
+  const p = acharPrioridade(valor);
+  return p ? ok(p.id) : erro('Grau de importância inválido.');
+}
+
+// ---------------------------------------------------------------------------
 // Tipos de documento
 //
 // Extraídos das perguntas de upload REAIS do Microsoft Forms (o nome da
@@ -599,6 +636,9 @@ function validarCadastro(entrada, { hoje = null, operacoesPermitidas = null } = 
   aplicar('rastreador', validarDaLista(e.rastreador, RASTREADORES, { rotulo: 'O rastreador' }));
   aplicar('rastreador_id', validarTexto(e.rastreador_id, { rotulo: 'O ID do rastreador', max: 60 }));
 
+  // Prioridade
+  aplicar('prioridade', validarPrioridade(e.prioridade, { obrigatorio: true }));
+
   // Observação
   aplicar('obs', validarTexto(e.obs, { rotulo: 'A observação', max: 2000 }));
 
@@ -642,6 +682,10 @@ module.exports = {
   formatarPis,
   validarPis,
   // listas fechadas
+  PRIORIDADES,
+  acharPrioridade,
+  ordemDaPrioridade,
+  validarPrioridade,
   TAGS_PEDAGIO,
   RASTREADORES,
   validarDaLista,

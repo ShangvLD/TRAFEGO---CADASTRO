@@ -241,6 +241,23 @@
                     </div>
                 </div>
 
+                <!-- ---------------- PRIORIDADE ---------------- -->
+                <div class="form-secao">
+                    <div class="form-secao__titulo">
+                        <span class="material-symbols-rounded">priority_high</span> Grau de importância
+                    </div>
+                    <p class="form-secao__ajuda">Quem envia sabe se o motorista vai carregar em seguida; a fila de atendimento não tem como adivinhar. Por isso o campo é obrigatório.</p>
+
+                    <div class="campo" data-campo="prioridade">
+                        <label for="prioridade">Grau de importância do cadastro <span class="obrig">*</span></label>
+                        <select id="prioridade" name="prioridade">
+                            <option value="">Selecione...</option>
+                        </select>
+                        <span class="dica" id="prioridade-ajuda"></span>
+                        <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
+                    </div>
+                </div>
+
                 <!-- ---------------- OBSERVAÇÕES ---------------- -->
                 <div class="form-secao">
                     <div class="form-secao__titulo">
@@ -553,6 +570,25 @@
         }
         preencherLista('tag', V.TAGS_PEDAGIO || []);
         preencherLista('rastreador', V.RASTREADORES || []);
+
+        // Grau de importância: as opções e a ordem vêm de V.PRIORIDADES, então
+        // a mais urgente aparece primeiro na lista, igual à fila.
+        (function ligarPrioridade() {
+            const el = document.getElementById('prioridade');
+            const ajuda = document.getElementById('prioridade-ajuda');
+            if (!el || !V.PRIORIDADES) return;
+
+            for (const p of V.PRIORIDADES) {
+                const op = document.createElement('option');
+                op.value = p.id;
+                op.textContent = p.bolinha + '  ' + p.rotulo;
+                el.appendChild(op);
+            }
+            el.addEventListener('change', () => {
+                const p = V.acharPrioridade(el.value);
+                ajuda.textContent = p ? p.ajuda : '';
+            });
+        })();
 
         // ------------------------------------------------------------------
         // Código PIS: só existe para proprietário pessoa física

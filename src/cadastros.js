@@ -22,7 +22,9 @@
    ========================================================================== */
 
 const db = require('./db');
-const { validarCadastro, formatarCpf, formatarTelefone, formatarPlaca, formatarPis } = require('./validacao');
+const { validarCadastro, formatarCpf, formatarTelefone, formatarPlaca, formatarPis, acharPrioridade } = require('./validacao');
+
+const rotuloPrioridade = (id) => (acharPrioridade(id) || {}).rotulo;
 
 // ---------------------------------------------------------------------------
 // Representação legada
@@ -54,6 +56,7 @@ function montarDetalhesLegado(d) {
     ['Placa Carreta', d.placa_carreta ? formatarPlaca(d.placa_carreta) : ''],
     ['Rastreador', d.rastreador],
     ['Rastreador ID', d.rastreador_id],
+    ['Prioridade', d.prioridade ? (rotuloPrioridade(d.prioridade) || d.prioridade) : ''],
     ['OBS', d.obs],
   ];
   return partes.map(([rotulo, valor]) => `${rotulo}: ${valor == null ? '' : valor}`).join(' | ');
@@ -174,10 +177,10 @@ async function criar(dados, solicitante) {
     // ---- Solicitação (formato legado, que o painel lê) --------------------
     const s = await q(
       `INSERT INTO solicitacoes
-         (solicitante_nome, solicitante_email, assunto, detalhes, origem)
-       VALUES (?, ?, ?, ?, 'portal')
+         (solicitante_nome, solicitante_email, assunto, detalhes, origem, prioridade)
+       VALUES (?, ?, ?, ?, 'portal', ?)
        RETURNING id`,
-      [solicitante.nome, solicitante.email, assunto, detalhes]
+      [solicitante.nome, solicitante.email, assunto, detalhes, dados.prioridade || null]
     );
     const solicitacaoId = s.rows[0].id;
 

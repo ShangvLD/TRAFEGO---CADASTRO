@@ -212,7 +212,6 @@ async function umaPassada({ mostrarOrfaos = true } = {}) {
     console.log('');
     return;
   }
-
   console.log(`\n  Modo observação: verificando a cada ${INTERVALO / 1000}s. Ctrl+C para parar.`);
   // Loop simples em vez de setInterval: garante que uma passada termina antes
   // da próxima começar, mesmo que a cópia demore mais que o intervalo.

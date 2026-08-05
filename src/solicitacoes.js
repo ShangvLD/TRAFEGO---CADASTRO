@@ -7,6 +7,7 @@
 
 const db = require('./db');
 const fluxo = require('./fluxo');
+const validacao = require('./validacao');
 
 // ---------------------------------------------------------------------------
 // Anexos
@@ -147,20 +148,39 @@ function statusGeral(clientes, decisoes, statusLegado) {
 }
 
 /**
+ * Lê o texto de "detalhes" ("Rótulo: valor | Rótulo: valor") num objeto.
+ *
+ * O formato é o do Microsoft Forms, e continua sendo gravado junto com as
+ * tabelas estruturadas. Ler daqui serve aos dois: cadastro antigo, que só tem
+ * o texto, e cadastro novo, onde o texto é gerado a partir das tabelas.
+ */
+function camposDoDetalhe(detalhes) {
+  const mapa = {};
+  for (const parte of String(detalhes || '').split('|')) {
+    const i = parte.indexOf(':');
+    if (i < 0) continue;
+    const rot = parte.slice(0, i).trim();
+    const val = parte.slice(i + 1).trim();
+    if (rot) mapa[rot.toUpperCase()] = val;
+  }
+  return mapa;
+}
+
+/** Valor útil? (o Forms aceitava ".", "-" e "N/A" como resposta) */
+function util(v) {
+  const t = String(v == null ? '' : v).trim();
+  return t && !/^(\.|-|--|n\/a|na)$/i.test(t) ? t : null;
+}
+
+/**
  * Quantos itens ALÉM do motorista este cadastro tem.
  *
  * Cada um custa 10 minutos na previsão. Hoje são as placas (cavalo e carreta);
  * quando houver implemento ou outro complemento, é aqui que ele entra — e a
  * previsão acompanha sem mexer no cálculo.
  */
-function itensAdicionaisDe(row, detalhes) {
-  let n = 0;
-  const texto = String(detalhes || row.detalhes || '');
-  for (const rot of ['Placa Cavalo', 'Placa Carreta']) {
-    const m = texto.match(new RegExp(rot + ':\s*([^|]+)'));
-    if (m && m[1].trim() && !/^[-.s]*$/.test(m[1])) n++;
-  }
-  return n;
+function itensAdicionaisDe(campos) {
+  return ['PLACA CAVALO', 'PLACA CARRETA'].filter((r) => util(campos[r])).length;
 }
 
 /**
@@ -199,8 +219,12 @@ function hidratar(row, ctx = {}) {
     assumido: !!(at && at.emAtendimento),
   });
 
+  const prioridade = validacao.acharPrioridade(row.prioridade);
+  const campos = camposDoDetalhe(row.detalhes);
+  const placas = ['PLACA CAVALO', 'PLACA CARRETA'].map((r) => util(campos[r])).filter(Boolean);
+
   const previsao = fluxo.previsaoDe({
-    itensAdicionais: itensAdicionaisDe(row),
+    itensAdicionais: itensAdicionaisDe(campos),
     clientes,
   });
 
@@ -228,6 +252,13 @@ function hidratar(row, ctx = {}) {
     situacao,
     previsao,
     tempos,
+    // Campos que a tela de acompanhamento filtra e mostra em coluna.
+    condutor: util(campos['CONDUTOR']) || util(campos['NOME']),
+    proprietario: util(campos['PROPRIETÁRIO']) || util(campos['PROPRIETARIO']),
+    placas,
+    prioridade: prioridade
+      ? { id: prioridade.id, rotulo: prioridade.rotulo, bolinha: prioridade.bolinha, cor: prioridade.cor, ordem: prioridade.ordem }
+      : null,
     responsavel: at && at.responsavel ? at.responsavel.nome : null,
     assumido_em: assumidoEm,
     colaboradores: at ? (at.colaboradores || []).length : 0,
@@ -252,12 +283,22 @@ async function listar() {
  */
 async function comContexto(linhas) {
   if (!linhas.length) return [];
+  // Ordena pela prioridade ANTES de devolver: a fila de atendimento é o que
+  // essa lista representa, e deixar a ordenação para cada tela faria as telas
+  // divergirem sobre quem é o próximo. Empate mantém o mais antigo na frente —
+  // dentro do mesmo grau, quem esperou mais é atendido primeiro.
   const atendimentos = require('./atendimentos');
   const [mapa, agora] = await Promise.all([
     atendimentos.resumoDeVarias('terceiro', linhas.map((l) => l.id)),
     agoraDoBanco(),
   ]);
-  return linhas.map((l) => hidratar(l, { atendimento: mapa[l.id], agora }));
+  const hidratadas = linhas.map((l) => hidratar(l, { atendimento: mapa[l.id], agora }));
+  return hidratadas.sort((a, b) => {
+    const pa = validacao.ordemDaPrioridade(a.prioridade && a.prioridade.id);
+    const pb = validacao.ordemDaPrioridade(b.prioridade && b.prioridade.id);
+    if (pa !== pb) return pa - pb;
+    return String(a.criado_em).localeCompare(String(b.criado_em));
+  });
 }
 
 /** Lista apenas as solicitações de um e-mail (área do solicitante). */

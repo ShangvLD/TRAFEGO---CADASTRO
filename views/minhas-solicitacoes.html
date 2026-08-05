@@ -14,6 +14,7 @@
     <link rel="stylesheet" href="/css/base.css">
     <link rel="stylesheet" href="/css/paginas.css">
     <link rel="stylesheet" href="/css/cadastro.css">
+    <link rel="stylesheet" href="/css/acompanhamento.css">
 </head>
 <body class="has-header">
 
@@ -56,8 +57,11 @@
 
         <section class="card card--hero">
             <h2>Minhas solicitações</h2>
-            <p>Acompanhe aqui tudo o que você enviou, de todos os formulários a que tem acesso, com o status de cada uma.</p>
+            <p>Acompanhe o ciclo completo de cada cadastro que você enviou: quem assumiu, quanto tempo levou e a previsão de conclusão.</p>
         </section>
+
+        <!-- Indicadores. Os de status filtram a tabela ao clique. -->
+        <div class="acomp-cards" id="cards"></div>
 
         <section class="card">
             <div class="card-header">
@@ -67,19 +71,63 @@
                 </button>
             </div>
 
+            <div class="acomp-filtros">
+                <div class="acomp-filtro">
+                    <label for="f-motorista">Motorista</label>
+                    <input type="search" id="f-motorista" placeholder="Nome do condutor">
+                </div>
+                <div class="acomp-filtro">
+                    <label for="f-placa">Placa</label>
+                    <input type="search" id="f-placa" placeholder="ABC1D23">
+                </div>
+                <div class="acomp-filtro">
+                    <label for="f-proprietario">Proprietário</label>
+                    <input type="search" id="f-proprietario" placeholder="Nome ou razão social">
+                </div>
+                <div class="acomp-filtro">
+                    <label for="f-de">Enviado de</label>
+                    <input type="date" id="f-de">
+                </div>
+                <div class="acomp-filtro">
+                    <label for="f-ate">até</label>
+                    <input type="date" id="f-ate">
+                </div>
+                <div class="acomp-filtro">
+                    <label for="f-prio">Importância</label>
+                    <select id="f-prio"><option value="">Todas</option></select>
+                </div>
+                <div class="acomp-filtro">
+                    <label for="f-status">Status</label>
+                    <select id="f-status"><option value="">Todos</option></select>
+                </div>
+                <div class="acomp-filtro acomp-filtro--acao">
+                    <button type="button" class="acomp-limpar" id="btn-limpar">Limpar filtros</button>
+                </div>
+            </div>
+
+            <div class="acomp-contagem" id="contagem"></div>
+
             <div class="table-wrap">
-                <table class="data-table">
+                <table class="data-table acomp-tabela">
                     <thead>
                         <tr>
-                            <th>Data</th>
+                            <th>Prio.</th>
+                            <th>Enviado</th>
                             <th>Formulário</th>
-                            <th>Resumo</th>
+                            <th>Motorista</th>
+                            <th>Proprietário</th>
+                            <th>Placas</th>
+                            <th>Clientes</th>
+                            <th>Responsável</th>
+                            <th>Assumido</th>
+                            <th>Tempo p/ assumir</th>
+                            <th>Tempo total</th>
+                            <th>Previsão</th>
                             <th>Status</th>
-                            <th>Observação</th>
                         </tr>
                     </thead>
                     <tbody id="corpo">
-                        <tr><td colspan="5">
+                        <tr><td colspan="13">
                             <div class="empty-state">
                                 <span class="material-symbols-rounded">hourglass_empty</span>
                                 <h4>Carregando...</h4>
@@ -92,8 +140,14 @@
     </main>
 
     <script src="/js/app.js"></script>
+    <script src="/js/validacao.js"></script>
     <script>
         const corpo = document.getElementById('corpo');
+        const elCards = document.getElementById('cards');
+        const elContagem = document.getElementById('contagem');
+
+        let TUDO = [];          // tudo que veio do servidor
+        let filtroStatus = '';  // vem do clique no card ou do seletor
 
         function esc(txt) {
             const d = document.createElement('div');
@@ -101,52 +155,275 @@
             return d.innerHTML;
         }
 
-        function formatarData(iso) {
-            // O banco grava em UTC; dataBR() (app.js) converte para o fuso de
-            // quem está lendo. Sem isso a tela mostrava tudo 3h adiantado.
-            return window.dataBR ? window.dataBR(iso) : (iso || '—');
+        const dataHora = (v) => (window.dataHoraBR ? window.dataHoraBR(v) : (v || '—'));
+
+        // ------------------------------------------------------------------
+        // Situação
+        //
+        // O rótulo e a cor vêm do servidor (src/fluxo.js). A tela não mantém
+        // uma segunda tabela de nomes: acrescentar um status lá aparece aqui
+        // sozinho, inclusive no seletor de filtro e nos cards.
+        // ------------------------------------------------------------------
+        const CLASSE = {
+            espera: 'is-warning',
+            andamento: 'is-info',
+            externo: 'is-parcial',
+            aprovado: 'is-success',
+            reprovado: 'is-danger',
+            'meio-termo': 'is-parcial',
+        };
+
+        function situacaoDe(s) {
+            // Agregado e candidato ainda não passam pelo fluxo do terceiro;
+            // para eles vale o status simples, sem inventar etapa inexistente.
+            if (s.situacao) return s.situacao;
+            const st = s.status_geral || s.status || 'pendente';
+            return { situacao: st, rotulo: st[0].toUpperCase() + st.slice(1), cor: 'espera', ajuda: '' };
         }
 
-        const BADGE = {
-            pendente:  '<span class="badge is-warning">Pendente</span>',
-            aprovado:  '<span class="badge is-success">Aprovado</span>',
-            reprovado: '<span class="badge is-danger">Reprovado</span>',
-            parcial:   '<span class="badge is-parcial">Parcial</span>',
-        };
+        /**
+         * Grau de importância. Cadastro antigo não tem o campo — mostra um
+         * traço em vez de fingir "pode aguardar", que seria inventar uma
+         * escolha que ninguém fez.
+         */
+        function prioridadeCel(s) {
+            const p = s.prioridade;
+            if (!p) return '<span class="acomp-nada" title="Enviado antes deste campo existir">—</span>';
+            return '<span class="acomp-prio" title="' + esc(p.rotulo) + '">' + p.bolinha + '</span>';
+        }
+
+        function badge(s) {
+            const sit = situacaoDe(s);
+            return `<span class="badge ${CLASSE[sit.cor] || 'is-warning'}" title="${esc(sit.ajuda || '')}">${esc(sit.rotulo)}</span>`;
+        }
+
+        // ------------------------------------------------------------------
+        // Filtros (no navegador)
+        //
+        // A lista é pequena — cem cadastros hoje — e filtrar aqui responde no
+        // mesmo quadro, sem ida ao servidor a cada tecla. Passando de uns dois
+        // mil registros, vale mover para o servidor com paginação; até lá, isso
+        // é mais rápido e mais simples.
+        // ------------------------------------------------------------------
+        const semAcento = (t) =>
+            String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
+
+        function filtrar() {
+            const mot = semAcento(document.getElementById('f-motorista').value.trim());
+            const pla = semAcento(document.getElementById('f-placa').value.trim()).replace(/[^A-Z0-9]/g, '');
+            const pro = semAcento(document.getElementById('f-proprietario').value.trim());
+            const de = document.getElementById('f-de').value;
+            const ate = document.getElementById('f-ate').value;
+
+            return TUDO.filter((s) => {
+                if (mot && !semAcento(s.condutor || s.solicitante_nome).includes(mot)) return false;
+                if (pro && !semAcento(s.proprietario).includes(pro)) return false;
+                if (pla) {
+                    const placas = (s.placas || []).map((p) => semAcento(p).replace(/[^A-Z0-9]/g, ''));
+                    if (!placas.some((p) => p.includes(pla))) return false;
+                }
+                if (filtroStatus && situacaoDe(s).situacao !== filtroStatus) return false;
+
+                const prio = document.getElementById('f-prio').value;
+                if (prio && (!s.prioridade || s.prioridade.id !== prio)) return false;
+
+                // A data comparada é a LOCAL, não o texto UTC do banco: filtrar
+                // pelo texto cru jogaria os registros do fim do dia para o dia
+                // seguinte — o mesmo erro que o fuso já causou na exibição.
+                if (de || ate) {
+                    const d = window.comoData ? window.comoData(s.criado_em) : null;
+                    if (!d) return false;
+                    const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
+                                '-' + String(d.getDate()).padStart(2, '0');
+                    if (de && iso < de) return false;
+                    if (ate && iso > ate) return false;
+                }
+                return true;
+            });
+        }
+
+        // ------------------------------------------------------------------
+        // Cards
+        // ------------------------------------------------------------------
+
+        /** Média dos valores presentes (ignora o que ainda não tem tempo). */
+        function media(valores) {
+            const v = valores.filter((n) => typeof n === 'number');
+            if (!v.length) return null;
+            return Math.round(v.reduce((a, b) => a + b, 0) / v.length);
+        }
+
+        function emTexto(min) {
+            if (min == null) return '—';
+            const h = Math.floor(min / 60), r = min % 60;
+            if (!h) return r + ' min';
+            return r ? h + ' h ' + r + ' min' : h + ' h';
+        }
+
+        function desenharCards(lista) {
+            const conta = (situacao) => lista.filter((s) => situacaoDe(s).situacao === situacao).length;
+            const contaPrio = (id) => lista.filter((s) => s.prioridade && s.prioridade.id === id).length;
+
+            // Tempo médio só de quem TERMINOU: incluir cadastro em curso
+            // puxaria a média para baixo e faria o número melhorar sozinho a
+            // cada envio novo — o contrário do que ele deveria mostrar.
+            const fechados = lista.filter((s) => s.tempos && s.situacao && s.situacao.finalizado);
+            const tMedio = media(fechados.map((s) => s.tempos.totalMin));
+            const tAssumir = media(lista.map((s) => s.tempos && s.tempos.paraAssumirMin));
+
+            const cards = [
+                { rot: 'Total', icone: 'inbox', val: lista.length, cor: 'espera' },
+                { rot: 'Aprovados', icone: 'check_circle', val: conta('aprovado'), cor: 'aprovado', filtro: 'aprovado' },
+                { rot: 'Reprovados', icone: 'cancel', val: conta('reprovado') + conta('reprovado_rdo'), cor: 'reprovado', filtro: 'reprovado' },
+                { rot: 'Em análise', icone: 'schedule', val: conta('em_analise') + conta('aguardando_rdo'), cor: 'espera', filtro: 'em_analise' },
+                { rot: 'Em andamento', icone: 'engineering', val: conta('em_andamento'), cor: 'andamento', filtro: 'em_andamento' },
+                { rot: 'Pendente Shopee', icone: 'hourglass_top', val: conta('pendente_shopee'), cor: 'externo', filtro: 'pendente_shopee' },
+                { rot: 'Pendente Amazon', icone: 'hourglass_top', val: conta('pendente_amazon'), cor: 'externo', filtro: 'pendente_amazon' },
+                { rot: '🔴 Instantes', icone: 'bolt', val: contaPrio('imediato'), cor: 'reprovado' },
+                { rot: '🟡 Urgente', icone: 'priority_high', val: contaPrio('urgente'), cor: 'espera' },
+                { rot: '🟢 Pode aguardar', icone: 'schedule', val: contaPrio('pode_aguardar'), cor: 'aprovado' },
+                { rot: 'Tempo médio', icone: 'timer', val: emTexto(tMedio), cor: 'tempo', tempo: true },
+                { rot: 'Média p/ assumir', icone: 'timer_play', val: emTexto(tAssumir), cor: 'tempo', tempo: true },
+            ];
+
+            elCards.innerHTML = cards.map((c) => {
+                const clic = c.filtro ? ` data-filtro="${c.filtro}"` : '';
+                const ativo = c.filtro && c.filtro === filtroStatus ? ' ativo' : '';
+                return `<div class="acomp-card acomp-card--${c.cor}${c.tempo ? ' acomp-card--tempo' : ''}${ativo}"${clic}>
+                    <div class="acomp-card__rot"><span class="material-symbols-rounded">${c.icone}</span>${c.rot}</div>
+                    <div class="acomp-card__val">${esc(String(c.val))}</div>
+                </div>`;
+            }).join('');
+        }
+
+        // ------------------------------------------------------------------
+        // Tabela
+        // ------------------------------------------------------------------
+        function linha(s) {
+            const t = s.tempos || {};
+            const sit = situacaoDe(s);
+            const prev = s.previsao;
+
+            const placas = (s.placas || []).length
+                ? s.placas.map((p) => `<span class="acomp-placa">${esc(p)}</span>`).join('')
+                : '<span class="acomp-nada">—</span>';
+
+            // "Tempo total" ainda em curso é uma contagem, não um resultado —
+            // por isso vem marcado, e em vermelho quando passou da previsão.
+            const total = t.total
+                ? (sit.finalizado
+                    ? esc(t.total)
+                    : `<span class="${t.atrasado ? 'acomp-atrasado' : ''}">${esc(t.decorrido)}<span class="acomp-sub">em curso</span></span>`)
+                : '<span class="acomp-nada">—</span>';
+
+            const previsao = prev
+                ? esc(prev.texto) + (prev.externa ? `<span class="acomp-externo">+ ${esc(prev.externa.texto)}</span>` : '')
+                : '<span class="acomp-nada">—</span>';
+
+            return `<tr>
+                <td>${prioridadeCel(s)}</td>
+                <td>${esc(dataHora(s.criado_em))}</td>
+                <td><span class="badge is-info">${esc(s.moduloRotulo || '—')}</span></td>
+                <td>${esc(s.condutor || s.solicitante_nome || '—')}</td>
+                <td>${esc(s.proprietario || '—')}</td>
+                <td>${placas}</td>
+                <td>${esc(s.assunto || '—')}</td>
+                <td>${s.responsavel ? esc(s.responsavel) : '<span class="acomp-nada">ninguém ainda</span>'}
+                    ${s.colaboradores ? `<span class="acomp-sub">+${s.colaboradores} colaborador(es)</span>` : ''}</td>
+                <td>${s.assumido_em ? esc(dataHora(s.assumido_em)) : '<span class="acomp-nada">—</span>'}</td>
+                <td>${t.paraAssumir ? esc(t.paraAssumir) : '<span class="acomp-nada">—</span>'}</td>
+                <td>${total}</td>
+                <td>${previsao}</td>
+                <td>${badge(s)}</td>
+            </tr>`;
+        }
+
+        function desenhar() {
+            const lista = filtrar();
+            desenharCards(lista);
+
+            elContagem.textContent = lista.length === TUDO.length
+                ? `${TUDO.length} solicitação(ões)`
+                : `${lista.length} de ${TUDO.length} solicitação(ões)`;
+
+            if (!lista.length) {
+                corpo.innerHTML = `<tr><td colspan="13"><div class="empty-state">
+                    <span class="material-symbols-rounded">${TUDO.length ? 'filter_alt_off' : 'inbox'}</span>
+                    <h4>${TUDO.length ? 'Nenhuma solicitação com esses filtros' : 'Nenhuma solicitação enviada'}</h4>
+                    <p>${TUDO.length ? 'Ajuste ou limpe os filtros.' : 'Quando você enviar uma solicitação, ela aparece aqui.'}</p>
+                </div></td></tr>`;
+                return;
+            }
+            corpo.innerHTML = lista.map(linha).join('');
+        }
+
+        /** Opções do seletor de status, a partir do que existe na lista. */
+        function montarSeletorStatus() {
+            const vistos = new Map();
+            for (const s of TUDO) {
+                const sit = situacaoDe(s);
+                if (!vistos.has(sit.situacao)) vistos.set(sit.situacao, sit.rotulo);
+            }
+            const sel = document.getElementById('f-status');
+            sel.innerHTML = '<option value="">Todos</option>' +
+                [...vistos].map(([v, r]) => `<option value="${esc(v)}">${esc(r)}</option>`).join('');
+            sel.value = filtroStatus;
+        }
 
         async function carregar() {
             try {
                 const r = await fetch('/api/minhas-solicitacoes');
                 if (r.status === 401) { window.location.href = '/login'; return; }
                 const j = await r.json();
-                const lista = j.solicitacoes || [];
-
-                if (!lista.length) {
-                    corpo.innerHTML = `<tr><td colspan="5"><div class="empty-state">
-                        <span class="material-symbols-rounded">inbox</span>
-                        <h4>Nenhuma solicitação enviada</h4>
-                        <p>Quando você enviar uma solicitação, ela aparece aqui com o status.</p>
-                    </div></td></tr>`;
-                    return;
-                }
-
-                corpo.innerHTML = lista.map((s) => {
-                    const st = s.status_geral || s.status;
-                    return `<tr>
-                        <td>${formatarData(s.criado_em)}</td>
-                        <td><span class="badge is-info">${esc(s.moduloRotulo || '—')}</span></td>
-                        <td>${esc(s.assunto)}</td>
-                        <td>${BADGE[st] || esc(st)}</td>
-                        <td>${esc(s.observacao || '—')}</td>
-                    </tr>`;
-                }).join('');
+                TUDO = j.solicitacoes || [];
+                montarSeletorStatus();
+                desenhar();
             } catch (e) {
-                corpo.innerHTML = `<tr><td colspan="5"><div class="empty-state">
+                corpo.innerHTML = `<tr><td colspan="13"><div class="empty-state">
                     <span class="material-symbols-rounded">wifi_off</span>
                     <h4>Erro ao carregar</h4>
                 </div></td></tr>`;
             }
         }
+
+        // ------------------------------------------------------------------
+        // Eventos
+        // ------------------------------------------------------------------
+        for (const id of ['f-motorista', 'f-placa', 'f-proprietario', 'f-de', 'f-ate']) {
+            document.getElementById(id).addEventListener('input', desenhar);
+        }
+        document.getElementById('f-prio').addEventListener('change', desenhar);
+
+        // As opções do filtro saem da mesma lista que o formulário usa.
+        (function opcoesDePrioridade() {
+            const sel = document.getElementById('f-prio');
+            const lista = (window.Validacao && window.Validacao.PRIORIDADES) || [];
+            sel.innerHTML = '<option value="">Todas</option>' +
+                lista.map((p) => '<option value="' + esc(p.id) + '">' + p.bolinha + ' ' + esc(p.rotulo) + '</option>').join('');
+        })();
+
+        document.getElementById('f-status').addEventListener('change', (e) => {
+            filtroStatus = e.target.value;
+            desenhar();
+        });
+
+        // Clicar no card filtra por aquele status; clicar de novo desfaz.
+        elCards.addEventListener('click', (e) => {
+            const card = e.target.closest('[data-filtro]');
+            if (!card) return;
+            filtroStatus = filtroStatus === card.dataset.filtro ? '' : card.dataset.filtro;
+            document.getElementById('f-status').value = filtroStatus;
+            desenhar();
+        });
+
+        document.getElementById('btn-limpar').addEventListener('click', () => {
+            for (const id of ['f-motorista', 'f-placa', 'f-proprietario', 'f-de', 'f-ate', 'f-prio']) {
+                document.getElementById(id).value = '';
+            }
+            filtroStatus = '';
+            document.getElementById('f-status').value = '';
+            desenhar();
+        });
 
         document.getElementById('btn-atualizar').addEventListener('click', carregar);
         carregar();
