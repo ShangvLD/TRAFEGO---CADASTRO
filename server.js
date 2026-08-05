@@ -597,7 +597,81 @@ for (const m of MODULOS) {
         dono,
       });
       if (!r.ok) return res.status(400).json({ ok: false, erro: r.erro });
+
+      // Provedor sem URL de gravação (pasta em disco): o arquivo passa por
+      // aqui. O navegador envia para a nossa própria rota, com o mesmo PUT.
+      if (!r.url) {
+        r.url = `${base.replace(':id', id)}/enviar?caminho=${encodeURIComponent(r.caminho)}`;
+        r.metodo = 'PUT';
+        r.direto = false;
+      }
       res.json({ ok: true, ...r });
+    })
+  );
+
+  // ---- Recebe o arquivo, quando o provedor grava em disco ----
+  //
+  // express.raw porque o corpo é o arquivo em si, não JSON. O limite é o mesmo
+  // da validação; rodando local não há o teto de 4,5 MB do Vercel no caminho.
+  app.put(
+    `${base}/enviar`,
+    exigirLogin,
+    exigirAcessoAoModulo(m.slug),
+    express.raw({ type: () => true, limit: require('./src/storage').TAMANHO_MAXIMO }),
+    wrap(async (req, res) => {
+      const caminho = String(req.query.caminho || '');
+      if (!caminho) return res.status(400).json({ ok: false, erro: 'Caminho não informado.' });
+      if (!req.body || !req.body.length) return res.status(400).json({ ok: false, erro: 'Corpo vazio.' });
+
+      const armazenamento = require('./src/storage');
+
+      // O caminho foi calculado por /preparar, mas volta pelo navegador e pode
+      // ter sido trocado. Revalidar aqui importa mais que no Supabase: a pasta
+      // é sincronizada pelo OneDrive para a equipe, e um .lnk ou .exe gravado
+      // ali chegaria na máquina de todo mundo.
+      const valido = armazenamento.validarArquivo({
+        nome: caminho,
+        contentType: req.get('content-type'),
+        tamanho: req.body.length,
+      });
+      if (!valido.ok) return res.status(400).json({ ok: false, erro: valido.erro });
+
+      const prov = armazenamento.provedor();
+      try {
+        // O provedor valida o caminho (prefixo obrigatório e travessia de
+        // diretório) — ele volta do navegador e não é confiável.
+        await prov.enviar(caminho, req.body, req.get('content-type'));
+      } catch (e) {
+        return res.status(400).json({ ok: false, erro: e.message });
+      }
+      res.json({ ok: true, caminho, tamanho: req.body.length });
+    })
+  );
+
+  // ---- Baixa um documento pelo servidor ----
+  //
+  // Usado quando o provedor não tem URL pública (pasta em disco). Com Supabase,
+  // a rota /url devolve link assinado e o navegador baixa direto, sem passar
+  // por aqui.
+  app.get(
+    `${base}/:docId/baixar`,
+    exigirLogin,
+    exigirAcessoAoModulo(m.slug),
+    wrap(async (req, res) => {
+      const docId = Number(req.params.docId);
+      if (!Number.isInteger(docId)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
+
+      const d = await documentos.buscarPorId(docId);
+      if (!d || !d.caminho) return res.status(404).json({ ok: false, erro: 'Documento não encontrado.' });
+
+      try {
+        const buffer = await require('./src/storage').provedor().baixar(d.caminho);
+        res.type(d.content_type || 'application/octet-stream');
+        res.set('Content-Disposition', `inline; filename="${d.nome_arquivo}"`);
+        res.send(buffer);
+      } catch (e) {
+        res.status(404).json({ ok: false, erro: 'Arquivo não encontrado no armazenamento.' });
+      }
     })
   );
 
@@ -637,9 +711,17 @@ for (const m of MODULOS) {
       const docId = Number(req.params.docId);
       if (!Number.isInteger(docId)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
 
-      const url = await documentos.urlDeLeitura(docId);
-      if (!url) return res.status(404).json({ ok: false, erro: 'Documento não encontrado.' });
-      res.json({ ok: true, url });
+      const d = await documentos.buscarPorId(docId);
+      if (!d) return res.status(404).json({ ok: false, erro: 'Documento não encontrado.' });
+
+      // Com Supabase, devolve link assinado e o navegador baixa direto. Com
+      // pasta em disco não existe link, então aponta para a rota deste
+      // servidor, que lê o arquivo e devolve.
+      const assinada = await documentos.urlDeLeitura(docId);
+      res.json({
+        ok: true,
+        url: assinada || `${base.replace(':id', d.solicitacao_id)}/${docId}/baixar`,
+      });
     })
   );
 
@@ -686,7 +768,10 @@ for (const m of MODULOS) {
           nome: partes[partes.length - 1],
           tamanho: a.tamanho,
           // 30 min: tempo de sobra para baixar tudo, sem deixar link vivo à toa.
-          url: await prov.urlDeLeitura(a.caminho, 1800),
+          // Sem link assinado (pasta em disco), aponta para a rota do servidor.
+          url:
+            (await prov.urlDeLeitura(a.caminho, 1800)) ||
+            `/api/modulos/${m.slug}/solicitacoes/${a.solicitacao_id}/documentos/${a.id}/baixar`,
         });
       }
 

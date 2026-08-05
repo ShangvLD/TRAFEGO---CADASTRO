@@ -113,6 +113,13 @@ async function listarDeVarias(modulo, ids) {
     .all(modulo, lista);
 }
 
+/** Um documento pelo id. */
+async function buscarPorId(id) {
+  return db
+    .prepare('SELECT id, modulo, solicitacao_id, tipo, nome_arquivo, caminho, content_type, tamanho FROM documentos WHERE id = ?')
+    .get(id);
+}
+
 /** URL temporária para baixar um documento. */
 async function urlDeLeitura(id, segundos = 600) {
   const d = await db.prepare('SELECT caminho, provedor FROM documentos WHERE id = ?').get(id);
@@ -188,6 +195,7 @@ async function contarPorSolicitacao(modulo) {
 
 module.exports = {
   prepararEnvio,
+  buscarPorId,
   registrar,
   listar,
   listarDeVarias,

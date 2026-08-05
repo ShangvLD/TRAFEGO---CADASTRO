@@ -256,6 +256,102 @@ const supabase = {
 };
 
 // ---------------------------------------------------------------------------
+// Provedor: PASTA — grava numa pasta do disco (canal do Teams via OneDrive)
+//
+// Para que serve: gravar direto na pasta do canal sincronizada pelo OneDrive.
+// O arquivo aparece no Teams sem passar por serviço nenhum e sem depender do
+// consentimento do SharePoint.
+//
+// LIMITAÇÃO INCONTORNÁVEL: só funciona com o app rodando na MÁQUINA que tem a
+// pasta. Em produção (Vercel) o app roda num datacenter e não alcança disco de
+// ninguém — lá o provedor se declara indisponível.
+//
+// Diferença de fluxo: no Supabase o navegador envia direto ao storage por URL
+// assinada. Aqui não existe URL para gravar em disco, então o arquivo PASSA
+// PELO SERVIDOR (uploadDireto = false). Rodando local isso não é problema; o
+// limite de 4,5 MB no corpo da requisição é do Vercel, que não está no caminho.
+// ---------------------------------------------------------------------------
+const fs = require('node:fs');
+const caminhoDeSistema = require('node:path');
+
+const PASTA_BASE = process.env.PASTA_CANAL || '';
+
+/**
+ * Converte o caminho lógico ("CADASTROS/JOAO_.../CNH.pdf") em caminho de disco.
+ *
+ * O prefixo "CADASTROS/" é descartado: a pasta configurada JÁ é a raiz dos
+ * cadastros, e repetir criaria ".../CADASTROS/CADASTROS/...".
+ *
+ * Valida contra travessia de diretório: o caminho volta do navegador na hora de
+ * registrar o arquivo, então ".." ou caminho absoluto poderia escrever fora da
+ * pasta. O resultado é conferido para estar DENTRO da base.
+ */
+function caminhoEmDisco(logico) {
+  const limpo = String(logico || '').replace(/\\/g, '/');
+  if (!/^CADASTROS\//.test(limpo) || limpo.includes('..')) {
+    throw new Error(`Caminho inválido: "${logico}"`);
+  }
+  const relativo = limpo.replace(/^CADASTROS\//, '');
+  const destino = caminhoDeSistema.resolve(PASTA_BASE, ...relativo.split('/'));
+  const base = caminhoDeSistema.resolve(PASTA_BASE);
+  if (destino !== base && !destino.startsWith(base + caminhoDeSistema.sep)) {
+    throw new Error(`Caminho fora da pasta permitida: "${logico}"`);
+  }
+  return destino;
+}
+
+const pasta = {
+  nome: 'pasta',
+  uploadDireto: false, // o arquivo passa pelo servidor
+
+  disponivel() {
+    if (!PASTA_BASE) return false;
+    try {
+      return fs.statSync(PASTA_BASE).isDirectory();
+    } catch {
+      return false;
+    }
+  },
+
+  /** Não há URL para gravar em disco: o servidor recebe e grava. */
+  async urlDeUpload() {
+    return { url: null, metodo: 'POST', direto: false };
+  },
+
+  async enviar(logico, buffer, _contentType) {
+    const destino = caminhoEmDisco(logico);
+    fs.mkdirSync(caminhoDeSistema.dirname(destino), { recursive: true });
+    fs.writeFileSync(destino, buffer);
+    return { caminho: logico };
+  },
+
+  async baixar(logico) {
+    return fs.readFileSync(caminhoEmDisco(logico));
+  },
+
+  /** Sem URL pública: quem lê é o próprio servidor, pela rota de download. */
+  async urlDeLeitura() {
+    return null;
+  },
+
+  async remover(logico) {
+    const destino = caminhoEmDisco(logico);
+    try {
+      fs.unlinkSync(destino);
+      // Remove a pasta do cadastro se ficou vazia, para não acumular pasta
+      // órfã no canal a cada exclusão.
+      const dir = caminhoDeSistema.dirname(destino);
+      if (fs.readdirSync(dir).filter((n) => n !== 'desktop.ini').length === 0) {
+        fs.rmdirSync(dir);
+      }
+    } catch (e) {
+      if (e.code !== 'ENOENT') throw e;
+    }
+    return true;
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Provedor: memória (teste automatizado)
 // ---------------------------------------------------------------------------
 const memoria = {
@@ -283,17 +379,34 @@ const memoria = {
   },
 };
 
-const PROVEDORES = { supabase, memoria };
+const PROVEDORES = { supabase, pasta, memoria };
 
-/** Provedor em uso. Cai para "memoria" quando o Supabase não está configurado. */
+/**
+ * Provedor em uso.
+ *
+ * STORAGE_PROVEDOR manda, quando definido — mas só se estiver DISPONÍVEL: pedir
+ * "pasta" em produção não pode fazer o upload gravar em lugar nenhum, então
+ * nesse caso cai para o Supabase. Sem escolha explícita, tenta pasta (mais
+ * próximo do destino final), depois Supabase, e por fim memória.
+ */
 function provedor() {
   const escolhido = process.env.STORAGE_PROVEDOR;
-  if (escolhido && PROVEDORES[escolhido]) return PROVEDORES[escolhido];
+  if (escolhido && PROVEDORES[escolhido] && PROVEDORES[escolhido].disponivel()) {
+    return PROVEDORES[escolhido];
+  }
+  if (escolhido === 'pasta' && supabase.disponivel()) return supabase;
+  if (pasta.disponivel()) return pasta;
   return supabase.disponivel() ? supabase : memoria;
+}
+
+/** O upload passa pelo servidor (true) ou vai direto ao storage (false)? */
+function uploadPassaPeloServidor() {
+  return provedor().uploadDireto === false;
 }
 
 module.exports = {
   provedor,
+  uploadPassaPeloServidor,
   PROVEDORES,
   BUCKET,
   TAMANHO_MAXIMO,
