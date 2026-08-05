@@ -143,3 +143,70 @@
     });
   }
 })();
+
+/* ============================================================================
+   Datas: o banco grava em UTC, a tela mostra no fuso de quem está lendo
+
+   POR QUE ISSO EXISTE: os carimbos de tempo são gravados em UTC (veja AGORA_SQL
+   em src/db.js). Exibir o valor cru mostrava tudo 3 horas adiantado no Brasil —
+   um atendimento das 17:43 aparecia como 20:43. Passava despercebido porque a
+   diferença é constante: parece só "um horário", não um erro.
+
+   Fica aqui, em app.js, porque quatro telas formatavam data cada uma do seu
+   jeito. Com a conversão espalhada, bastaria uma delas ficar para trás.
+   ========================================================================== */
+(function () {
+  'use strict';
+
+  /** "2026-08-05 20:43:11" (UTC do banco) -> objeto Date correto. */
+  function comoData(valor) {
+    if (!valor) return null;
+    const txt = String(valor).trim();
+
+    // Já tem fuso declarado (ISO com Z ou ±hh:mm)? Então respeita o que veio.
+    if (/[Zz]$|[+-]\d{2}:?\d{2}$/.test(txt)) {
+      const d = new Date(txt);
+      return isNaN(d) ? null : d;
+    }
+
+    // Formato do banco, sem fuso: é UTC, e precisa ser dito explicitamente —
+    // sem o "Z" o navegador interpretaria como hora local e o erro dobraria.
+    const m = txt.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
+    if (m) return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)));
+
+    // Só a data, sem hora: não há o que converter.
+    const so = txt.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (so) return new Date(+so[1], +so[2] - 1, +so[3]);
+
+    const d = new Date(txt);
+    return isNaN(d) ? null : d;
+  }
+
+  const pad = (n) => String(n).padStart(2, '0');
+
+  /** 05/08/2026 */
+  function dataBR(valor) {
+    const d = comoData(valor);
+    if (!d) return '—';
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+  }
+
+  /** 05/08/2026 17:43 */
+  function dataHoraBR(valor) {
+    const d = comoData(valor);
+    if (!d) return '—';
+    return `${dataBR(valor)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  /** 05/08/2026 às 17:43 */
+  function dataHoraPorExtenso(valor) {
+    const d = comoData(valor);
+    if (!d) return '';
+    return `${dataBR(valor)} às ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  window.comoData = comoData;
+  window.dataBR = dataBR;
+  window.dataHoraBR = dataHoraBR;
+  window.dataHoraPorExtenso = dataHoraPorExtenso;
+})();

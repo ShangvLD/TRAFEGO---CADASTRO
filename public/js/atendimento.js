@@ -24,12 +24,11 @@
         );
     }
 
-    /** "04/08/2026 às 14:35" */
+    /** "04/08/2026 às 14:35", já no fuso de quem lê (o banco grava em UTC). */
     function quando(valor) {
         if (!valor) return '';
-        const m = String(valor).match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
-        if (!m) return String(valor);
-        return `${m[3]}/${m[2]}/${m[1]} às ${m[4]}:${m[5]}`;
+        if (window.dataHoraPorExtenso) return window.dataHoraPorExtenso(valor);
+        return String(valor);
     }
 
     function primeiroNome(nome) {

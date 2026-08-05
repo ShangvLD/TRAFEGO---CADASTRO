@@ -20,6 +20,9 @@
          CNH.pdf
          CRLV_CAVALO.pdf
 
+   Copia apenas os módulos de SINCRONIZAR_MODULOS (por padrão terceiro e
+   agregado). Candidato é processo de RH e não pertence à pasta da operação.
+
    NUNCA APAGA nada da pasta. Se um documento sai do portal, o arquivo fica lá
    e é apenas reportado — apagar arquivo de uma pasta compartilhada por decisão
    automática seria arriscado demais.
@@ -36,6 +39,18 @@ const documentos = require('./documentos');
 const PASTA = process.env.PASTA_CANAL || '';
 const OBSERVAR = process.argv.includes('--observar');
 const INTERVALO = Number(process.env.SINCRONIZAR_INTERVALO_S || 60) * 1000;
+
+/**
+ * Quais módulos vão para o canal.
+ *
+ * Nem tudo que o portal guarda precisa estar lá: candidato é processo de RH e
+ * a pasta é da operação de frota. Copiar tudo encheria o canal de documento
+ * que ninguém daquele time vai procurar — e o canal é compartilhado.
+ */
+const MODULOS = (process.env.SINCRONIZAR_MODULOS || 'terceiro,agregado')
+  .split(',')
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
 
 function abortar(mensagem) {
   console.error('\n  ' + mensagem + '\n');
@@ -68,10 +83,10 @@ async function documentosDoPortal() {
     .prepare(
       `SELECT d.id, d.modulo, d.solicitacao_id, d.tipo, d.caminho, d.provedor, d.tamanho
          FROM documentos d
-        WHERE d.caminho IS NOT NULL
+        WHERE d.caminho IS NOT NULL AND d.modulo = ANY(?)
         ORDER BY d.modulo, d.solicitacao_id, d.id`
     )
-    .all();
+    .all(MODULOS);
 }
 
 /**
@@ -190,6 +205,7 @@ async function umaPassada({ mostrarOrfaos = true } = {}) {
   console.log('\n  Espelhando os documentos do portal em:');
   console.log('  ' + PASTA);
   console.log('  (o OneDrive sobe para o canal do Teams sozinho)');
+  console.log('  Módulos: ' + MODULOS.join(', '));
 
   if (!OBSERVAR) {
     await umaPassada();
