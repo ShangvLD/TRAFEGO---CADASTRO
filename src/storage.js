@@ -429,7 +429,13 @@ function provedor() {
   }
   if (supabase.disponivel()) return supabase;
   if (pasta.disponivel()) return pasta;
-  return memoria;
+
+  // Nunca cair em "memoria" sozinho. Memória aceita o arquivo e o perde no
+  // reinício — em produção isso seria upload que parece funcionar e some, e
+  // ninguém descobre até precisarem do documento. Devolvendo o Supabase
+  // indisponível, prepararEnvio() recusa com "armazenamento não configurado",
+  // que é a verdade. Para teste automatizado, peça memoria explicitamente.
+  return supabase;
 }
 
 /**

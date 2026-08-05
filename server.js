@@ -260,6 +260,59 @@ app.get('/admin/usuarios', exigirLogin, exigirAdmin, (req, res) => {
 // funcionando mas exige acesso ao terminal do projeto.
 // --------------------------------------------------------------------------
 
+// --------------------------------------------------------------------------
+// Diagnóstico do armazenamento — somente admin
+//
+// Existe porque a configuração do storage é invisível pela tela: a chave do
+// Supabase mora numa variável de ambiente, e sem ela o upload recusa sem que
+// ninguém saiba por quê. Aqui dá para conferir em dois segundos, sem terminal
+// e sem abrir o painel do Vercel.
+//
+// Não devolve a chave, só se ela existe.
+// --------------------------------------------------------------------------
+app.get(
+  '/api/admin/armazenamento',
+  exigirLogin,
+  exigirAdmin,
+  wrap(async (req, res) => {
+    const armazenamento = require('./src/storage');
+    const emUso = armazenamento.provedor();
+
+    const provedores = {};
+    for (const [nome, p] of Object.entries(armazenamento.PROVEDORES)) {
+      provedores[nome] = p.disponivel();
+    }
+
+    // Uma escrita de verdade: "a chave existe" não prova que ela funciona
+    // (pode estar revogada, ou apontar para outro projeto).
+    let escrita = { ok: false, erro: 'não testado' };
+    if (emUso.disponivel()) {
+      const alvo = 'CADASTROS/_DIAGNOSTICO/teste.pdf';
+      try {
+        await emUso.enviar(alvo, Buffer.from('%PDF-1.4 diagnostico\n%%EOF\n'), 'application/pdf');
+        const volta = await emUso.baixar(alvo);
+        await emUso.remover(alvo);
+        escrita = { ok: volta && volta.length > 0 };
+      } catch (e) {
+        escrita = { ok: false, erro: e.message.slice(0, 200) };
+      }
+    }
+
+    res.json({
+      ok: true,
+      emUso: emUso.nome,
+      funcionando: emUso.disponivel() && escrita.ok,
+      escolhaExplicita: process.env.STORAGE_PROVEDOR || null,
+      provedores,
+      escrita,
+      limiteMB: armazenamento.TAMANHO_MAXIMO_MB,
+      bucket: armazenamento.BUCKET,
+      pastaCanal: process.env.PASTA_CANAL || null,
+      ambiente: EM_PRODUCAO ? 'producao' : 'local',
+    });
+  })
+);
+
 // Lista os usuários + os papéis disponíveis (para o seletor da tela).
 app.get(
   '/api/admin/usuarios',
