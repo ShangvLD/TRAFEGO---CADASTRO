@@ -22,7 +22,7 @@
    ========================================================================== */
 
 const db = require('./db');
-const { validarCadastro, formatarCpf, formatarTelefone, formatarPlaca } = require('./validacao');
+const { validarCadastro, formatarCpf, formatarTelefone, formatarPlaca, formatarPis } = require('./validacao');
 
 // ---------------------------------------------------------------------------
 // Representação legada
@@ -48,9 +48,11 @@ function montarDetalhesLegado(d) {
     ['Proprietário', d.proprietario_nome],
     ['Doc Proprietário', d.proprietario_documento ? formatarDocumento(d.proprietario_documento) : ''],
     ['Contato Prop', d.proprietario_telefone ? formatarTelefone(d.proprietario_telefone) : ''],
+    ['PIS Proprietário', d.proprietario_pis ? formatarPis(d.proprietario_pis) : ''],
     ['TAG', d.tag],
     ['Placa Cavalo', d.placa_cavalo ? formatarPlaca(d.placa_cavalo) : ''],
     ['Placa Carreta', d.placa_carreta ? formatarPlaca(d.placa_carreta) : ''],
+    ['Rastreador', d.rastreador],
     ['Rastreador ID', d.rastreador_id],
     ['OBS', d.obs],
   ];
@@ -129,20 +131,28 @@ async function criar(dados, solicitante) {
     if (dados.proprietario_nome || dados.proprietario_documento) {
       if (dados.proprietario_documento) {
         const p = await q(
-          `INSERT INTO proprietarios (documento, nome, telefone)
-           VALUES (?, ?, ?)
+          `INSERT INTO proprietarios (documento, nome, telefone, pis)
+           VALUES (?, ?, ?, ?)
            ON CONFLICT (documento) DO UPDATE SET
              nome          = excluded.nome,
              telefone      = COALESCE(excluded.telefone, proprietarios.telefone),
+             -- COALESCE e nao substituicao: um cadastro novo sem o PIS nao
+             -- apaga o PIS que outro cadastro ja tinha informado.
+             pis           = COALESCE(excluded.pis, proprietarios.pis),
              atualizado_em = ${db.AGORA_SQL}
            RETURNING id`,
-          [dados.proprietario_documento, dados.proprietario_nome || '(sem nome)', dados.proprietario_telefone || null]
+          [
+            dados.proprietario_documento,
+            dados.proprietario_nome || '(sem nome)',
+            dados.proprietario_telefone || null,
+            dados.proprietario_pis || null,
+          ]
         );
         proprietarioId = p.rows[0].id;
       } else {
         const p = await q(
-          `INSERT INTO proprietarios (nome, telefone) VALUES (?, ?) RETURNING id`,
-          [dados.proprietario_nome, dados.proprietario_telefone || null]
+          `INSERT INTO proprietarios (nome, telefone, pis) VALUES (?, ?, ?) RETURNING id`,
+          [dados.proprietario_nome, dados.proprietario_telefone || null, dados.proprietario_pis || null]
         );
         proprietarioId = p.rows[0].id;
       }
@@ -174,8 +184,8 @@ async function criar(dados, solicitante) {
     // ---- Dados estruturados ----------------------------------------------
     await q(
       `INSERT INTO solicitacao_cadastro
-         (solicitacao_id, condutor_id, proprietario_id, placa_cavalo, placa_carreta, tag, rastreador_id, obs)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+         (solicitacao_id, condutor_id, proprietario_id, placa_cavalo, placa_carreta, tag, rastreador, rastreador_id, obs)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         solicitacaoId,
         condutorId,
@@ -183,6 +193,7 @@ async function criar(dados, solicitante) {
         dados.placa_cavalo || null,
         dados.placa_carreta || null,
         dados.tag || null,
+        dados.rastreador || null,
         dados.rastreador_id || null,
         dados.obs || null,
       ]

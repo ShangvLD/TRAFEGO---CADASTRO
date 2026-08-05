@@ -157,6 +157,16 @@
                             <input type="text" id="proprietario_telefone" name="proprietario_telefone" placeholder="(11) 96304-0076" inputmode="tel" maxlength="20">
                             <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
                         </div>
+
+                        <!-- PIS: só aparece quando o documento é CPF.
+                             Empresa não tem PIS, e um campo que não se aplica
+                             na tela é convite para preencher errado. -->
+                        <div class="campo" data-campo="proprietario_pis" id="campo-pis" hidden>
+                            <label for="proprietario_pis">Código PIS</label>
+                            <input type="text" id="proprietario_pis" name="proprietario_pis" placeholder="000.00000.00-0" inputmode="numeric" maxlength="14">
+                            <span class="dica">Opcional — proprietário pessoa física</span>
+                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
+                        </div>
                     </div>
                 </div>
 
@@ -189,16 +199,30 @@
                     </div>
                     <p class="form-secao__ajuda">Opcional. Deixe em branco se não houver — não preencha com ponto ou traço.</p>
 
-                    <div class="campos">
+                    <!-- As opções destas listas vêm de src/validacao.js, servido
+                         ao navegador em /js/validacao.js. Uma fonte só: incluir
+                         um fornecedor novo é editar aquela lista, e a tela e a
+                         validação do servidor acompanham juntas. -->
+                    <div class="campos campos--3">
                         <div class="campo" data-campo="tag">
-                            <label for="tag">TAG</label>
-                            <input type="text" id="tag" name="tag" placeholder="Identificação da TAG" maxlength="60">
+                            <label for="tag">TAG de pedágio</label>
+                            <select id="tag" name="tag">
+                                <option value="">— sem TAG —</option>
+                            </select>
+                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
+                        </div>
+
+                        <div class="campo" data-campo="rastreador">
+                            <label for="rastreador">Rastreador</label>
+                            <select id="rastreador" name="rastreador">
+                                <option value="">— sem rastreador —</option>
+                            </select>
                             <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
                         </div>
 
                         <div class="campo" data-campo="rastreador_id">
                             <label for="rastreador_id">Rastreador ID</label>
-                            <input type="text" id="rastreador_id" name="rastreador_id" placeholder="Identificação do equipamento" maxlength="60">
+                            <input type="text" id="rastreador_id" name="rastreador_id" placeholder="Número do equipamento" maxlength="60">
                             <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
                         </div>
                     </div>
@@ -500,6 +524,61 @@
         for (const id of ['placa_cavalo', 'placa_carreta']) {
             mascarar(id, (v) => V.normalizarPlaca(v).slice(0, 7));
         }
+
+        mascarar('proprietario_pis', (v) => {
+            const d = V.apenasDigitos(v).slice(0, 11);
+            if (d.length <= 3) return d;
+            if (d.length <= 8) return d.slice(0, 3) + '.' + d.slice(3);
+            if (d.length <= 10) return d.slice(0, 3) + '.' + d.slice(3, 8) + '.' + d.slice(8);
+            return d.slice(0, 3) + '.' + d.slice(3, 8) + '.' + d.slice(8, 10) + '-' + d.slice(10);
+        });
+
+        // ------------------------------------------------------------------
+        // Listas fechadas de TAG e rastreador
+        //
+        // Montadas a partir de V.TAGS_PEDAGIO e V.RASTREADORES, que vêm de
+        // src/validacao.js. Escrever as opções no HTML criaria uma segunda
+        // lista para manter em dia — e é assim que a tela e o servidor passam
+        // a discordar.
+        // ------------------------------------------------------------------
+        function preencherLista(id, valores) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            for (const valor of valores) {
+                const op = document.createElement('option');
+                op.value = valor;
+                op.textContent = valor;
+                el.appendChild(op);
+            }
+        }
+        preencherLista('tag', V.TAGS_PEDAGIO || []);
+        preencherLista('rastreador', V.RASTREADORES || []);
+
+        // ------------------------------------------------------------------
+        // Código PIS: só existe para proprietário pessoa física
+        //
+        // Aparece quando o documento tem 11 dígitos (CPF) e some quando vira
+        // CNPJ. Ao sumir, o valor é limpo: um PIS escondido continuaria sendo
+        // enviado, e o servidor recusaria por um campo que a pessoa não vê.
+        // ------------------------------------------------------------------
+        (function ligarPis() {
+            const doc = document.getElementById('proprietario_documento');
+            const campo = document.getElementById('campo-pis');
+            const pis = document.getElementById('proprietario_pis');
+            if (!doc || !campo || !pis) return;
+
+            function atualizar() {
+                const ehCpf = V.apenasDigitos(doc.value).length === 11;
+                campo.hidden = !ehCpf;
+                if (!ehCpf && pis.value) {
+                    pis.value = '';
+                    limparErro('proprietario_pis');
+                }
+            }
+            doc.addEventListener('input', atualizar);
+            doc.addEventListener('blur', atualizar);
+            atualizar();
+        })();
 
         // ------------------------------------------------------------------
         // Envio

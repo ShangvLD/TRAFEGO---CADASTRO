@@ -359,6 +359,29 @@
     font-size: 0.78rem;
 }
 
+/* "obrigatório" dos anexos. Mesmo tamanho do das perguntas, para os dois
+   controles se lerem como a mesma coisa em telas diferentes. */
+.item-cfg .marca-obrig {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+/* Anexo desligado não pode ser obrigatório — o controle acompanha. */
+.item-cfg .marca-obrig:has(input:disabled) {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.item-cfg .marca-obrig + .btn-excluir {
+    margin-left: var(--space-2);
+}
+
 /* Excluir fica visualmente discreto e à direita: é permanente, então não deve
    competir por atenção com o interruptor, que é a ação reversível do dia a dia. */
 .btn-excluir {

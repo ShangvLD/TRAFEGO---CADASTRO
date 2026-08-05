@@ -27,7 +27,15 @@ async function prepararEnvio({ modulo, solicitacaoId, tipo, nomeArquivo, content
 
   const prov = armazenamento.provedor();
   if (!prov.disponivel()) {
-    return { ok: false, erro: 'Armazenamento não configurado no servidor.' };
+    // Mensagem nomeando a variável de propósito: quem vê isto é do time
+    // interno, e "não configurado" sozinho não diz o que fazer. A causa é
+    // sempre a mesma — a chave não chegou ao ambiente.
+    return {
+      ok: false,
+      erro:
+        'Armazenamento não configurado: falta a variável SUPABASE_SERVICE_KEY neste ambiente. ' +
+        'Um administrador pode conferir em Configurações > Armazenamento.',
+    };
   }
 
   const pasta = armazenamento.pastaDoCadastro(dono && dono.nome, dono && dono.cpf);

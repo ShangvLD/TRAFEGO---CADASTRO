@@ -64,6 +64,48 @@ aceita('CPF aceito no campo CPF-ou-CNPJ', v.validarCpfOuCnpj('52998224725'), '52
 rejeita('documento com 12 dígitos', v.validarCpfOuCnpj('112223330001'));
 
 // --------------------------------------------------------------------------
+console.log('=== PIS / PASEP ===');
+aceita('PIS válido', v.validarPis('120.00345.56-7'), '12000345567');
+aceita('PIS válido sem máscara', v.validarPis('12345678900'), '12345678900');
+aceita('PIS com dígito 0 por resto < 2', v.validarPis('00000123455'), '00000123455');
+rejeita('PIS com dígito errado', v.validarPis('12000345568'));
+rejeita('PIS com 10 dígitos', v.validarPis('1200034556'));
+rejeita('PIS com 12 dígitos', v.validarPis('120003455670'));
+rejeita('PIS com todos os dígitos iguais', v.validarPis('11111111111'));
+aceita('PIS vazio é opcional', v.validarPis(''), null);
+aceita('PIS "N/A" conta como vazio', v.validarPis('N/A'), null);
+rejeita('PIS obrigatório e vazio', v.validarPis('', { obrigatorio: true }));
+conferir('formatarPis', v.formatarPis('12000345567') === '120.00345.56-7');
+
+// O PIS é de pessoa física: preenchido junto com CNPJ, é campo trocado.
+{
+  const comCnpj = v.validarCadastro(
+    { proprietario_documento: '11222333000181', proprietario_pis: '12000345567' },
+    { hoje: '2026-08-04' }
+  );
+  conferir('PIS com CNPJ é recusado', !!comCnpj.erros.proprietario_pis);
+
+  const comCpf = v.validarCadastro(
+    { proprietario_documento: '52998224725', proprietario_pis: '12000345567' },
+    { hoje: '2026-08-04' }
+  );
+  conferir('PIS com CPF é aceito', !comCpf.erros.proprietario_pis);
+}
+
+// --------------------------------------------------------------------------
+console.log('=== TAG de pedágio e rastreador (listas fechadas) ===');
+aceita('TAG da lista', v.validarDaLista('SEM PARAR', v.TAGS_PEDAGIO), 'SEM PARAR');
+aceita('TAG em minúsculas vira o valor da lista', v.validarDaLista('sem parar', v.TAGS_PEDAGIO), 'SEM PARAR');
+aceita('TAG com espaço sobrando', v.validarDaLista('  Conect   Car ', v.TAGS_PEDAGIO), 'CONECT CAR');
+rejeita('TAG fora da lista', v.validarDaLista('TAG-00123', v.TAGS_PEDAGIO));
+rejeita('"SEM PARA" (grafia antiga) não passa', v.validarDaLista('SEM PARA', v.TAGS_PEDAGIO));
+aceita('TAG vazia é opcional', v.validarDaLista('', v.TAGS_PEDAGIO), null);
+aceita('rastreador da lista', v.validarDaLista('onixsat', v.RASTREADORES), 'ONIXSAT');
+rejeita('rastreador fora da lista', v.validarDaLista('OUTRO', v.RASTREADORES));
+conferir('4 rastreadores', v.RASTREADORES.length === 4);
+conferir('3 TAGs', v.TAGS_PEDAGIO.length === 3);
+
+// --------------------------------------------------------------------------
 console.log('=== Placa ===');
 aceita('placa antiga', v.validarPlaca('ABC1234'), 'ABC1234');
 aceita('placa antiga com hífen', v.validarPlaca('abc-1234'), 'ABC1234');
@@ -200,7 +242,8 @@ const cadastroBom = {
   proprietario_telefone: '11 96304-0076',
   placa_cavalo: 'ABC1D23',
   placa_carreta: 'XYZ4321',
-  tag: 'TAG-00123',
+  tag: 'SEM PARAR',
+  rastreador: 'SASCAR',
   rastreador_id: 'RST-998',
   obs: 'Cadastro de teste',
   operacoes: ['MERCADO LIVRE', 'SHOPEE'],

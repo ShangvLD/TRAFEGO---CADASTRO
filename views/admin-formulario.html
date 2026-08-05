@@ -333,6 +333,10 @@
                 '</div>'
             ).join('');
 
+            // Dois controles por anexo, e eles respondem perguntas diferentes:
+            // o switch diz se o anexo APARECE no formulário; a caixa
+            // "obrigatório" diz se ele TRAVA o envio. Um anexo desligado não
+            // pode ser obrigatório, então a caixa acompanha o switch.
             elListaDocs.innerHTML = cfg.documentos.map((d) =>
                 '<div class="item-cfg">' +
                     '<label class="switch">' +
@@ -340,6 +344,11 @@
                         '<span class="trilho"></span>' +
                     '</label>' +
                     '<span class="item-nome' + (d.ativo ? '' : ' apagado') + '">' + esc(d.rotulo) + '</span>' +
+                    '<label class="marca-obrig" title="Trava o envio enquanto o anexo não for enviado">' +
+                        '<input type="checkbox" data-doc-obrig="' + d.id + '"' +
+                            (d.obrigatorio ? ' checked' : '') +
+                            (d.ativo ? '' : ' disabled') + '> obrigatório' +
+                    '</label>' +
                     botaoExcluir('documentos', d.id, d.rotulo, 'o anexo') +
                 '</div>'
             ).join('');
@@ -437,6 +446,11 @@
             }
             if (el.dataset.docAtivo) {
                 const ok = await enviar('/api/admin/documentos/' + el.dataset.docAtivo, 'PATCH', { ativo: el.checked });
+                if (ok) await carregar();
+                return;
+            }
+            if (el.dataset.docObrig) {
+                const ok = await enviar('/api/admin/documentos/' + el.dataset.docObrig, 'PATCH', { obrigatorio: el.checked });
                 if (ok) await carregar();
                 return;
             }

@@ -130,6 +130,48 @@ function validarCpfOuCnpj(valor, { obrigatorio = false } = {}) {
 }
 
 // --------------------------------------------------------------------------
+// PIS / PASEP / NIT
+//
+// Onze dígitos com dígito verificador próprio: os dez primeiros são
+// multiplicados pelos pesos 3,2,9,8,7,6,5,4,3,2 e o resto da divisão por 11
+// define o último. Resto 0 ou 1 dá dígito 0.
+//
+// Só faz sentido para o proprietário PESSOA FÍSICA — empresa não tem PIS.
+// --------------------------------------------------------------------------
+
+const PESOS_PIS = [3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+
+function pisValido(digitos) {
+  const d = apenasDigitos(digitos);
+  if (d.length !== 11) return false;
+  // Todos iguais passariam na conta (00000000000 fecha), e não são PIS reais.
+  if (/^(\d)\1{10}$/.test(d)) return false;
+
+  let soma = 0;
+  for (let i = 0; i < 10; i++) soma += Number(d[i]) * PESOS_PIS[i];
+
+  const resto = soma % 11;
+  const dv = resto < 2 ? 0 : 11 - resto;
+  return dv === Number(d[10]);
+}
+
+/** 123.45678.90-1 */
+function formatarPis(valor) {
+  const d = apenasDigitos(valor);
+  if (d.length !== 11) return String(valor || '');
+  return `${d.slice(0, 3)}.${d.slice(3, 8)}.${d.slice(8, 10)}-${d.slice(10)}`;
+}
+
+function validarPis(valor, { obrigatorio = false } = {}) {
+  if (vazio(valor)) {
+    return obrigatorio ? erro('Informe o PIS.') : ok(null);
+  }
+  const d = apenasDigitos(valor);
+  if (d.length !== 11) return erro('O PIS deve ter 11 dígitos.');
+  return pisValido(d) ? ok(d) : erro('PIS inválido (dígito verificador não confere).');
+}
+
+// --------------------------------------------------------------------------
 // Placa de veículo
 //
 // Dois formatos convivem na frota brasileira:
@@ -372,6 +414,48 @@ const OPERACOES = [
 ];
 
 // ---------------------------------------------------------------------------
+// Rastreamento: quem fornece a TAG de pedágio e quem fornece o rastreador
+//
+// Listas fechadas em vez de texto livre. Antes, cada pessoa digitava do seu
+// jeito ("SEM PARA", "Sem Parar", "semparar") e agrupar por fornecedor virava
+// adivinhação. A lista resolve na entrada, que é o único lugar barato.
+//
+// Para incluir um fornecedor novo, acrescente aqui: o formulário, a validação
+// e o servidor leem desta mesma lista.
+// ---------------------------------------------------------------------------
+
+const TAGS_PEDAGIO = ['CONECT CAR', 'SEM PARAR', 'VELOE'];
+
+const RASTREADORES = ['SASCAR', 'AUTOTRAC', 'ONIXSAT', 'OMNILINK'];
+
+/**
+ * Valida um valor contra uma lista fechada.
+ *
+ * Tolerante na comparação (sem acento, sem espaço duplicado, maiúsculas) e
+ * exato na gravação: o que entra no banco é o valor da lista, não o que a
+ * pessoa digitou. É isso que faz o agrupamento por fornecedor funcionar.
+ */
+function validarDaLista(valor, lista, { rotulo = 'O valor', obrigatorio = false } = {}) {
+  if (vazio(valor)) {
+    return obrigatorio ? erro(`${rotulo} é obrigatório.`) : ok(null);
+  }
+
+  const chave = (t) =>
+    String(t)
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .toUpperCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const alvo = chave(valor);
+  const achado = lista.find((item) => chave(item) === alvo);
+  if (achado) return ok(achado);
+
+  return erro(`${rotulo} deve ser um destes: ${lista.join(', ')}.`);
+}
+
+// ---------------------------------------------------------------------------
 // Tipos de documento
 //
 // Extraídos das perguntas de upload REAIS do Microsoft Forms (o nome da
@@ -493,13 +577,26 @@ function validarCadastro(entrada, { hoje = null, operacoesPermitidas = null } = 
   aplicar('proprietario_nome', validarTexto(e.proprietario_nome, { rotulo: 'O nome do proprietário', max: 120 }));
   aplicar('proprietario_documento', validarCpfOuCnpj(e.proprietario_documento));
   aplicar('proprietario_telefone', validarTelefone(e.proprietario_telefone, { rotulo: 'O contato do proprietário' }));
+  aplicar('proprietario_pis', validarPis(e.proprietario_pis));
+
+  // O PIS é de pessoa física. Preenchido junto com um CNPJ, alguém digitou no
+  // campo errado — e um número no campo errado é pior que campo vazio, porque
+  // parece dado bom.
+  if (
+    !erros.proprietario_pis &&
+    !vazio(e.proprietario_pis) &&
+    apenasDigitos(e.proprietario_documento).length === 14
+  ) {
+    erros.proprietario_pis = 'PIS é do proprietário pessoa física. Com CNPJ, deixe em branco.';
+  }
 
   // Veículo
   aplicar('placa_cavalo', validarPlaca(e.placa_cavalo, { rotulo: 'A placa do cavalo' }));
   aplicar('placa_carreta', validarPlaca(e.placa_carreta, { rotulo: 'A placa da carreta' }));
 
   // Rastreamento
-  aplicar('tag', validarTexto(e.tag, { rotulo: 'A TAG', max: 60 }));
+  aplicar('tag', validarDaLista(e.tag, TAGS_PEDAGIO, { rotulo: 'A TAG' }));
+  aplicar('rastreador', validarDaLista(e.rastreador, RASTREADORES, { rotulo: 'O rastreador' }));
   aplicar('rastreador_id', validarTexto(e.rastreador_id, { rotulo: 'O ID do rastreador', max: 60 }));
 
   // Observação
@@ -541,6 +638,13 @@ module.exports = {
   cnpjValido,
   formatarCnpj,
   validarCpfOuCnpj,
+  pisValido,
+  formatarPis,
+  validarPis,
+  // listas fechadas
+  TAGS_PEDAGIO,
+  RASTREADORES,
+  validarDaLista,
   // veículo
   normalizarPlaca,
   placaValida,
