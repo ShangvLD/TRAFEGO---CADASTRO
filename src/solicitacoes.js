@@ -307,6 +307,7 @@ async function excluir(id) {
   // chave estrangeira ao passar a servir os três módulos — a cascata é feita
   // aqui, senão os arquivos ficariam órfãos no storage.
   await require('./documentos').excluirDaSolicitacao('terceiro', id);
+  await require('./atendimentos').excluirDaSolicitacao('terceiro', id);
 
   const info = await db.prepare('DELETE FROM solicitacoes WHERE id = ?').run(id);
   return info.changes > 0;

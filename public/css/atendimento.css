@@ -1,0 +1,206 @@
+/* ============================================================================
+   Atendimento — selo na listagem e modal de "como participar"
+
+   Usa as variáveis do base.css; nenhuma cor solta, para o dia em que o tema
+   mudar não sobrar um azul perdido só aqui.
+   ========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   Célula da listagem
+   -------------------------------------------------------------------------- */
+.at-cel {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    line-height: 1.35;
+}
+
+.at-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    align-self: flex-start;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: .72rem;
+    font-weight: 700;
+    background: var(--primary-soft);
+    color: var(--primary-darker);
+    white-space: nowrap;
+}
+
+.at-badge .material-symbols-rounded {
+    font-size: 14px;
+}
+
+.at-linha {
+    font-size: .78rem;
+    color: var(--text-primary);
+}
+
+.at-quando,
+.at-sem-dono {
+    font-size: .72rem;
+    color: var(--text-secondary);
+}
+
+.at-livre {
+    font-size: .78rem;
+    color: var(--text-secondary);
+}
+
+/* ---------------------------------------------------------------------------
+   Modal
+   -------------------------------------------------------------------------- */
+.at-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-4, 16px);
+    background: rgba(15, 23, 42, .55);
+}
+
+.at-overlay[hidden] {
+    display: none;
+}
+
+.at-modal {
+    width: min(520px, 100%);
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: var(--space-6, 24px);
+    border-radius: var(--radius-lg, 14px);
+    background: var(--surface, #fff);
+    box-shadow: 0 24px 60px rgba(15, 23, 42, .28);
+}
+
+.at-modal h3 {
+    margin: 0 0 var(--space-4, 16px);
+    font-size: 1.1rem;
+    color: var(--text-primary);
+}
+
+.at-ja {
+    margin-bottom: var(--space-4, 16px);
+    padding: var(--space-3, 12px);
+    border-radius: var(--radius, 10px);
+    background: var(--surface-muted, #f1f5f9);
+}
+
+.at-ja--livre {
+    font-size: .85rem;
+    color: var(--text-secondary);
+}
+
+.at-opcoes {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2, 8px);
+}
+
+.at-op {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3, 12px);
+    width: 100%;
+    padding: var(--space-4, 16px);
+    border: 1.5px solid var(--border, #e2e8f0);
+    border-radius: var(--radius, 10px);
+    background: var(--surface, #fff);
+    text-align: left;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+}
+
+.at-op:hover:not(:disabled) {
+    border-color: var(--primary);
+    background: var(--primary-soft);
+}
+
+.at-op:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+}
+
+.at-op--principal {
+    border-color: var(--primary);
+}
+
+.at-op strong {
+    display: block;
+    font-size: .95rem;
+    color: var(--text-primary);
+}
+
+.at-op small {
+    display: block;
+    margin-top: 2px;
+    font-size: .8rem;
+    color: var(--text-secondary);
+}
+
+.at-op .material-symbols-rounded {
+    color: var(--primary);
+}
+
+.at-erro {
+    margin-top: var(--space-3, 12px);
+    padding: var(--space-3, 12px);
+    border-radius: var(--radius, 10px);
+    font-size: .85rem;
+    background: var(--danger-soft, #fee2e2);
+    color: var(--danger, #b91c1c);
+}
+
+.at-rodape {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: var(--space-4, 16px);
+}
+
+.at-cancelar {
+    padding: 8px 16px;
+    border: 1px solid var(--border, #e2e8f0);
+    border-radius: var(--radius, 10px);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: .875rem;
+    cursor: pointer;
+}
+
+.at-cancelar:hover {
+    background: var(--surface-muted, #f1f5f9);
+}
+
+/* ---------------------------------------------------------------------------
+   Bloco dentro do detalhe do cadastro
+   -------------------------------------------------------------------------- */
+.at-detalhe {
+    margin-bottom: var(--space-4, 16px);
+    padding: var(--space-3, 12px) var(--space-4, 16px);
+    border-left: 3px solid var(--primary);
+    border-radius: var(--radius, 10px);
+    background: var(--primary-soft);
+    font-size: .85rem;
+    line-height: 1.6;
+}
+
+.at-detalhe__titulo {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+    font-weight: 700;
+    color: var(--primary-darker);
+}
+
+.at-detalhe__titulo .material-symbols-rounded {
+    font-size: 18px;
+}
+
+.at-detalhe small {
+    color: var(--text-secondary);
+}

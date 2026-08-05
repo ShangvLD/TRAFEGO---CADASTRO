@@ -152,6 +152,7 @@ function criarCamada(tabelaBruta, slugDoModulo) {
     // uma solicitação deixaria os arquivos órfãos no storage, pagos e invisíveis.
     if (slugDoModulo) {
       await require('./documentos').excluirDaSolicitacao(slugDoModulo, id);
+      await require('./atendimentos').excluirDaSolicitacao(slugDoModulo, id);
     }
     const info = await db.prepare(`DELETE FROM ${tabela} WHERE id = ?`).run(id);
     return info.changes > 0;

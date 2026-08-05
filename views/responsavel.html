@@ -13,6 +13,7 @@
 
     <link rel="stylesheet" href="/css/base.css">
     <link rel="stylesheet" href="/css/paginas.css">
+    <link rel="stylesheet" href="/css/atendimento.css">
 </head>
 <body class="has-header">
 
@@ -109,13 +110,14 @@
                             <th>Solicitante</th>
                             <th>Assunto</th>
                             <th>Anexo</th>
+                            <th>Atendimento</th>
                             <th>Status</th>
                             <th>Ações</th>
                         </tr>
                     </thead>
                     <tbody id="tabela-corpo">
                         <tr>
-                            <td colspan="7">
+                            <td colspan="8">
                                 <div class="empty-state">
                                     <span class="material-symbols-rounded">hourglass_empty</span>
                                     <h4>Carregando...</h4>
@@ -151,6 +153,7 @@
     <script src="/js/app.js"></script>
     <script src="/js/zip.js"></script>
     <script src="/js/exportar.js"></script>
+    <script src="/js/atendimento.js"></script>
     <script>
         const corpo = document.getElementById('tabela-corpo');
         const overlay = document.getElementById('modal-detalhe');
@@ -162,6 +165,8 @@
         let ehAdmin = false; // controla a exibição do botão de excluir
         let idAtual = null;  // id da solicitação aberta no modal
         let contagemAnexos = {}; // quantos anexos cada solicitação tem
+        let atendimentoPorId = {}; // quem está cuidando de cada cadastro
+        let meuId = null;          // para saber se sou eu quem está no atendimento
 
         // Formata "2026-07-13 15:40:12" -> "13/07/2026"
         function formatarData(iso) {
@@ -431,7 +436,9 @@
             const s = solicitacoesCache.find((x) => String(x.id) === String(id));
             if (!s) return;
             idAtual = s.id;
-            modalBody.innerHTML = detalheHtml(s);
+            // Quem está no cadastro aparece no topo do detalhe: é a primeira
+            // coisa que importa antes de ligar para o motorista.
+            modalBody.innerHTML = Atendimento.detalhe(atendimentoPorId[s.id]) + detalheHtml(s);
             modalFooter.innerHTML = footerHtml(s);
             overlay.hidden = false;
             document.body.style.overflow = 'hidden';
@@ -461,6 +468,7 @@
                 <td>${esc(s.solicitante_nome)}<br><small style="color:var(--text-secondary)">${esc(s.solicitante_email)}</small></td>
                 <td>${clientesChips(s.assunto)}</td>
                 <td>${anexosResumo(s.anexos, contagemAnexos[s.id])}</td>
+                <td>${Atendimento.selo(atendimentoPorId[s.id])}</td>
                 <td>${BADGE[s.status_geral] || esc(s.status_geral || s.status)}</td>
                 <td><div style="display:flex;gap:6px;align-items:center">${verBtn}${excluirBtn}</div></td>
             </tr>`;
@@ -483,10 +491,12 @@
                 atualizarKpis(dados.resumo || {});
                 ehAdmin = dados.papel === 'admin';
                 contagemAnexos = dados.anexos || {};
+                atendimentoPorId = dados.atendimentos || {};
+                meuId = dados.usuarioId ?? null;
                 solicitacoesCache = dados.solicitacoes || [];
 
                 if (!solicitacoesCache.length) {
-                    corpo.innerHTML = `<tr><td colspan="7">
+                    corpo.innerHTML = `<tr><td colspan="8">
                         <div class="empty-state">
                             <span class="material-symbols-rounded">database</span>
                             <h4>Nenhuma solicitação ainda</h4>
@@ -498,7 +508,7 @@
                 corpo.innerHTML = solicitacoesCache.map(linhaHtml).join('');
                 atualizarBotaoExportar();
             } catch (e) {
-                corpo.innerHTML = `<tr><td colspan="7">
+                corpo.innerHTML = `<tr><td colspan="8">
                     <div class="empty-state">
                         <span class="material-symbols-rounded">wifi_off</span>
                         <h4>Erro ao carregar</h4>
@@ -582,17 +592,37 @@
             }
         }
 
+        /**
+         * Abre o cadastro DEPOIS de a pessoa declarar como vai participar.
+         *
+         * A pergunta vem antes de propósito: o objetivo é evitar duas pessoas
+         * cuidando do mesmo cadastro sem saber, e perguntar na saída não evita
+         * nada — o retrabalho já aconteceu. Quem já está participando não é
+         * perguntado de novo; reabrir a tela não é uma decisão nova.
+         */
+        async function abrirComAtendimento(id) {
+            const escolha = await Atendimento.perguntarComoParticipar('terceiro', id, {
+                ehAdmin,
+                usuarioId: meuId,
+            });
+            if (escolha === null) return; // cancelou
+            await carregar(); // a linha passa a mostrar o atendimento
+            abrirModal(id);
+        }
+
         // Clique na tabela: ver detalhes / excluir, ou abrir o detalhe da linha.
         corpo.addEventListener('click', (e) => {
             const btn = e.target.closest('.btn-acao');
             if (btn) {
                 const id = btn.dataset.id;
                 if (btn.classList.contains('excluir')) { excluir(id); return; }
-                abrirModal(id); // "ver"
+                abrirComAtendimento(id); // "ver"
                 return;
             }
+            // Clique no checkbox de seleção não é intenção de abrir.
+            if (e.target.closest('.col-sel')) return;
             const tr = e.target.closest('tr[data-id]');
-            if (tr) abrirModal(tr.dataset.id);
+            if (tr) abrirComAtendimento(tr.dataset.id);
         });
 
         // Botões de decisão POR CLIENTE (dentro do corpo do modal).

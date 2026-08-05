@@ -40,9 +40,9 @@ const MODULOS = [
     // é o time interno que cadastra terceiros, não o terceiro em si.
     dominioExigido: 'jomedlog.com.br',
 
-    // Restrito a admin enquanto o upload de documentos não estiver liberado.
-    // Ao liberar, troque para false.
-    somenteAdmin: true,
+    // Ficou restrito a admin enquanto o upload de documentos estava sendo
+    // construído. Com o envio de anexos funcionando, o time inteiro usa.
+    somenteAdmin: false,
 
     // Tem API própria (POST /api/cadastros, que grava também nas tabelas
     // estruturadas: condutores, veiculos, documentos...). Por isso NÃO recebe a

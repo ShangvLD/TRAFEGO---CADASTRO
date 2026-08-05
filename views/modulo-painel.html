@@ -13,6 +13,7 @@
 
     <link rel="stylesheet" href="/css/base.css">
     <link rel="stylesheet" href="/css/paginas.css">
+    <link rel="stylesheet" href="/css/atendimento.css">
     <link rel="stylesheet" href="/css/cadastro.css">
 </head>
 <body class="has-header">
@@ -100,12 +101,13 @@
                             <th>Data</th>
                             <th>Solicitante</th>
                             <th>Resumo</th>
+                            <th>Atendimento</th>
                             <th>Status</th>
                             <th>Ações</th>
                         </tr>
                     </thead>
                     <tbody id="tabela-corpo">
-                        <tr><td colspan="6">
+                        <tr><td colspan="7">
                             <div class="empty-state">
                                 <span class="material-symbols-rounded">hourglass_empty</span>
                                 <h4>Carregando...</h4>
@@ -125,6 +127,7 @@
     <script src="/js/app.js"></script>
     <script src="/js/zip.js"></script>
     <script src="/js/exportar.js"></script>
+    <script src="/js/atendimento.js"></script>
     <script>
         // O módulo vem da URL: /painel/<slug>
         const SLUG = window.location.pathname.split('/').filter(Boolean)[1] || '';
@@ -133,6 +136,8 @@
         const corpo = document.getElementById('tabela-corpo');
         let lista = [];
         let podeExcluir = false;
+        let atendimentoPorId = {}; // quem está cuidando de cada cadastro
+        let meuId = null;
 
         function esc(txt) {
             const d = document.createElement('div');
@@ -163,6 +168,10 @@
                        <span class="material-symbols-rounded" style="font-size:15px">delete</span></button>`
                 : '';
 
+            // Entrar no cadastro sem decidir nada — para quem só vai apurar.
+            const atender = `<button class="badge is-info acao atender" data-id="${s.id}" style="border:none;cursor:pointer;margin-left:4px" title="Assumir ou acompanhar">
+                       <span class="material-symbols-rounded" style="font-size:15px">headset_mic</span></button>`;
+
             const anexos = (contagemAnexos[s.id] || 0);
             return `<tr>
                 <td class="col-sel"><input type="checkbox" class="sel-linha" data-id="${s.id}"></td>
@@ -171,8 +180,9 @@
                 </td>
                 <td>${esc(s.solicitante_nome)}<br><small style="color:var(--text-secondary)">${esc(s.solicitante_email)}</small></td>
                 <td>${esc(s.assunto)}${s.detalhes ? `<br><small style="color:var(--text-secondary)">${esc(String(s.detalhes).slice(0, 90))}${String(s.detalhes).length > 90 ? '…' : ''}</small>` : ''}</td>
+                <td>${Atendimento.selo(atendimentoPorId[s.id])}</td>
                 <td>${BADGE[s.status] || esc(s.status)}${s.observacao ? `<br><small style="color:var(--text-secondary)">${esc(s.observacao)}</small>` : ''}</td>
-                <td>${acoes}${excluir}</td>
+                <td>${acoes}${atender}${excluir}</td>
             </tr>`;
         }
 
@@ -193,18 +203,20 @@
                 atualizarKpis(j.resumo || {});
                 podeExcluir = !!j.podeExcluir;
                 contagemAnexos = j.anexos || {};
+                atendimentoPorId = j.atendimentos || {};
+                meuId = j.usuarioId ?? null;
                 lista = j.solicitacoes || [];
 
                 corpo.innerHTML = lista.length
                     ? lista.map(linhaHtml).join('')
-                    : `<tr><td colspan="6"><div class="empty-state">
+                    : `<tr><td colspan="7"><div class="empty-state">
                            <span class="material-symbols-rounded">database</span>
                            <h4>Nenhuma solicitação ainda</h4>
                            <p>As solicitações enviadas por este formulário aparecem aqui.</p>
                        </div></td></tr>`;
                 atualizarBotaoExportar();
             } catch (e) {
-                corpo.innerHTML = `<tr><td colspan="6"><div class="empty-state">
+                corpo.innerHTML = `<tr><td colspan="7"><div class="empty-state">
                         <span class="material-symbols-rounded">wifi_off</span>
                         <h4>Erro ao carregar</h4>
                         <p>Não foi possível falar com o servidor.</p>
@@ -243,11 +255,37 @@
             versaoConhecida = impressaoLocal();
         }
 
-        corpo.addEventListener('click', (ev) => {
+        /**
+         * Garante que a pessoa declarou como participa antes de mexer no
+         * cadastro.
+         *
+         * Nesta tela não existe "abrir": decidir é o momento em que alguém
+         * assume o cadastro, então é aí que a pergunta cabe. Quem já está
+         * participando passa direto.
+         *
+         * @returns true para seguir, false se cancelou
+         */
+        async function garantirAtendimento(id) {
+            const escolha = await Atendimento.perguntarComoParticipar(SLUG, id, {
+                ehAdmin: podeExcluir, // podeExcluir já é "é admin" nesta tela
+                usuarioId: meuId,
+            });
+            return escolha !== null;
+        }
+
+        corpo.addEventListener('click', async (ev) => {
             const btn = ev.target.closest('button.acao');
             if (!btn) return;
             const id = btn.dataset.id;
+
             if (btn.classList.contains('excluir')) return excluir(id);
+
+            if (btn.classList.contains('atender')) {
+                if (await garantirAtendimento(id)) await carregar();
+                return;
+            }
+
+            if (!(await garantirAtendimento(id))) return;
             decidir(id, btn.classList.contains('aprovar') ? 'aprovado' : 'reprovado');
         });
 

@@ -32,6 +32,7 @@ const { dadosDe } = require('./src/modulo-servico');
 const { menuPara, menuDaConta } = require('./src/menu');
 const campos = require('./src/campos');
 const documentos = require('./src/documentos');
+const atendimentos = require('./src/atendimentos');
 const {
   exigirLogin,
   exigirAdmin,
@@ -352,9 +353,11 @@ app.get(
     res.json({
       ok: true,
       papel: req.session.usuario.papel, // o front usa para mostrar o botão de excluir só ao admin
+      usuarioId: req.session.usuario.id, // para saber se ele mesmo já está no atendimento
       resumo,
       solicitacoes: lista,
       anexos,
+      atendimentos: await atendimentos.resumoDeVarias('terceiro', lista.map((s) => s.id)),
     });
   })
 );
@@ -559,6 +562,72 @@ for (const m of MODULOS) {
     const d = s.dados || {};
     return { nome: d.condutor_nome || s.solicitante_nome, cpf: d.condutor_cpf || d.cpf || '' };
   }
+
+  // ------------------------------------------------------------------------
+  // Atendimento: quem está cuidando deste cadastro
+  //
+  // Vale para os três módulos. A tela pergunta ANTES de abrir a solicitação,
+  // então estas rotas são chamadas na hora do clique, não no fim do trabalho.
+  // ------------------------------------------------------------------------
+  const baseAt = `/api/modulos/${m.slug}/solicitacoes/:id/atendimento`;
+
+  app.get(
+    baseAt,
+    exigirLogin,
+    exigirAcessoAoModulo(m.slug),
+    wrap(async (req, res) => {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
+
+      const u = req.session.usuario;
+      res.json({
+        ok: true,
+        ...(await atendimentos.resumo(m.slug, id)),
+        // O front usa para decidir se mostra o modal ou abre direto.
+        minhaParticipacao: (await atendimentos.minhaParticipacao(m.slug, id, u.id)) || null,
+        historico: await atendimentos.historico(m.slug, id),
+      });
+    })
+  );
+
+  app.post(
+    baseAt,
+    exigirLogin,
+    exigirAcessoAoModulo(m.slug),
+    wrap(async (req, res) => {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
+
+      const u = req.session.usuario;
+      const r = await atendimentos.entrar({
+        modulo: m.slug,
+        solicitacaoId: id,
+        usuario: u,
+        papel: (req.body || {}).papel,
+        // Só o admin tira o atendimento de outra pessoa, e mesmo assim
+        // precisa pedir de propósito — não acontece por clique distraído.
+        forcar: papeis.ehAdmin(u.papel) && (req.body || {}).forcar === true,
+      });
+      res.status(r.ok ? 200 : 409).json(r);
+    })
+  );
+
+  app.delete(
+    baseAt,
+    exigirLogin,
+    exigirAcessoAoModulo(m.slug),
+    wrap(async (req, res) => {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
+
+      const r = await atendimentos.sair({
+        modulo: m.slug,
+        solicitacaoId: id,
+        usuarioId: req.session.usuario.id,
+      });
+      res.status(r.ok ? 200 : 400).json(r);
+    })
+  );
 
   // ---- Lista os documentos ----
   app.get(
@@ -1040,6 +1109,9 @@ for (const m of MODULOS) {
         // na lista e para o usuário saber o que a exportação vai trazer.
         anexos,
         podeExcluir: papeis.ehAdmin(req.session.usuario.papel),
+        usuarioId: req.session.usuario.id,
+        // Quem está cuidando de cada cadastro, para a coluna "Em atendimento".
+        atendimentos: await atendimentos.resumoDeVarias(m.slug, lista.map((s) => s.id)),
       });
     })
   );
