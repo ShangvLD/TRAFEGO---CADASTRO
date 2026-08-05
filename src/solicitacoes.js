@@ -6,6 +6,7 @@
    ========================================================================== */
 
 const db = require('./db');
+const fluxo = require('./fluxo');
 
 // ---------------------------------------------------------------------------
 // Anexos
@@ -160,11 +161,29 @@ function hidratar(row) {
   }
   const clientes = parseClientes(row.assunto);
   const decisoes = parseDecisoes(row);
+
+  // rdo_aprovado é integer no banco (1/0/NULL) porque a coluna nasceu antes de
+  // haver boolean no schema; aqui vira o que o resto do código espera.
+  const rdoAprovado = row.rdo_aprovado === null || row.rdo_aprovado === undefined
+    ? null
+    : Number(row.rdo_aprovado) === 1;
+
+  const situacao = fluxo.situacaoDe({ rdoAprovado, clientes, decisoes });
+
   return {
     ...row,
     anexos: Array.isArray(anexos) ? anexos : [],
     clientes,
     decisoes,
+    rdo: {
+      aprovado: rdoAprovado,
+      por: row.rdo_por || null,
+      em: row.rdo_em || null,
+      obs: row.rdo_obs || null,
+    },
+    // "situacao" é o estado do fluxo inteiro (inclui o RDO). "status_geral"
+    // continua sendo só o resultado das gerenciadoras — telas antigas leem ele.
+    situacao,
     status_geral: statusGeral(clientes, decisoes, row.status),
   };
 }
@@ -320,18 +339,74 @@ async function excluir(id) {
  */
 async function contarPorStatus() {
   const linhas = await db
-    .prepare('SELECT status, assunto, decisoes FROM solicitacoes')
+    .prepare('SELECT status, assunto, decisoes, rdo_aprovado FROM solicitacoes')
     .all();
 
+  // Duas contagens no mesmo passe. "resumo" é o que as telas antigas já leem;
+  // "situacoes" é o fluxo completo, com o RDO — e é o que o painel mostra.
   const resumo = { total: 0, pendente: 0, aprovado: 0, reprovado: 0, parcial: 0 };
+  const situacoes = {};
+  for (const k of Object.keys(fluxo.SITUACOES)) situacoes[k] = 0;
+
   for (const l of linhas) {
     const clientes = parseClientes(l.assunto);
-    const sg = statusGeral(clientes, parseDecisoes(l), l.status);
+    const decisoes = parseDecisoes(l);
+
+    const sg = statusGeral(clientes, decisoes, l.status);
     if (resumo[sg] == null) resumo[sg] = 0;
     resumo[sg]++;
     resumo.total++;
+
+    const rdoAprovado = l.rdo_aprovado === null || l.rdo_aprovado === undefined
+      ? null
+      : Number(l.rdo_aprovado) === 1;
+    situacoes[fluxo.situacaoDe({ rdoAprovado, clientes, decisoes }).situacao]++;
   }
-  return resumo;
+
+  return { ...resumo, situacoes };
+}
+
+/**
+ * Registra o resultado da pesquisa no RDO.
+ *
+ * A validação do impedimento fica em fluxo.js e é chamada AQUI, não só na
+ * rota: gravar um "reprovado" sem comprovante deixaria a auditoria sem a
+ * única prova que ela vai procurar, e a camada de dados é o último ponto por
+ * onde tudo passa.
+ */
+async function registrarRdo(id, { aprovado, observacao, por, temComprovante }) {
+  const impedimento = fluxo.impedimentoParaRdo({ aprovado, temComprovante });
+  if (impedimento) return { ok: false, erro: impedimento };
+
+  const agora = await agoraDoBanco();
+  const s = await buscarPorId(id);
+  if (!s) return { ok: false, erro: 'Solicitação não encontrada.' };
+
+  const situacao = fluxo.situacaoDe({
+    rdoAprovado: aprovado,
+    clientes: s.clientes,
+    decisoes: s.decisoes,
+  });
+
+  await db
+    .prepare(
+      `UPDATE solicitacoes
+          SET rdo_aprovado = ?, rdo_por = ?, rdo_em = ?, rdo_obs = ?,
+              status = ?, revisado_por = ?, revisado_em = ?
+        WHERE id = ?`
+    )
+    .run(
+      aprovado ? 1 : 0,
+      por || null,
+      agora,
+      observacao || null,
+      fluxo.statusLegadoDe(situacao.situacao),
+      por || null,
+      agora,
+      id
+    );
+
+  return { ok: true, solicitacao: await buscarPorId(id) };
 }
 
 /**
@@ -369,6 +444,20 @@ async function agoraDoBanco() {
   return r ? r.agora : null;
 }
 
+/**
+ * Motivo para NÃO deixar decidir cliente, ou null quando pode.
+ * A ordem do processo é RDO primeiro, gerenciadoras depois.
+ */
+function barrarPeloRdo(s) {
+  if (s.rdo.aprovado === null) {
+    return 'Responda a pesquisa do RDO antes de decidir os clientes.';
+  }
+  if (s.rdo.aprovado === false) {
+    return 'Cadastro reprovado no RDO — não segue para as gerenciadoras.';
+  }
+  return null;
+}
+
 /** Grava a coluna decisoes e sincroniza o status legado com o status geral. */
 async function salvarDecisoes(id, clientes, decisoes, revisadoPor, agora) {
   const sg = statusGeral(clientes, decisoes, 'pendente');
@@ -393,6 +482,13 @@ async function salvarDecisoes(id, clientes, decisoes, revisadoPor, agora) {
 async function registrarDecisaoCliente(id, { cliente, status, observacao, revisadoPor }) {
   const s = await buscarPorId(id);
   if (!s) return null;
+
+  // O RDO é portão: sem ele respondido (ou reprovado), as gerenciadoras nem
+  // deveriam ter sido acionadas. Barrar aqui, e não só na tela, porque a tela
+  // é uma cópia da regra e esta é a original.
+  const barrado = barrarPeloRdo(s);
+  if (barrado) return { erro: barrado };
+
   const alvo = (s.clientes || []).find((c) => c.toUpperCase() === String(cliente || '').toUpperCase());
   if (!alvo) return null;
 
@@ -409,6 +505,10 @@ async function registrarDecisaoCliente(id, { cliente, status, observacao, revisa
 async function registrarDecisaoTodos(id, { status, observacao, revisadoPor }) {
   const s = await buscarPorId(id);
   if (!s) return null;
+
+  const barrado = barrarPeloRdo(s);
+  if (barrado) return { erro: barrado };
+
   const agora = await agoraDoBanco();
   const decisoes = { ...(s.decisoes || {}) };
   for (const c of s.clientes || []) {
@@ -419,6 +519,8 @@ async function registrarDecisaoTodos(id, { status, observacao, revisadoPor }) {
 
 module.exports = {
   listar,
+  registrarRdo,
+  barrarPeloRdo,
   listarPorEmail,
   buscarPorId,
   buscarPorOrigemId,

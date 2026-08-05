@@ -706,3 +706,116 @@ a.anexo-card:hover {
 .anexo-forms  { color: var(--text-secondary); font-weight: 600; }
 
 .anexo-origens .material-symbols-rounded { font-size: 15px; }
+
+/* ===========================================================================
+   Pesquisa RDO — a etapa antes das gerenciadoras
+
+   Bloco de destaque no topo do detalhe, porque é a primeira decisão do
+   processo: enquanto ela não existe, o resto da tela não deve ser usado.
+   =========================================================================== */
+.rdo-bloco {
+    margin-bottom: var(--space-4);
+    padding: var(--space-4);
+    border-radius: var(--radius);
+    border-left: 3px solid var(--primary);
+    background: var(--surface-muted, #f1f5f9);
+}
+
+.rdo-bloco--aprovado { border-left-color: var(--success, #15803d); background: var(--success-soft, #dcfce7); }
+.rdo-bloco--reprovado { border-left-color: var(--danger, #b91c1c); background: var(--danger-soft, #fee2e2); }
+
+.rdo-titulo {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 700;
+    font-size: 0.95rem;
+}
+
+.rdo-ajuda { margin: 4px 0 0; font-size: 0.82rem; color: var(--text-secondary); }
+.rdo-obs { margin-top: 6px; font-size: 0.85rem; font-style: italic; }
+
+.rdo-acoes { display: flex; gap: var(--space-2); margin-top: var(--space-3); }
+
+.btn-rdo {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 8px 18px;
+    border-radius: var(--radius-sm);
+    border: 1.5px solid var(--border);
+    background: #fff;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.btn-rdo.sim:hover { border-color: var(--success, #15803d); color: var(--success, #15803d); }
+.btn-rdo.nao:hover { border-color: var(--danger, #b91c1c); color: var(--danger, #b91c1c); }
+
+.btn-rdo.confirmar {
+    margin-top: var(--space-2);
+    border-color: var(--danger, #b91c1c);
+    background: var(--danger, #b91c1c);
+    color: #fff;
+}
+
+.btn-rdo:disabled { opacity: .5; cursor: not-allowed; }
+
+/* A exigência do comprovante fica em vermelho porque é bloqueio, não aviso. */
+.rdo-exigencia {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin: var(--space-3) 0 var(--space-2);
+    font-size: 0.83rem;
+    color: var(--danger, #b91c1c);
+}
+
+.rdo-ok {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: var(--space-2) 0;
+    font-size: 0.83rem;
+    color: var(--success, #15803d);
+}
+
+#rdo-reprova input[type=file],
+#rdo-reprova textarea {
+    display: block;
+    width: 100%;
+    margin-bottom: var(--space-2);
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font: inherit;
+    font-size: 0.85rem;
+}
+
+.rdo-erro {
+    margin-top: var(--space-2);
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    font-size: 0.83rem;
+    background: var(--danger-soft, #fee2e2);
+    color: var(--danger, #b91c1c);
+}
+
+.rdo-doc {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: var(--space-2);
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--danger, #b91c1c);
+}
+
+/* O que falta para o cadastro terminar, no topo do detalhe. Fica ao lado do
+   nome porque é a resposta de "e agora?", perguntada antes de qualquer outra. */
+.detalhe-falta {
+    margin-top: 4px;
+    font-size: 0.78rem;
+    color: var(--warning-dark, #92400e);
+}

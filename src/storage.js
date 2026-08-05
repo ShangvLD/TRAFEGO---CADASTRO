@@ -289,6 +289,38 @@ const supabase = {
     return { caminho };
   },
 
+  /**
+   * Assina VÁRIOS caminhos numa requisição só.
+   *
+   * Medido: assinar um caminho custa ~900ms (ida e volta até o Supabase), e
+   * esse tempo é quase todo latência — sete em paralelo davam 1023ms, sete em
+   * série davam 1820ms. Em lote, os sete saem no mesmo ~900ms de uma
+   * requisição, e não abrem sete conexões.
+   *
+   * @returns Map de caminho -> URL (o caminho que falhar simplesmente não entra)
+   */
+  async urlsDeLeitura(caminhos, segundos = 600) {
+    const mapa = new Map();
+    const lista = [...new Set((caminhos || []).filter(Boolean))];
+    if (!lista.length) return mapa;
+
+    const r = await fetch(`${URL_BASE}/storage/v1/object/sign/${BUCKET}`, {
+      method: 'POST',
+      headers: cabecalhos({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ expiresIn: segundos, paths: lista }),
+    });
+    if (!r.ok) return mapa; // quem chamou cai para a assinatura individual
+
+    for (const item of await r.json()) {
+      // O Supabase devolve um item por caminho, com "error" preenchido quando
+      // aquele falhou — um arquivo ausente não pode derrubar os outros seis.
+      if (item && item.signedURL && !item.error) {
+        mapa.set(String(item.path).replace(/^\/+/, ''), `${URL_BASE}/storage/v1${item.signedURL}`);
+      }
+    }
+    return mapa;
+  },
+
   async baixar(caminho) {
     const r = await conferir(
       await fetch(`${URL_BASE}/storage/v1/object/${BUCKET}/${encodeURI(caminho)}`, {

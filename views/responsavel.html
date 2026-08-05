@@ -186,8 +186,30 @@
             pendente:  '<span class="badge is-warning">Pendente</span>',
             aprovado:  '<span class="badge is-success">Aprovado</span>',
             reprovado: '<span class="badge is-danger">Reprovado</span>',
-            parcial:   '<span class="badge is-parcial">Parcial</span>',
+            parcial:   '<span class="badge is-parcial">Aprovado em parte</span>',
         };
+
+        /**
+         * Badge da SITUAÇÃO do fluxo — inclui as etapas do RDO, que o status
+         * antigo não conhecia. O rótulo vem do servidor (src/fluxo.js) para
+         * não existir uma segunda tabela de nomes aqui envelhecendo sozinha.
+         */
+        const CLASSE_COR = {
+            espera: 'is-warning',
+            aprovado: 'is-success',
+            reprovado: 'is-danger',
+            'meio-termo': 'is-parcial',
+        };
+
+        function badgeSituacao(s) {
+            const sit = s && s.situacao;
+            if (!sit) return BADGE[s.status_geral] || '';
+            const cls = CLASSE_COR[sit.cor] || 'is-warning';
+            const check = sit.finalizado
+                ? '<span class="material-symbols-rounded" style="font-size:14px;vertical-align:-2px">task_alt</span> '
+                : '';
+            return '<span class="badge ' + cls + '" title="' + esc(sit.ajuda) + '">' + check + esc(sit.rotulo) + '</span>';
+        }
 
         // Cores dos clientes/operações. Marcas conhecidas têm cor fixa; as demais
         // recebem uma cor estável (mesma cor sempre para o mesmo nome) via hash.
@@ -346,9 +368,83 @@
 
         // Seção "Decisão por cliente": um bloco por cliente com o selo atual e
         // os botões Aprovar/Reprovar individuais.
+        /**
+         * Bloco da pesquisa RDO — a etapa que vem ANTES das gerenciadoras.
+         *
+         * Três estados: não pesquisado (pergunta), aprovado (liberado) e
+         * reprovado (fim de linha, com o comprovante à vista). O comprovante é
+         * exigido ANTES de gravar a reprovação: gravar primeiro e cobrar depois
+         * deixaria cadastros reprovados sem prova.
+         */
+        function blocoRdo(s) {
+            const rdo = s.rdo || {};
+            const docs = docsDoModal[s.id] || [];
+            const comprovante = docs.find((d) => String(d.tipo).toUpperCase() === 'RESULTADO RDO');
+
+            if (rdo.aprovado === null || rdo.aprovado === undefined) {
+                return `<div class="rdo-bloco rdo-bloco--pergunta">
+                    <div class="rdo-titulo"><span class="material-symbols-rounded">travel_explore</span> RDO aprovado?</div>
+                    <p class="rdo-ajuda">Pesquisa interna, feita antes de acionar as gerenciadoras.</p>
+                    <div class="rdo-acoes">
+                        <button type="button" class="btn-rdo sim" data-rdo="sim">
+                            <span class="material-symbols-rounded">check</span> Sim
+                        </button>
+                        <button type="button" class="btn-rdo nao" data-rdo="nao">
+                            <span class="material-symbols-rounded">close</span> Não
+                        </button>
+                    </div>
+                    <div id="rdo-reprova" hidden>
+                        <p class="rdo-exigencia">
+                            <span class="material-symbols-rounded">attach_file</span>
+                            Anexe o resultado do RDO para confirmar a reprovação. Sem o documento
+                            o cadastro não pode ser reprovado.
+                        </p>
+                        ${comprovante
+                            ? `<p class="rdo-ok"><span class="material-symbols-rounded">check_circle</span>
+                                 ${esc(comprovante.nome_original || comprovante.nome_arquivo)} anexado.</p>`
+                            : `<input type="file" id="rdo-arquivo" accept=".pdf,.jpg,.jpeg,.png">`}
+                        <textarea id="rdo-obs" rows="2" placeholder="Observação (opcional)"></textarea>
+                        <button type="button" class="btn-rdo confirmar" id="rdo-confirmar"${comprovante ? '' : ' disabled'}>
+                            Confirmar reprovação
+                        </button>
+                        <div class="rdo-erro" id="rdo-erro" hidden></div>
+                    </div>
+                </div>`;
+            }
+
+            const quem = `${esc(rdo.por || '—')}${rdo.em ? ' · ' + formatarData(rdo.em) : ''}`;
+            const obs = rdo.obs ? `<div class="rdo-obs">${esc(rdo.obs)}</div>` : '';
+
+            if (rdo.aprovado === false) {
+                return `<div class="rdo-bloco rdo-bloco--reprovado">
+                    <div class="rdo-titulo"><span class="material-symbols-rounded">block</span> Reprovado no RDO</div>
+                    <p class="rdo-ajuda">Não segue para as gerenciadoras. Reprovado por ${quem}.</p>
+                    ${obs}
+                    ${comprovante
+                        ? `<a class="rdo-doc" href="${esc(comprovante.url || '#')}" target="_blank" rel="noopener">
+                             <span class="material-symbols-rounded">description</span>
+                             Ver o resultado do RDO</a>`
+                        : '<p class="rdo-exigencia">Comprovante não localizado.</p>'}
+                </div>`;
+            }
+
+            return `<div class="rdo-bloco rdo-bloco--aprovado">
+                <div class="rdo-titulo"><span class="material-symbols-rounded">verified</span> RDO aprovado</div>
+                <p class="rdo-ajuda">Liberado para as gerenciadoras. Aprovado por ${quem}.</p>
+                ${obs}
+            </div>`;
+        }
+
         function decisaoPorCliente(s) {
             const clientes = s.clientes || [];
             if (!clientes.length) return '<p class="modal-vazio">Sem clientes nesta solicitação.</p>';
+
+            // Sem o RDO respondido (ou com ele reprovado), decidir cliente não
+            // faz sentido — o processo nem chegou nas gerenciadoras.
+            const barrado = s.situacao && !s.situacao.podeDecidirClientes;
+            if (barrado) {
+                return `<p class="modal-vazio">${esc(s.situacao.ajuda)}</p>`;
+            }
             const decisoes = s.decisoes || {};
             const linhas = clientes.map((c) => {
                 const d = decisoes[c] || {};
@@ -450,6 +546,9 @@
                     <div>
                         <strong class="detalhe-nome">${esc(s.solicitante_nome)}</strong>
                         <div class="detalhe-email">${esc(s.solicitante_email)}</div>
+                        ${s.situacao && s.situacao.falta.length
+                            ? '<div class="detalhe-falta">Falta: ' + s.situacao.falta.map(esc).join(' · ') + '</div>'
+                            : ''}
                     </div>
                     ${BADGE[s.status_geral] || esc(s.status_geral || s.status)}
                 </div>
@@ -457,6 +556,7 @@
                     ${linhaDetalhe('Data', formatarData(s.criado_em))}
                     ${linhaDetalhe('Assunto', clientesChips(s.assunto))}
                 </div>
+                ${blocoRdo(s)}
                 <h4 class="detalhe-secao">
                     <span class="material-symbols-rounded" style="vertical-align:-5px;color:var(--primary)">how_to_reg</span>
                     Decisão por cliente
@@ -515,18 +615,35 @@
          */
         const docsDoModal = {}; // id da solicitação -> array (undefined = carregando)
 
-        async function carregarDocumentos(s) {
-            if (docsDoModal[s.id]) return redesenharDetalhe(s); // já em memória
-            try {
-                const r = await fetch('/api/modulos/terceiro/solicitacoes/' + s.id + '/documentos');
-                const j = await r.json();
-                docsDoModal[s.id] = j.ok ? j.documentos || [] : [];
-            } catch (e) {
-                docsDoModal[s.id] = [];
+        const buscaEmCurso = {}; // evita duas buscas do mesmo cadastro (prefetch + abertura)
+
+        async function carregarDocumentos(s, { silencioso = false } = {}) {
+            if (docsDoModal[s.id]) {
+                if (!silencioso) redesenharDetalhe(s);
+                return;
             }
+            if (buscaEmCurso[s.id]) {
+                await buscaEmCurso[s.id];
+                if (!silencioso && idAtual === s.id) redesenharDetalhe(s);
+                return;
+            }
+
+            buscaEmCurso[s.id] = (async () => {
+                try {
+                    const r = await fetch('/api/modulos/terceiro/solicitacoes/' + s.id + '/documentos');
+                    const j = await r.json();
+                    docsDoModal[s.id] = j.ok ? j.documentos || [] : [];
+                } catch (e) {
+                    docsDoModal[s.id] = [];
+                }
+            })();
+
+            await buscaEmCurso[s.id];
+            delete buscaEmCurso[s.id];
+
             // Só redesenha se o modal ainda é o mesmo: a resposta pode chegar
             // depois de a pessoa fechar e abrir outro cadastro.
-            if (idAtual === s.id) redesenharDetalhe(s);
+            if (!silencioso && idAtual === s.id) redesenharDetalhe(s);
         }
 
         function redesenharDetalhe(s) {
@@ -558,7 +675,7 @@
                 <td>${clientesChips(s.assunto)}</td>
                 <td>${anexosResumo(s.anexos, contagemAnexos[s.id])}</td>
                 <td>${Atendimento.selo(atendimentoPorId[s.id])}</td>
-                <td>${BADGE[s.status_geral] || esc(s.status_geral || s.status)}</td>
+                <td>${badgeSituacao(s)}</td>
                 <td><div style="display:flex;gap:6px;align-items:center">${verBtn}${excluirBtn}</div></td>
             </tr>`;
         }
@@ -568,7 +685,18 @@
             document.getElementById('kpi-pendente').textContent = r.pendente ?? 0;
             document.getElementById('kpi-aprovado').textContent = r.aprovado ?? 0;
             document.getElementById('kpi-reprovado').textContent = r.reprovado ?? 0;
-            document.getElementById('kpi-parcial').textContent = r.parcial ?? 0;
+            // As situações do fluxo, quando o servidor as manda: "pendente"
+            // vira a soma do que ainda não terminou (aguardando RDO + em
+            // análise), e o reprovado inclui quem parou no RDO.
+            const sit = r.situacoes;
+            if (sit) {
+                document.getElementById('kpi-pendente').textContent = (sit.aguardando_rdo || 0) + (sit.em_analise || 0);
+                document.getElementById('kpi-aprovado').textContent = sit.aprovado || 0;
+                document.getElementById('kpi-reprovado').textContent = (sit.reprovado || 0) + (sit.reprovado_rdo || 0);
+                document.getElementById('kpi-parcial').textContent = sit.aprovado_em_parte || 0;
+            } else {
+                document.getElementById('kpi-parcial').textContent = r.parcial ?? 0;
+            }
         }
 
         async function carregar() {
@@ -690,6 +818,12 @@
          * perguntado de novo; reabrir a tela não é uma decisão nova.
          */
         async function abrirComAtendimento(id) {
+            // Adianta a busca dos anexos: assinar as URLs leva meio segundo, e
+            // o tempo que a pessoa gasta escolhendo como participar cobre isso.
+            // Sem o prefetch, os dois tempos se somam e o anexo "demora".
+            const s = solicitacoesCache.find((x) => String(x.id) === String(id));
+            if (s) carregarDocumentos(s, { silencioso: true });
+
             const escolha = await Atendimento.perguntarComoParticipar('terceiro', id, {
                 ehAdmin,
                 usuarioId: meuId,
@@ -714,12 +848,132 @@
             if (tr) abrirComAtendimento(tr.dataset.id);
         });
 
-        // Botões de decisão POR CLIENTE (dentro do corpo do modal).
-        modalBody.addEventListener('click', (e) => {
+        // ------------------------------------------------------------------
+        // Pesquisa RDO
+        // ------------------------------------------------------------------
+
+        /** Envia o comprovante do RDO pelo mesmo caminho de qualquer anexo. */
+        async function enviarComprovanteRdo(id, arquivo) {
+            const base = '/api/modulos/terceiro/solicitacoes/' + id + '/documentos';
+
+            const rp = await fetch(base + '/preparar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    tipo: 'RESULTADO RDO',
+                    nomeArquivo: arquivo.name,
+                    contentType: arquivo.type,
+                    tamanho: arquivo.size,
+                }),
+            });
+            const prep = await rp.json();
+            if (!prep.ok) throw new Error(prep.erro || 'Não foi possível preparar o envio.');
+
+            const env = await fetch(prep.url, {
+                method: prep.metodo || 'PUT',
+                headers: Object.assign({ 'Content-Type': arquivo.type || 'application/octet-stream' }, prep.cabecalhos || {}),
+                body: arquivo,
+            });
+            if (!env.ok) throw new Error('Falha no envio do arquivo (HTTP ' + env.status + ').');
+
+            const rr = await fetch(base + '/registrar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    tipo: 'RESULTADO RDO',
+                    caminho: prep.caminho,
+                    nomeOriginal: arquivo.name,
+                    contentType: arquivo.type,
+                    tamanho: arquivo.size,
+                    provedor: prep.provedor,
+                }),
+            });
+            const reg = await rr.json();
+            if (!reg.ok) throw new Error(reg.erro || 'Não foi possível registrar o documento.');
+        }
+
+        async function gravarRdo(id, aprovado, observacao) {
+            const r = await fetch('/api/solicitacoes/' + id + '/rdo', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ aprovado, observacao }),
+            });
+            return r.json().catch(() => ({ ok: false, erro: 'Resposta inválida do servidor.' }));
+        }
+
+        modalBody.addEventListener('change', (e) => {
+            // Escolheu o arquivo: libera o botão de confirmar a reprovação.
+            if (e.target.id === 'rdo-arquivo') {
+                const btn = document.getElementById('rdo-confirmar');
+                if (btn) btn.disabled = !e.target.files.length;
+            }
+        });
+
+        // Botões de decisão POR CLIENTE e da pesquisa RDO.
+        modalBody.addEventListener('click', async (e) => {
+            if (idAtual == null) return;
+
+            // ---- RDO: Sim ----
+            const btnRdo = e.target.closest('.btn-rdo');
+            if (btnRdo) {
+                if (btnRdo.dataset.rdo === 'sim') {
+                    btnRdo.disabled = true;
+                    const j = await gravarRdo(idAtual, true, null);
+                    if (!j.ok) { alert(j.erro || 'Não foi possível registrar.'); btnRdo.disabled = false; return; }
+                    await carregar();
+                    return reabrir(idAtual);
+                }
+
+                // ---- RDO: Não -> revela a exigência do comprovante ----
+                if (btnRdo.dataset.rdo === 'nao') {
+                    const area = document.getElementById('rdo-reprova');
+                    if (area) area.hidden = false;
+                    return;
+                }
+
+                // ---- Confirmar a reprovação ----
+                if (btnRdo.id === 'rdo-confirmar') {
+                    const erroEl = document.getElementById('rdo-erro');
+                    const arq = document.getElementById('rdo-arquivo');
+                    const obs = (document.getElementById('rdo-obs') || {}).value || '';
+                    btnRdo.disabled = true;
+                    erroEl.hidden = true;
+                    try {
+                        // O anexo vai PRIMEIRO: se o envio falhar, nada foi
+                        // gravado e o cadastro continua onde estava.
+                        if (arq && arq.files.length) {
+                            btnRdo.textContent = 'Enviando o documento...';
+                            await enviarComprovanteRdo(idAtual, arq.files[0]);
+                            delete docsDoModal[idAtual]; // força reler com o novo anexo
+                        }
+                        btnRdo.textContent = 'Registrando...';
+                        const j = await gravarRdo(idAtual, false, obs);
+                        if (!j.ok) throw new Error(j.erro || 'Não foi possível registrar.');
+                        await carregar();
+                        return reabrir(idAtual);
+                    } catch (err) {
+                        erroEl.textContent = err.message;
+                        erroEl.hidden = false;
+                        btnRdo.disabled = false;
+                        btnRdo.textContent = 'Confirmar reprovação';
+                    }
+                    return;
+                }
+                return;
+            }
+
             const btn = e.target.closest('.btn-cli');
-            if (!btn || idAtual == null) return;
+            if (!btn) return;
             decidirCliente(idAtual, btn.dataset.cliente, btn.dataset.status);
         });
+
+        /** Reabre o modal com os dados recarregados. */
+        async function reabrir(id) {
+            const s = solicitacoesCache.find((x) => String(x.id) === String(id));
+            if (!s) return fecharModal();
+            await carregarDocumentos(s, { silencioso: true });
+            abrirModal(id);
+        }
 
         // Rodapé do modal: excluir / aprovar todos / reprovar todos.
         modalFooter.addEventListener('click', (e) => {

@@ -33,6 +33,7 @@ const { menuPara, menuDaConta } = require('./src/menu');
 const campos = require('./src/campos');
 const documentos = require('./src/documentos');
 const atendimentos = require('./src/atendimentos');
+const fluxo = require('./src/fluxo');
 const {
   exigirLogin,
   exigirAdmin,
@@ -709,23 +710,12 @@ for (const m of MODULOS) {
       // documento só para conseguir abrir cada um — e a miniatura da foto,
       // que é o que o analista olha primeiro, nem apareceria.
       //
-      // Em paralelo porque cada assinatura é uma ida ao storage; em série,
-      // sete anexos seriam sete esperas encadeadas.
-      const comUrl = await Promise.all(
-        lista.map(async (d) => {
-          const prov = documentos.armazenamentoDe(d);
-          if (!prov) return { ...d, url: null, indisponivel: documentos.motivoIndisponivel(d) };
-          try {
-            const assinada = await prov.urlDeLeitura(d.caminho, 1800);
-            return {
-              ...d,
-              url: assinada || `${base.replace(':id', id)}/${d.id}/baixar`,
-            };
-          } catch (e) {
-            return { ...d, url: null, indisponivel: e.message.slice(0, 120) };
-          }
-        })
-      );
+      // Assinadas em LOTE: o custo é latência, não volume. Medido, uma
+      // assinatura leva ~900ms; sete em paralelo, 1023ms; sete em lote saem
+      // no mesmo ~900ms de uma requisição só.
+      const comUrl = await documentos.comUrls(lista, {
+        rotaDeDownload: (d) => `${base.replace(':id', id)}/${d.id}/baixar`,
+      });
 
       res.json({ ok: true, documentos: comUrl });
     })
@@ -945,33 +935,29 @@ for (const m of MODULOS) {
 
       // A pasta de cada cadastro vem do caminho já gravado, não é remontada:
       // assim a exportação reflete exatamente como os arquivos foram salvos.
+      // 30 min de validade: tempo de sobra para baixar tudo, sem deixar link
+      // vivo à toa. Em lote, porque a exportação de vários cadastros pode
+      // passar de cem arquivos — uma assinatura por arquivo seria proibitivo.
+      const assinados = await documentos.comUrls(arquivos.filter((a) => a.caminho), {
+        rotaDeDownload: (a) =>
+          `/api/modulos/${m.slug}/solicitacoes/${a.solicitacao_id}/documentos/${a.id}/baixar`,
+      });
+
       const itens = [];
       const indisponiveis = [];
-      for (const a of arquivos) {
-        if (!a.caminho) continue;
+      for (const a of assinados) {
         const partes = a.caminho.split('/');
         const pasta = partes[partes.length - 2] || 'CADASTRO';
         const nome = partes[partes.length - 1];
 
-        // Cada arquivo é lido do armazenamento em que foi gravado. Um ZIP que
-        // simplesmente omite o que não alcançou parece completo e não é.
-        const prov = documentos.armazenamentoDe(a);
-        if (!prov) {
-          indisponiveis.push({ pasta, nome, motivo: documentos.motivoIndisponivel(a) });
+        // Um ZIP que simplesmente omite o que não alcançou parece completo e
+        // não é — o que falta vai declarado, não sumido.
+        if (!a.url) {
+          indisponiveis.push({ pasta, nome, motivo: a.indisponivel || documentos.motivoIndisponivel(a) });
           continue;
         }
 
-        itens.push({
-          solicitacaoId: a.solicitacao_id,
-          pasta,
-          nome,
-          tamanho: a.tamanho,
-          // 30 min: tempo de sobra para baixar tudo, sem deixar link vivo à toa.
-          // Sem link assinado (pasta em disco), aponta para a rota do servidor.
-          url:
-            (await prov.urlDeLeitura(a.caminho, 1800)) ||
-            `/api/modulos/${m.slug}/solicitacoes/${a.solicitacao_id}/documentos/${a.id}/baixar`,
-        });
+        itens.push({ solicitacaoId: a.solicitacao_id, pasta, nome, tamanho: a.tamanho, url: a.url });
       }
 
       // ---- Anexos ANTIGOS, do Microsoft Forms ----
@@ -1386,6 +1372,10 @@ app.post(
       revisadoPor: req.session.usuario.nome,
     });
 
+    if (atualizada && atualizada.erro) {
+      // 409: o pedido faz sentido, mas o processo não está nesse ponto ainda.
+      return res.status(409).json({ ok: false, erro: atualizada.erro });
+    }
     if (!atualizada) {
       return res.status(404).json({ ok: false, erro: 'Solicitação ou cliente não encontrado.' });
     }
@@ -1412,10 +1402,51 @@ app.post(
       revisadoPor: req.session.usuario.nome,
     });
 
+    if (atualizada && atualizada.erro) {
+      return res.status(409).json({ ok: false, erro: atualizada.erro });
+    }
     if (!atualizada) {
       return res.status(404).json({ ok: false, erro: 'Solicitação não encontrada.' });
     }
     res.json({ ok: true, solicitacao: atualizada });
+  })
+);
+
+// --------------------------------------------------------------------------
+// Pesquisa RDO — a etapa que vem ANTES das gerenciadoras
+//
+// Reprovar exige o comprovante JÁ ANEXADO. A conferência é feita aqui, e não
+// só na tela: um "reprovado" gravado sem prova é exatamente o registro que
+// falta quando alguém audita a decisão meses depois.
+// --------------------------------------------------------------------------
+app.post(
+  '/api/solicitacoes/:id/rdo',
+  exigirLogin,
+  exigirPainel('terceiro'),
+  wrap(async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
+
+    const { aprovado, observacao } = req.body || {};
+    if (aprovado !== true && aprovado !== false) {
+      return res.status(400).json({ ok: false, erro: 'Responda se o RDO foi aprovado.' });
+    }
+
+    // O comprovante é procurado entre os documentos já enviados — o upload usa
+    // o mesmo caminho de qualquer outro anexo, então não há um fluxo especial
+    // para manter, e o arquivo já nasce visível no histórico do cadastro.
+    const docs = await documentos.listar('terceiro', id);
+    const temComprovante = docs.some((d) => String(d.tipo).toUpperCase() === fluxo.DOC_RDO);
+
+    const r = await solicitacoes.registrarRdo(id, {
+      aprovado,
+      observacao,
+      por: req.session.usuario.nome,
+      temComprovante,
+    });
+
+    if (!r.ok) return res.status(409).json(r);
+    res.json(r);
   })
 );
 

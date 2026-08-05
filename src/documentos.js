@@ -155,6 +155,60 @@ function motivoIndisponivel(d) {
   return `Armazenamento "${d && d.provedor}" não está configurado neste ambiente.`;
 }
 
+/**
+ * Acrescenta a URL de leitura a uma lista de documentos.
+ *
+ * Assina em LOTE quando o provedor sabe fazer isso — uma requisição em vez de
+ * uma por arquivo. O ganho é de latência: a assinatura é quase toda ida e
+ * volta até o storage, então o número de chamadas pesa mais que a quantidade
+ * de caminhos.
+ *
+ * @param rotaDeDownload  (doc) => caminho da rota do servidor, usada quando o
+ *                        provedor não tem URL pública (pasta em disco)
+ */
+async function comUrls(lista, { segundos = 1800, rotaDeDownload } = {}) {
+  const docs = lista || [];
+  if (!docs.length) return [];
+
+  // Agrupa por provedor: uma lista pode misturar arquivos do Supabase com
+  // arquivos gravados em pasta, e cada um assina do seu jeito.
+  const porProvedor = new Map();
+  for (const d of docs) {
+    const chave = d.provedor || '';
+    if (!porProvedor.has(chave)) porProvedor.set(chave, []);
+    porProvedor.get(chave).push(d);
+  }
+
+  const urls = new Map();
+  for (const [, grupo] of porProvedor) {
+    const prov = armazenamentoDe(grupo[0]);
+    if (!prov) continue;
+    if (typeof prov.urlsDeLeitura === 'function') {
+      const m = await prov.urlsDeLeitura(grupo.map((d) => d.caminho), segundos);
+      for (const [caminho, url] of m) urls.set(caminho, url);
+    }
+  }
+
+  return Promise.all(
+    docs.map(async (d) => {
+      const prov = armazenamentoDe(d);
+      if (!prov) return { ...d, url: null, indisponivel: motivoIndisponivel(d) };
+
+      // Já veio no lote? Senão tenta individualmente — cobre o provedor sem
+      // assinatura em lote e o caminho que o lote não devolveu.
+      let url = urls.get(d.caminho);
+      if (!url) {
+        try {
+          url = await prov.urlDeLeitura(d.caminho, segundos);
+        } catch (e) {
+          return { ...d, url: null, indisponivel: e.message.slice(0, 120) };
+        }
+      }
+      return { ...d, url: url || (rotaDeDownload ? rotaDeDownload(d) : null) };
+    })
+  );
+}
+
 /** URL temporária para baixar um documento (null quando não há link direto). */
 async function urlDeLeitura(id, segundos = 600) {
   const d = await db.prepare('SELECT caminho, provedor FROM documentos WHERE id = ?').get(id);
@@ -241,6 +295,7 @@ module.exports = {
   prepararEnvio,
   buscarPorId,
   armazenamentoDe,
+  comUrls,
   motivoIndisponivel,
   registrar,
   listar,
