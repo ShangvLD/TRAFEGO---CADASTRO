@@ -146,7 +146,28 @@ function statusGeral(clientes, decisoes, statusLegado) {
   return 'parcial';
 }
 
-function hidratar(row) {
+/**
+ * Quantos itens ALÉM do motorista este cadastro tem.
+ *
+ * Cada um custa 10 minutos na previsão. Hoje são as placas (cavalo e carreta);
+ * quando houver implemento ou outro complemento, é aqui que ele entra — e a
+ * previsão acompanha sem mexer no cálculo.
+ */
+function itensAdicionaisDe(row, detalhes) {
+  let n = 0;
+  const texto = String(detalhes || row.detalhes || '');
+  for (const rot of ['Placa Cavalo', 'Placa Carreta']) {
+    const m = texto.match(new RegExp(rot + ':\s*([^|]+)'));
+    if (m && m[1].trim() && !/^[-.s]*$/.test(m[1])) n++;
+  }
+  return n;
+}
+
+/**
+ * @param ctx.atendimento  resumo de src/atendimentos (quem assumiu e quando)
+ * @param ctx.agora        carimbo do banco, para os tempos em curso
+ */
+function hidratar(row, ctx = {}) {
   if (!row) return row;
   let anexos = [];
   if (row.anexos) {
@@ -168,7 +189,28 @@ function hidratar(row) {
     ? null
     : Number(row.rdo_aprovado) === 1;
 
-  const situacao = fluxo.situacaoDe({ rdoAprovado, clientes, decisoes });
+  const at = ctx.atendimento || null;
+  const assumidoEm = at && at.responsavel ? at.responsavel.desde : null;
+
+  const situacao = fluxo.situacaoDe({
+    rdoAprovado,
+    clientes,
+    decisoes,
+    assumido: !!(at && at.emAtendimento),
+  });
+
+  const previsao = fluxo.previsaoDe({
+    itensAdicionais: itensAdicionaisDe(row),
+    clientes,
+  });
+
+  const tempos = fluxo.temposDe({
+    criadoEm: row.criado_em,
+    assumidoEm,
+    finalizadoEm: row.finalizado_em,
+    agora: ctx.agora || row.criado_em,
+    previsaoMin: previsao.minutos,
+  });
 
   return {
     ...row,
@@ -184,6 +226,11 @@ function hidratar(row) {
     // "situacao" é o estado do fluxo inteiro (inclui o RDO). "status_geral"
     // continua sendo só o resultado das gerenciadoras — telas antigas leem ele.
     situacao,
+    previsao,
+    tempos,
+    responsavel: at && at.responsavel ? at.responsavel.nome : null,
+    assumido_em: assumidoEm,
+    colaboradores: at ? (at.colaboradores || []).length : 0,
     status_geral: statusGeral(clientes, decisoes, row.status),
   };
 }
@@ -193,7 +240,24 @@ async function listar() {
   const linhas = await db
     .prepare('SELECT * FROM solicitacoes ORDER BY datetime(criado_em) DESC, id DESC')
     .all();
-  return linhas.map(hidratar);
+  return comContexto(linhas);
+}
+
+/**
+ * Acrescenta a cada linha quem a assumiu e os tempos.
+ *
+ * Uma consulta de atendimento para a lista inteira, e um só "agora": pedir o
+ * relógio do banco por linha seriam dezenas de idas, e ainda dariam tempos
+ * levemente diferentes entre linhas da MESMA tela.
+ */
+async function comContexto(linhas) {
+  if (!linhas.length) return [];
+  const atendimentos = require('./atendimentos');
+  const [mapa, agora] = await Promise.all([
+    atendimentos.resumoDeVarias('terceiro', linhas.map((l) => l.id)),
+    agoraDoBanco(),
+  ]);
+  return linhas.map((l) => hidratar(l, { atendimento: mapa[l.id], agora }));
 }
 
 /** Lista apenas as solicitações de um e-mail (área do solicitante). */
@@ -205,12 +269,14 @@ async function listarPorEmail(email) {
        ORDER BY datetime(criado_em) DESC, id DESC`
     )
     .all(email);
-  return linhas.map(hidratar);
+  return comContexto(linhas);
 }
 
 /** Busca uma solicitação pelo id. */
 async function buscarPorId(id) {
-  return hidratar(await db.prepare('SELECT * FROM solicitacoes WHERE id = ?').get(id));
+  const linha = await db.prepare('SELECT * FROM solicitacoes WHERE id = ?').get(id);
+  if (!linha) return linha;
+  return (await comContexto([linha]))[0];
 }
 
 /** Busca uma solicitação pelo id da resposta do Forms (para evitar duplicar). */
@@ -392,7 +458,10 @@ async function registrarRdo(id, { aprovado, observacao, por, temComprovante }) {
     .prepare(
       `UPDATE solicitacoes
           SET rdo_aprovado = ?, rdo_por = ?, rdo_em = ?, rdo_obs = ?,
-              status = ?, revisado_por = ?, revisado_em = ?
+              status = ?, revisado_por = ?, revisado_em = ?,
+              -- Reprovar no RDO encerra o cadastro; aprovar apenas libera a
+              -- etapa seguinte, então o fim volta a ser nulo.
+              finalizado_em = CASE WHEN ? THEN COALESCE(finalizado_em, ?) ELSE NULL END
         WHERE id = ?`
     )
     .run(
@@ -402,6 +471,8 @@ async function registrarRdo(id, { aprovado, observacao, por, temComprovante }) {
       observacao || null,
       fluxo.statusLegadoDe(situacao.situacao),
       por || null,
+      agora,
+      situacao.finalizado,
       agora,
       id
     );
@@ -461,6 +532,12 @@ function barrarPeloRdo(s) {
 /** Grava a coluna decisoes e sincroniza o status legado com o status geral. */
 async function salvarDecisoes(id, clientes, decisoes, revisadoPor, agora) {
   const sg = statusGeral(clientes, decisoes, 'pendente');
+
+  // Carimba o fim assim que todos os clientes têm decisão. Não dá para usar
+  // "revisado_em": ele muda a cada clique, então marcaria a última alteração
+  // e não o encerramento. E só grava uma vez — reabrir e mexer de novo não
+  // deve reescrever o momento em que o cadastro fechou.
+  const terminou = ['aprovado', 'reprovado', 'parcial'].includes(sg);
   // A coluna "status" só aceita pendente/aprovado/reprovado (CHECK). Para o
   // caso "parcial", guardamos "pendente" na coluna legada — o status geral
   // real é recalculado a partir de "decisoes" na leitura.
@@ -468,10 +545,14 @@ async function salvarDecisoes(id, clientes, decisoes, revisadoPor, agora) {
   await db
     .prepare(
       `UPDATE solicitacoes
-       SET decisoes = ?, status = ?, revisado_por = ?, revisado_em = ?
-       WHERE id = ?`
+          SET decisoes      = ?,
+              status        = ?,
+              revisado_por  = ?,
+              revisado_em   = ?,
+              finalizado_em = CASE WHEN ? THEN COALESCE(finalizado_em, ?) ELSE NULL END
+        WHERE id = ?`
     )
-    .run(JSON.stringify(decisoes), statusLegado, revisadoPor || null, agora, id);
+    .run(JSON.stringify(decisoes), statusLegado, revisadoPor || null, agora, terminou, agora, id);
   return buscarPorId(id);
 }
 

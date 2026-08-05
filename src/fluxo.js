@@ -37,7 +37,22 @@ const SITUACOES = {
   em_analise: {
     rotulo: 'Em análise',
     cor: 'espera',
-    ajuda: 'RDO liberado. Falta decidir os clientes.',
+    ajuda: 'Enviado. Ninguém assumiu ainda.',
+  },
+  em_andamento: {
+    rotulo: 'Em andamento',
+    cor: 'andamento',
+    ajuda: 'Alguém assumiu e está conduzindo o cadastro.',
+  },
+  pendente_shopee: {
+    rotulo: 'Pendente Shopee',
+    cor: 'externo',
+    ajuda: 'Aguardando aprovação da Shopee. Sem cadastro prévio, o retorno pode levar até 24 horas.',
+  },
+  pendente_amazon: {
+    rotulo: 'Pendente Amazon',
+    cor: 'externo',
+    ajuda: 'Aguardando retorno da Amazon.',
   },
   aprovado: {
     rotulo: 'Aprovado',
@@ -67,7 +82,7 @@ const DOC_RDO = 'RESULTADO RDO';
  * @param decisoes     { cliente: { status } }
  * @returns { situacao, rotulo, finalizado, podeDecidirClientes, falta }
  */
-function situacaoDe({ rdoAprovado, clientes = [], decisoes = {} }) {
+function situacaoDe({ rdoAprovado, clientes = [], decisoes = {}, assumido = false }) {
   // ---- Etapa 1: RDO ----
   if (rdoAprovado === null || rdoAprovado === undefined) {
     return montar('aguardando_rdo', {
@@ -90,14 +105,25 @@ function situacaoDe({ rdoAprovado, clientes = [], decisoes = {} }) {
   // ---- Etapa 2: gerenciadoras ----
   const semDecisao = clientes.filter((c) => !decisoes[c] || !decisoes[c].status);
   if (!clientes.length) {
-    return montar('em_analise', {
+    return montar(assumido ? 'em_andamento' : 'em_analise', {
       finalizado: false,
       podeDecidirClientes: true,
       falta: ['Nenhum cliente informado neste cadastro'],
     });
   }
   if (semDecisao.length) {
-    return montar('em_analise', {
+    // Falta SÓ um cliente externo? Então a espera não é nossa, e dizer isso
+    // muda o que a pessoa faz: cobrar internamente não adianta. Só vale
+    // quando ele é o ÚNICO pendente — com outros em aberto, o gargalo é aqui.
+    const pendencia = pendenciaExterna(semDecisao);
+    if (pendencia) {
+      return montar(pendencia, {
+        finalizado: false,
+        podeDecidirClientes: true,
+        falta: semDecisao.map((c) => `Decidir ${c}`),
+      });
+    }
+    return montar(assumido ? 'em_andamento' : 'em_analise', {
       finalizado: false,
       podeDecidirClientes: true,
       falta: semDecisao.map((c) => `Decidir ${c}`),
@@ -108,6 +134,22 @@ function situacaoDe({ rdoAprovado, clientes = [], decisoes = {} }) {
   const chave = aprov === clientes.length ? 'aprovado' : aprov === 0 ? 'reprovado' : 'aprovado_em_parte';
 
   return montar(chave, { finalizado: true, podeDecidirClientes: true, falta: [] });
+}
+
+/**
+ * O que sobrou para decidir é só um cliente de retorno externo?
+ *
+ * SHOPEE e AMAZON dependem de terceiros, e o cadastro fica parado esperando
+ * gente de fora. Separar isso de "em andamento" evita cobrar o time interno
+ * por algo que ele não controla — e é a informação que o solicitante quer.
+ */
+const EXTERNOS = { SHOPEE: 'pendente_shopee', AMAZON: 'pendente_amazon' };
+
+function pendenciaExterna(semDecisao) {
+  if (!semDecisao.length) return null;
+  const chaves = [...new Set(semDecisao.map((c) => String(c).trim().toUpperCase()))];
+  if (chaves.length !== 1) return null; // mais de um pendente: o gargalo não é claro
+  return EXTERNOS[chaves[0]] || null;
 }
 
 function montar(situacao, extra) {
@@ -145,8 +187,115 @@ function statusLegadoDe(situacao) {
   return 'pendente';
 }
 
+/* ===========================================================================
+   Previsão de conclusão
+
+   Tempo interno medido pela operação, sem depender de terceiros:
+
+     base            60 min   RDO (30) + Opentech/BRK/Shopee (30)
+     item adicional  10 min   cada veículo, placa ou implemento
+
+   O cadastro no Rodopar NÃO entra na conta: acontece em paralelo, enquanto o
+   RDO está em análise, então não empurra o total.
+
+   Pendência externa (Shopee sem cadastro prévio, Amazon) fica SEPARADA. Somar
+   as 24h ao total faria uma previsão de 25 horas para um trabalho de uma hora
+   — e esconderia que o atraso não é interno. A previsão interna continua
+   valendo; o que muda é o status.
+   =========================================================================== */
+
+const MINUTOS_BASE = 60;
+const MINUTOS_POR_ITEM = 10;
+const HORAS_ESPERA_EXTERNA = 24;
+
+/** "1 h 20 min", "50 min", "2 h" */
+function emTexto(minutos) {
+  const m = Math.max(0, Math.round(minutos));
+  const h = Math.floor(m / 60);
+  const resto = m % 60;
+  if (!h) return resto + ' min';
+  if (!resto) return h + ' h';
+  return h + ' h ' + resto + ' min';
+}
+
+/**
+ * @param itensAdicionais  quantos veículos/placas/implementos além do motorista
+ * @param clientes         para saber se há dependência externa
+ */
+function previsaoDe({ itensAdicionais = 0, clientes = [] } = {}) {
+  const minutos = MINUTOS_BASE + Math.max(0, itensAdicionais) * MINUTOS_POR_ITEM;
+
+  const externos = clientes
+    .map((c) => String(c).trim().toUpperCase())
+    .filter((c) => EXTERNOS[c]);
+
+  return {
+    minutos,
+    texto: emTexto(minutos),
+    itensAdicionais,
+    // A dependência é declarada, não somada.
+    externa: externos.length
+      ? { clientes: externos, horas: HORAS_ESPERA_EXTERNA,
+          texto: 'até ' + HORAS_ESPERA_EXTERNA + ' h (retorno de ' + externos.join(' e ') + ')' }
+      : null,
+  };
+}
+
+/* ===========================================================================
+   Tempos de um cadastro
+   =========================================================================== */
+
+/** Diferença em minutos entre dois carimbos do banco (UTC, "AAAA-MM-DD HH:MM:SS"). */
+function minutosEntre(de, ate) {
+  if (!de || !ate) return null;
+  const ms = (s) => {
+    const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
+    return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)) : null;
+  };
+  const a = ms(de), b = ms(ate);
+  if (a == null || b == null) return null;
+  return Math.max(0, Math.round((b - a) / 60000));
+}
+
+/**
+ * Os tempos que o solicitante acompanha.
+ *
+ * "agora" entra como parâmetro em vez de ser lido aqui: assim a função é pura
+ * e testável, e o servidor decide qual relógio vale.
+ */
+function temposDe({ criadoEm, assumidoEm, finalizadoEm, agora, previsaoMin }) {
+  const fim = finalizadoEm || agora;
+
+  const paraAssumir = minutosEntre(criadoEm, assumidoEm);
+  const operacional = assumidoEm ? minutosEntre(assumidoEm, fim) : null;
+  const total = minutosEntre(criadoEm, fim);
+  const decorrido = minutosEntre(criadoEm, agora);
+
+  return {
+    paraAssumirMin: paraAssumir,
+    paraAssumir: paraAssumir == null ? null : emTexto(paraAssumir),
+    operacionalMin: operacional,
+    operacional: operacional == null ? null : emTexto(operacional),
+    totalMin: total,
+    total: total == null ? null : emTexto(total),
+    decorridoMin: decorrido,
+    decorrido: decorrido == null ? null : emTexto(decorrido),
+    // Restante só faz sentido enquanto não terminou.
+    restanteMin: finalizadoEm || previsaoMin == null || decorrido == null
+      ? null
+      : Math.max(0, previsaoMin - decorrido),
+    atrasado: !finalizadoEm && previsaoMin != null && decorrido != null && decorrido > previsaoMin,
+  };
+}
+
 module.exports = {
   SITUACOES,
+  MINUTOS_BASE,
+  MINUTOS_POR_ITEM,
+  emTexto,
+  previsaoDe,
+  minutosEntre,
+  temposDe,
   DOC_RDO,
   situacaoDe,
   impedimentoParaRdo,
