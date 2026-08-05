@@ -31,6 +31,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const db = require('./db');
 const armazenamento = require('./storage');
+const documentos = require('./documentos');
 
 const PASTA = process.env.PASTA_CANAL || '';
 const OBSERVAR = process.argv.includes('--observar');
@@ -65,7 +66,7 @@ function validarPasta() {
 async function documentosDoPortal() {
   return db
     .prepare(
-      `SELECT d.id, d.modulo, d.solicitacao_id, d.tipo, d.caminho, d.tamanho
+      `SELECT d.id, d.modulo, d.solicitacao_id, d.tipo, d.caminho, d.provedor, d.tamanho
          FROM documentos d
         WHERE d.caminho IS NOT NULL
         ORDER BY d.modulo, d.solicitacao_id, d.id`
@@ -85,12 +86,11 @@ function caminhoLocal(caminhoNoStorage) {
 
 async function sincronizar() {
   const docs = await documentosDoPortal();
-  const prov = armazenamento.provedor();
 
-  if (prov.nome !== 'supabase') {
+  if (docs.length && !armazenamento.PROVEDORES.supabase.disponivel()) {
     abortar(
-      'O armazenamento não está configurado (provedor atual: ' + prov.nome + ').\n' +
-        '  Defina SUPABASE_SERVICE_KEY no .env.'
+      'O Supabase Storage não está configurado.\n' +
+        '  Defina SUPABASE_SERVICE_KEY no .env — é de lá que os arquivos são baixados.'
     );
   }
 
@@ -109,6 +109,16 @@ async function sincronizar() {
         jaTinha++;
         continue;
       }
+    }
+
+    // Cada documento é lido do armazenamento em que foi gravado, não do
+    // provedor em uso agora: um documento gravado direto na pasta não existe
+    // no Supabase, e tentar baixá-lo de lá daria falha a cada passada.
+    const prov = documentos.armazenamentoDe(d);
+    if (!prov) {
+      console.error('  ! ' + d.caminho + ' -> ' + documentos.motivoIndisponivel(d));
+      falhas++;
+      continue;
     }
 
     try {
@@ -136,7 +146,11 @@ async function orfaos() {
     for (const nome of fs.readdirSync(dir, { withFileTypes: true })) {
       const p = path.join(dir, nome.name);
       if (nome.isDirectory()) varrer(p);
-      else if (!esperados.has(p) && !nome.name.startsWith('.')) achados.push(p);
+      // desktop.ini é do próprio OneDrive (guarda o ícone da pasta sincronizada);
+      // reportar como órfão a cada passada seria só ruído.
+      else if (!esperados.has(p) && !nome.name.startsWith('.') && nome.name !== 'desktop.ini') {
+        achados.push(p);
+      }
     }
   }
   try {

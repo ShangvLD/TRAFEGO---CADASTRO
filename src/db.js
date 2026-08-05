@@ -478,12 +478,49 @@ function ensureReady() {
 // Em "run", lastInsertRowid vem do "RETURNING id" quando a consulta o pede
 // (os INSERTs de usuarios/solicitacoes pedem); caso contrário é null.
 // --------------------------------------------------------------------------
+/**
+ * A falha foi ao CONSEGUIR a conexão, antes de a consulta ser enviada?
+ *
+ * Essa distinção decide se dá para tentar de novo. Aqui o banco nunca viu a
+ * consulta, então repetir é seguro até para INSERT. Já "Connection terminated
+ * unexpectedly" no meio de uma consulta é outra coisa: o INSERT pode ter sido
+ * aplicado, e repetir duplicaria — por isso não entra nesta lista.
+ */
+function falhaAoConectar(err) {
+  const m = String((err && err.message) || '');
+  return (
+    /timeout exceeded when trying to connect/i.test(m) ||
+    /Connection terminated due to connection timeout/i.test(m) ||
+    /ETIMEDOUT|ECONNRESET|ENOTFOUND|EAI_AGAIN/i.test(m)
+  );
+}
+
+const TENTATIVAS = 3;
+
 function prepare(sql) {
   const texto = traduzir(sql);
 
+  /**
+   * O pooler do Supabase às vezes demora a entregar conexão — no plano free ele
+   * hiberna, e a primeira conexão depois disso estoura o tempo. Sem repetir, a
+   * tela mostra "Erro interno" numa falha que passa sozinha em um segundo.
+   */
   async function executar(args) {
     await ensureReady();
-    return pool.query(texto, args);
+
+    let ultimo;
+    for (let tentativa = 1; tentativa <= TENTATIVAS; tentativa++) {
+      try {
+        return await pool.query(texto, args);
+      } catch (err) {
+        if (!falhaAoConectar(err) || tentativa === TENTATIVAS) throw err;
+        ultimo = err;
+        // Espera crescente: 300ms, 900ms. Curto o bastante para o usuário não
+        // perceber, longo o bastante para o pooler acordar.
+        await new Promise((r) => setTimeout(r, 300 * Math.pow(3, tentativa - 1)));
+        console.warn(`[db] reconectando (tentativa ${tentativa + 1}/${TENTATIVAS}): ${ultimo.message}`);
+      }
+    }
   }
 
   return {
