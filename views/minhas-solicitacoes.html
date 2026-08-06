@@ -66,6 +66,11 @@
         <section class="card">
             <div class="card-header">
                 <h3><span class="material-symbols-rounded" style="color:var(--primary);vertical-align:-5px">fact_check</span> Histórico</h3>
+                <button class="badge is-info" id="btn-ordem" type="button" style="border:none;cursor:pointer"
+                        title="Alterna entre a ordem de chegada e a fila por grau de importância">
+                    <span class="material-symbols-rounded" style="font-size:16px">sort</span>
+                    <span id="btn-ordem-txt">Ordenar por prioridade</span>
+                </button>
                 <button class="badge is-info" id="btn-atualizar" type="button" style="border:none;cursor:pointer">
                     <span class="material-symbols-rounded" style="font-size:16px">refresh</span> Atualizar
                 </button>
@@ -148,6 +153,25 @@
 
         let TUDO = [];          // tudo que veio do servidor
         let filtroStatus = '';  // vem do clique no card ou do seletor
+        let porPrioridade = false; // botão de ordenação; padrão é ordem de chegada
+
+        /**
+         * A lista na ordem escolhida.
+         *
+         * Padrão é por data, da mais recente para a mais antiga. O botão troca
+         * para a FILA: o grau que o solicitante preencheu manda, e dentro do
+         * mesmo grau quem esperou mais vem primeiro — é o que faz uma fila
+         * justa. Cadastro sem o campo vai para o fim: não dá para presumir
+         * urgência que ninguém declarou.
+         */
+        function naOrdemEscolhida(lista) {
+            if (!porPrioridade) return lista;
+            const ordem = (s) => (s.prioridade && typeof s.prioridade.ordem === 'number' ? s.prioridade.ordem : 99);
+            return [...lista].sort((a, b) => {
+                const d = ordem(a) - ordem(b);
+                return d !== 0 ? d : String(a.criado_em).localeCompare(String(b.criado_em));
+            });
+        }
 
         function esc(txt) {
             const d = document.createElement('div');
@@ -354,7 +378,7 @@
                 </div></td></tr>`;
                 return;
             }
-            corpo.innerHTML = lista.map(linha).join('');
+            corpo.innerHTML = naOrdemEscolhida(lista).map(linha).join('');
         }
 
         /** Opções do seletor de status, a partir do que existe na lista. */
@@ -422,6 +446,14 @@
             }
             filtroStatus = '';
             document.getElementById('f-status').value = '';
+            desenhar();
+        });
+
+        document.getElementById('btn-ordem').addEventListener('click', () => {
+            porPrioridade = !porPrioridade;
+            document.getElementById('btn-ordem-txt').textContent =
+                porPrioridade ? 'Ordenar por chegada' : 'Ordenar por prioridade';
+            document.getElementById('btn-ordem').classList.toggle('is-success', porPrioridade);
             desenhar();
         });
 

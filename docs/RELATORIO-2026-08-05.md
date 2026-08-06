@@ -69,8 +69,8 @@ completo: **12 indicadores**, **7 filtros** e **13 colunas**.
 
 | | Quando |
 |---|---|
-| Aguardando RDO | ninguém pesquisou ainda |
 | Em análise | enviado, ninguém assumiu |
+| Aguardando RDO | assumido, falta responder o RDO |
 | Em andamento | alguém assumiu |
 | Pendente Shopee / Amazon | esperando retorno externo |
 | Reprovado no RDO | parou na pesquisa interna |

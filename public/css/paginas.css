@@ -819,3 +819,7 @@ a.anexo-card:hover {
     font-size: 0.78rem;
     color: var(--warning-dark, #92400e);
 }
+
+/* Grau de importância ao lado da data, no painel. Fica junto da data porque é
+   nela que o olho pousa ao varrer a fila. */
+.prio-bolinha { font-size: 1rem; line-height: 1; margin-right: 2px; }

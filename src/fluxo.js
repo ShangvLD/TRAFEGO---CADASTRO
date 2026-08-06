@@ -83,6 +83,21 @@ const DOC_RDO = 'RESULTADO RDO';
  * @returns { situacao, rotulo, finalizado, podeDecidirClientes, falta }
  */
 function situacaoDe({ rdoAprovado, clientes = [], decisoes = {}, assumido = false }) {
+  // ---- Etapa 0: ninguém pegou ainda ----
+  //
+  // Vem ANTES do RDO de propósito. "Aguardando RDO" descreve uma pesquisa que
+  // alguém precisa fazer — dito de um cadastro que ninguém assumiu, sugere que
+  // o trabalho está em curso quando ele nem saiu da fila. Quem envia precisa
+  // enxergar essa diferença: um está parado esperando gente, o outro já tem
+  // dono e espera uma ação dele.
+  if (!assumido) {
+    return montar('em_analise', {
+      finalizado: false,
+      podeDecidirClientes: false,
+      falta: ['Alguém assumir o atendimento'],
+    });
+  }
+
   // ---- Etapa 1: RDO ----
   if (rdoAprovado === null || rdoAprovado === undefined) {
     return montar('aguardando_rdo', {

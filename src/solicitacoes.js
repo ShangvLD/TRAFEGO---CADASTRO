@@ -283,22 +283,22 @@ async function listar() {
  */
 async function comContexto(linhas) {
   if (!linhas.length) return [];
-  // Ordena pela prioridade ANTES de devolver: a fila de atendimento é o que
-  // essa lista representa, e deixar a ordenação para cada tela faria as telas
-  // divergirem sobre quem é o próximo. Empate mantém o mais antigo na frente —
-  // dentro do mesmo grau, quem esperou mais é atendido primeiro.
+
   const atendimentos = require('./atendimentos');
   const [mapa, agora] = await Promise.all([
     atendimentos.resumoDeVarias('terceiro', linhas.map((l) => l.id)),
     agoraDoBanco(),
   ]);
+
   const hidratadas = linhas.map((l) => hidratar(l, { atendimento: mapa[l.id], agora }));
-  return hidratadas.sort((a, b) => {
-    const pa = validacao.ordemDaPrioridade(a.prioridade && a.prioridade.id);
-    const pb = validacao.ordemDaPrioridade(b.prioridade && b.prioridade.id);
-    if (pa !== pb) return pa - pb;
-    return String(a.criado_em).localeCompare(String(b.criado_em));
-  });
+
+  // Ordem padrão: a mais RECENTE primeiro. É como a lista é lida no dia a dia
+  // — o que acabou de entrar é o que se procura ao abrir a tela.
+  //
+  // A ordem por prioridade não é imposta aqui: virou um botão na tela. Forçá-la
+  // sempre esconderia o cadastro que acabou de chegar atrás de uma fila de
+  // urgentes antigos, e nem toda leitura desta lista é "quem atendo agora".
+  return hidratadas.sort((a, b) => String(b.criado_em).localeCompare(String(a.criado_em)));
 }
 
 /** Lista apenas as solicitações de um e-mail (área do solicitante). */

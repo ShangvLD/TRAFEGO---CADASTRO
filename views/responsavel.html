@@ -95,6 +95,11 @@
                         <span class="material-symbols-rounded">folder_zip</span>
                         <span id="btn-exportar-txt">Exportar documentos</span>
                     </button>
+                    <button class="badge is-info" id="btn-ordem" type="button" style="border:none;cursor:pointer"
+                            title="Alterna entre a ordem de chegada e a fila por grau de importância">
+                        <span class="material-symbols-rounded" style="font-size:16px">sort</span>
+                        <span id="btn-ordem-txt">Ordenar por prioridade</span>
+                    </button>
                     <button class="badge is-info" id="btn-atualizar" type="button" style="border:none;cursor:pointer">
                         <span class="material-symbols-rounded" style="font-size:16px">refresh</span> Atualizar
                     </button>
@@ -168,6 +173,31 @@
         let atendimentoPorId = {}; // quem está cuidando de cada cadastro
         let meuId = null;          // para saber se sou eu quem está no atendimento
         let podeVerRdo = false;    // a pesquisa RDO é restrita a admin
+        let porPrioridade = false; // botão de ordenação; padrão é ordem de chegada
+
+        /**
+         * A lista na ordem escolhida.
+         *
+         * O servidor devolve por data, da mais recente para a mais antiga —
+         * é como a tela é lida no dia a dia. O botão troca para a FILA: o grau
+         * de importância que o solicitante preencheu manda, e dentro do mesmo
+         * grau quem esperou mais vem primeiro, que é o que faz uma fila justa.
+         */
+        function naOrdemEscolhida(lista) {
+            if (!porPrioridade) return lista;
+
+            const ordem = (s) => {
+                const p = s.prioridade;
+                // Cadastro sem o campo (enviado antes de ele existir) vai para
+                // o fim: não dá para presumir urgência que ninguém declarou.
+                return p && typeof p.ordem === 'number' ? p.ordem : 99;
+            };
+            return [...lista].sort((a, b) => {
+                const d = ordem(a) - ordem(b);
+                if (d !== 0) return d;
+                return String(a.criado_em).localeCompare(String(b.criado_em));
+            });
+        }
 
         // Formata "2026-07-13 15:40:12" -> "13/07/2026"
         function formatarData(iso) {
@@ -676,7 +706,9 @@
 
             return `<tr data-id="${s.id}" class="linha-clic">
                 <td class="col-sel"><input type="checkbox" class="sel-linha" data-id="${s.id}"></td>
-                <td>${formatarData(s.criado_em)}</td>
+                <td>${s.prioridade
+                        ? '<span class="prio-bolinha" title="' + esc(s.prioridade.rotulo) + '">' + s.prioridade.bolinha + '</span> '
+                        : ''}${formatarData(s.criado_em)}</td>
                 <td>${esc(s.solicitante_nome)}<br><small style="color:var(--text-secondary)">${esc(s.solicitante_email)}</small></td>
                 <td>${clientesChips(s.assunto)}</td>
                 <td>${anexosResumo(s.anexos, contagemAnexos[s.id])}</td>
@@ -729,7 +761,7 @@
                     return;
                 }
 
-                corpo.innerHTML = solicitacoesCache.map(linhaHtml).join('');
+                corpo.innerHTML = naOrdemEscolhida(solicitacoesCache).map(linhaHtml).join('');
                 atualizarBotaoExportar();
             } catch (e) {
                 corpo.innerHTML = `<tr><td colspan="8">
@@ -995,6 +1027,14 @@
         document.getElementById('modal-fechar').addEventListener('click', fecharModal);
         overlay.addEventListener('click', (e) => { if (e.target === overlay) fecharModal(); });
         document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !overlay.hidden) fecharModal(); });
+
+        document.getElementById('btn-ordem').addEventListener('click', () => {
+            porPrioridade = !porPrioridade;
+            document.getElementById('btn-ordem-txt').textContent =
+                porPrioridade ? 'Ordenar por chegada' : 'Ordenar por prioridade';
+            document.getElementById('btn-ordem').classList.toggle('is-success', porPrioridade);
+            corpo.innerHTML = naOrdemEscolhida(solicitacoesCache).map(linhaHtml).join('');
+        });
 
         document.getElementById('btn-atualizar').addEventListener('click', async () => {
             await carregar();
