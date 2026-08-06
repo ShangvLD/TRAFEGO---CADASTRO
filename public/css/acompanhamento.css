@@ -149,3 +149,22 @@
    a coluna existe para varrer a fila com o olho, não para ser lida palavra a
    palavra; o rótulo fica no title. */
 .acomp-prio { font-size: 1.1rem; line-height: 1; cursor: default; }
+
+/* Botao "Ver" da grade. Discreto: a grade e para varrer, e o detalhe e o
+   segundo passo — nao deve competir com a leitura das linhas. */
+.btn-ver {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: #fff;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.btn-ver:hover { border-color: var(--primary); color: var(--primary); }
+.btn-ver .material-symbols-rounded { font-size: 15px; }

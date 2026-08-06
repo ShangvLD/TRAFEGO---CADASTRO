@@ -57,11 +57,8 @@
 
         <section class="card card--hero">
             <h2>Minhas solicitações</h2>
-            <p>Acompanhe o ciclo completo de cada cadastro que você enviou: quem assumiu, quanto tempo levou e a previsão de conclusão.</p>
+            <p>Acompanhe o andamento do que você enviou. Clique em <strong>Ver</strong> para os detalhes do cadastro. Indicadores e exportação ficam em <strong>Relatórios</strong>, no menu da sua conta.</p>
         </section>
-
-        <!-- Indicadores. Os de status filtram a tabela ao clique. -->
-        <div class="acomp-cards" id="cards"></div>
 
         <section class="card">
             <div class="card-header">
@@ -120,19 +117,16 @@
                             <th>Enviado</th>
                             <th>Formulário</th>
                             <th>Motorista</th>
-                            <th>Proprietário</th>
                             <th>Placas</th>
                             <th>Clientes</th>
                             <th>Responsável</th>
-                            <th>Assumido</th>
-                            <th>Tempo p/ assumir</th>
-                            <th>Tempo total</th>
-                            <th>Previsão</th>
+                            <th>Prazo</th>
                             <th>Status</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody id="corpo">
-                        <tr><td colspan="13">
+                        <tr><td colspan="10">
                             <div class="empty-state">
                                 <span class="material-symbols-rounded">hourglass_empty</span>
                                 <h4>Carregando...</h4>
@@ -144,11 +138,26 @@
         </section>
     </main>
 
+    <!-- Detalhes de uma solicitação -->
+    <div class="modal-overlay" id="modal-detalhe" hidden>
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
+            <div class="modal-header">
+                <h3 id="modal-titulo">
+                    <span class="material-symbols-rounded" style="color:var(--primary);vertical-align:-5px">assignment</span>
+                    Detalhes da solicitação
+                </h3>
+                <button class="modal-close" id="modal-fechar" type="button" aria-label="Fechar">
+                    <span class="material-symbols-rounded">close</span>
+                </button>
+            </div>
+            <div class="modal-body" id="modal-body"></div>
+        </div>
+    </div>
+
     <script src="/js/app.js"></script>
     <script src="/js/validacao.js"></script>
     <script>
         const corpo = document.getElementById('corpo');
-        const elCards = document.getElementById('cards');
         const elContagem = document.getElementById('contagem');
 
         let TUDO = [];          // tudo que veio do servidor
@@ -266,59 +275,6 @@
             });
         }
 
-        // ------------------------------------------------------------------
-        // Cards
-        // ------------------------------------------------------------------
-
-        /** Média dos valores presentes (ignora o que ainda não tem tempo). */
-        function media(valores) {
-            const v = valores.filter((n) => typeof n === 'number');
-            if (!v.length) return null;
-            return Math.round(v.reduce((a, b) => a + b, 0) / v.length);
-        }
-
-        function emTexto(min) {
-            if (min == null) return '—';
-            const h = Math.floor(min / 60), r = min % 60;
-            if (!h) return r + ' min';
-            return r ? h + ' h ' + r + ' min' : h + ' h';
-        }
-
-        function desenharCards(lista) {
-            const conta = (situacao) => lista.filter((s) => situacaoDe(s).situacao === situacao).length;
-            const contaPrio = (id) => lista.filter((s) => s.prioridade && s.prioridade.id === id).length;
-
-            // Tempo médio só de quem TERMINOU: incluir cadastro em curso
-            // puxaria a média para baixo e faria o número melhorar sozinho a
-            // cada envio novo — o contrário do que ele deveria mostrar.
-            const fechados = lista.filter((s) => s.tempos && s.situacao && s.situacao.finalizado);
-            const tMedio = media(fechados.map((s) => s.tempos.totalMin));
-            const tAssumir = media(lista.map((s) => s.tempos && s.tempos.paraAssumirMin));
-
-            const cards = [
-                { rot: 'Total', icone: 'inbox', val: lista.length, cor: 'espera' },
-                { rot: 'Aprovados', icone: 'check_circle', val: conta('aprovado'), cor: 'aprovado', filtro: 'aprovado' },
-                { rot: 'Reprovados', icone: 'cancel', val: conta('reprovado') + conta('reprovado_rdo'), cor: 'reprovado', filtro: 'reprovado' },
-                { rot: 'Em análise', icone: 'schedule', val: conta('em_analise') + conta('aguardando_rdo'), cor: 'espera', filtro: 'em_analise' },
-                { rot: 'Em andamento', icone: 'engineering', val: conta('em_andamento'), cor: 'andamento', filtro: 'em_andamento' },
-                { rot: 'Pendente Shopee', icone: 'hourglass_top', val: conta('pendente_shopee'), cor: 'externo', filtro: 'pendente_shopee' },
-                { rot: 'Pendente Amazon', icone: 'hourglass_top', val: conta('pendente_amazon'), cor: 'externo', filtro: 'pendente_amazon' },
-                { rot: '🔴 Instantes', icone: 'bolt', val: contaPrio('imediato'), cor: 'reprovado' },
-                { rot: '🟡 Urgente', icone: 'priority_high', val: contaPrio('urgente'), cor: 'espera' },
-                { rot: '🟢 Pode aguardar', icone: 'schedule', val: contaPrio('pode_aguardar'), cor: 'aprovado' },
-                { rot: 'Tempo médio', icone: 'timer', val: emTexto(tMedio), cor: 'tempo', tempo: true },
-                { rot: 'Média p/ assumir', icone: 'timer_play', val: emTexto(tAssumir), cor: 'tempo', tempo: true },
-            ];
-
-            elCards.innerHTML = cards.map((c) => {
-                const clic = c.filtro ? ` data-filtro="${c.filtro}"` : '';
-                const ativo = c.filtro && c.filtro === filtroStatus ? ' ativo' : '';
-                return `<div class="acomp-card acomp-card--${c.cor}${c.tempo ? ' acomp-card--tempo' : ''}${ativo}"${clic}>
-                    <div class="acomp-card__rot"><span class="material-symbols-rounded">${c.icone}</span>${c.rot}</div>
-                    <div class="acomp-card__val">${esc(String(c.val))}</div>
-                </div>`;
-            }).join('');
-        }
 
         // ------------------------------------------------------------------
         // Tabela
@@ -344,34 +300,41 @@
                 ? esc(prev.texto) + (prev.externa ? `<span class="acomp-externo">+ ${esc(prev.externa.texto)}</span>` : '')
                 : '<span class="acomp-nada">—</span>';
 
+            // "Prazo" reúne previsão e andamento numa coluna só: separadas,
+            // eram três colunas para responder uma pergunta — "vai atrasar?".
+            const prazo = prev
+                ? esc(prev.texto) +
+                  (t.decorrido && !sit.finalizado
+                      ? `<span class="acomp-sub ${t.atrasado ? 'acomp-atrasado' : ''}">${esc(t.decorrido)} decorrido${t.atrasado ? ' — atrasado' : ''}</span>`
+                      : (sit.finalizado && t.total ? `<span class="acomp-sub">levou ${esc(t.total)}</span>` : '')) +
+                  (prev.externa ? `<span class="acomp-externo">+ ${esc(prev.externa.texto)}</span>` : '')
+                : '<span class="acomp-nada">—</span>';
+
             return `<tr>
                 <td>${prioridadeCel(s)}</td>
                 <td>${esc(dataHora(s.criado_em))}</td>
                 <td><span class="badge is-info">${esc(s.moduloRotulo || '—')}</span></td>
                 <td>${esc(s.condutor || s.solicitante_nome || '—')}</td>
-                <td>${esc(s.proprietario || '—')}</td>
                 <td>${placas}</td>
                 <td>${esc(s.assunto || '—')}</td>
-                <td>${s.responsavel ? esc(s.responsavel) : '<span class="acomp-nada">ninguém ainda</span>'}
-                    ${s.colaboradores ? `<span class="acomp-sub">+${s.colaboradores} colaborador(es)</span>` : ''}</td>
-                <td>${s.assumido_em ? esc(dataHora(s.assumido_em)) : '<span class="acomp-nada">—</span>'}</td>
-                <td>${t.paraAssumir ? esc(t.paraAssumir) : '<span class="acomp-nada">—</span>'}</td>
-                <td>${total}</td>
-                <td>${previsao}</td>
+                <td>${s.responsavel ? esc(s.responsavel) : '<span class="acomp-nada">ninguém ainda</span>'}</td>
+                <td>${prazo}</td>
                 <td>${badge(s)}</td>
+                <td><button type="button" class="btn-ver" data-ver="${s.id}" data-modulo="${esc(s.modulo || 'terceiro')}">
+                        <span class="material-symbols-rounded">visibility</span> Ver
+                    </button></td>
             </tr>`;
         }
 
         function desenhar() {
             const lista = filtrar();
-            desenharCards(lista);
 
             elContagem.textContent = lista.length === TUDO.length
                 ? `${TUDO.length} solicitação(ões)`
                 : `${lista.length} de ${TUDO.length} solicitação(ões)`;
 
             if (!lista.length) {
-                corpo.innerHTML = `<tr><td colspan="13"><div class="empty-state">
+                corpo.innerHTML = `<tr><td colspan="10"><div class="empty-state">
                     <span class="material-symbols-rounded">${TUDO.length ? 'filter_alt_off' : 'inbox'}</span>
                     <h4>${TUDO.length ? 'Nenhuma solicitação com esses filtros' : 'Nenhuma solicitação enviada'}</h4>
                     <p>${TUDO.length ? 'Ajuste ou limpe os filtros.' : 'Quando você enviar uma solicitação, ela aparece aqui.'}</p>
@@ -403,7 +366,7 @@
                 montarSeletorStatus();
                 desenhar();
             } catch (e) {
-                corpo.innerHTML = `<tr><td colspan="13"><div class="empty-state">
+                corpo.innerHTML = `<tr><td colspan="10"><div class="empty-state">
                     <span class="material-symbols-rounded">wifi_off</span>
                     <h4>Erro ao carregar</h4>
                 </div></td></tr>`;
@@ -431,14 +394,6 @@
             desenhar();
         });
 
-        // Clicar no card filtra por aquele status; clicar de novo desfaz.
-        elCards.addEventListener('click', (e) => {
-            const card = e.target.closest('[data-filtro]');
-            if (!card) return;
-            filtroStatus = filtroStatus === card.dataset.filtro ? '' : card.dataset.filtro;
-            document.getElementById('f-status').value = filtroStatus;
-            desenhar();
-        });
 
         document.getElementById('btn-limpar').addEventListener('click', () => {
             for (const id of ['f-motorista', 'f-placa', 'f-proprietario', 'f-de', 'f-ate', 'f-prio']) {
@@ -455,6 +410,150 @@
                 porPrioridade ? 'Ordenar por chegada' : 'Ordenar por prioridade';
             document.getElementById('btn-ordem').classList.toggle('is-success', porPrioridade);
             desenhar();
+        });
+
+        // ------------------------------------------------------------------
+        // "Ver": detalhes de uma solicitação
+        //
+        // Buscados na hora, não junto da lista: contato, documentos e
+        // histórico multiplicariam o tamanho da resposta por cadastro, e só
+        // um é aberto por vez.
+        // ------------------------------------------------------------------
+        const overlay = document.getElementById("modal-detalhe");
+        const modalBody = document.getElementById("modal-body");
+
+        function fecharModal() {
+            overlay.hidden = true;
+            document.body.style.overflow = "";
+        }
+
+        function linhaDet(rot, val) {
+            if (!val) return "";
+            return '<div class="detalhe-linha"><span class="detalhe-rot">' + esc(rot) +
+                   '</span><span class="detalhe-val">' + val + '</span></div>';
+        }
+
+        function ehImagem(nome) {
+            return /\.(png|jpe?g|gif|webp|bmp|heic)$/i.test(String(nome || ""));
+        }
+
+        function docCard(d) {
+            const nome = esc(d.tipo || d.nome_arquivo);
+            const tam = d.tamanho ? Math.max(1, Math.round(d.tamanho / 1024)) + " KB" : "";
+
+            if (!d.url) {
+                return '<div class="anexo-card is-indisponivel">' +
+                    '<span class="anexo-card__icon material-symbols-rounded">error</span>' +
+                    '<span class="anexo-card__info"><strong>' + nome + '</strong><small>' +
+                    esc(d.indisponivel || "Indisponível") + '</small></span></div>';
+            }
+
+            const visual = ehImagem(d.nome_arquivo)
+                ? '<span class="anexo-card__thumb"><img src="' + esc(d.url) +
+                  '" alt="" loading="lazy" onerror="this.remove()">' +
+                  '<span class="material-symbols-rounded">image</span></span>'
+                : '<span class="anexo-card__icon material-symbols-rounded">description</span>';
+
+            return '<a class="anexo-card" href="' + esc(d.url) + '" target="_blank" rel="noopener">' +
+                visual +
+                '<span class="anexo-card__info"><strong>' + nome + '</strong><small>' +
+                esc(d.nome_original || d.nome_arquivo) + (tam ? " · " + tam : "") + '</small></span>' +
+                '<span class="anexo-card__open material-symbols-rounded">open_in_new</span></a>';
+        }
+
+        /** Os campos do formulário, lidos do texto "Rótulo: valor | ...". */
+        function camposDoDetalhe(texto) {
+            return String(texto || "").split("|").map(function (p) {
+                const i = p.indexOf(":");
+                if (i < 0) return null;
+                const rot = p.slice(0, i).trim();
+                const val = p.slice(i + 1).trim();
+                // Vazio disfarçado e o que já aparece no topo ficam de fora.
+                if (!rot || !val) return null;
+                if (/^(\.|-|n\/a|na)$/i.test(val)) return null;
+                if (/^prioridade$/i.test(rot)) return null;
+                return [rot, val];
+            }).filter(Boolean);
+        }
+
+        async function abrirDetalhe(id, modulo) {
+            overlay.hidden = false;
+            document.body.style.overflow = "hidden";
+            modalBody.innerHTML = '<p class="modal-vazio">Carregando...</p>';
+
+            let j;
+            try {
+                const r = await fetch("/api/modulos/" + modulo + "/solicitacoes/" + id + "/detalhe");
+                j = await r.json();
+                if (!j.ok) throw new Error(j.erro || "Não foi possível carregar.");
+            } catch (e) {
+                modalBody.innerHTML = '<p class="modal-vazio">' + esc(e.message) + "</p>";
+                return;
+            }
+
+            const s = j.solicitacao;
+            const sit = situacaoDe(s);
+            const campos = camposDoDetalhe(s.detalhes);
+            const docs = j.documentos || [];
+
+            const hist = (j.historico || []).length
+                ? (j.historico || []).map(function (h) {
+                    return '<div class="detalhe-linha"><span class="detalhe-rot">' +
+                        (h.papel === "responsavel" ? "Responsável" : "Colaborador") +
+                        '</span><span class="detalhe-val">' + esc(h.usuario_nome) +
+                        ' <small style="color:var(--text-secondary)">· entrou ' + esc(dataHora(h.entrou_em)) +
+                        (h.saiu_em ? " · saiu " + esc(dataHora(h.saiu_em)) : "") +
+                        "</small></span></div>";
+                  }).join("")
+                : '<p class="modal-vazio">Ninguém assumiu este cadastro ainda.</p>';
+
+            const partes = [];
+            partes.push('<div class="detalhe-topo"><div><strong class="detalhe-nome">' +
+                (s.prioridade ? s.prioridade.bolinha + " " : "") +
+                esc(s.condutor || s.solicitante_nome || "—") + "</strong>" +
+                '<div class="detalhe-email">Solicitação #' + s.id + " · enviada por " +
+                esc(s.solicitante_email || "—") + "</div></div>" +
+                '<span class="badge ' + (CLASSE[sit.cor] || "is-warning") + '">' + esc(sit.rotulo) + "</span></div>");
+
+            partes.push('<div class="detalhe-grid">' +
+                linhaDet("Criada em", esc(dataHora(s.criado_em))) +
+                linhaDet("Responsável", s.responsavel ? esc(s.responsavel) : '<span class="acomp-nada">ninguém ainda</span>') +
+                linhaDet("Assumida em", s.assumido_em ? esc(dataHora(s.assumido_em)) : "") +
+                linhaDet("Clientes", esc(s.assunto || "")) +
+                linhaDet("Prioridade", s.prioridade ? esc(s.prioridade.rotulo) : "") +
+                linhaDet("Previsão", s.previsao
+                    ? esc(s.previsao.texto) + (s.previsao.externa ? " <small>+ " + esc(s.previsao.externa.texto) + "</small>" : "")
+                    : "") +
+                "</div>");
+
+            partes.push('<h4 class="detalhe-secao"><span class="material-symbols-rounded" ' +
+                'style="vertical-align:-5px;color:var(--primary)">badge</span> Dados do cadastro</h4>');
+            partes.push(campos.length
+                ? '<div class="detalhe-grid">' + campos.map(function (c) { return linhaDet(c[0], esc(c[1])); }).join("") + "</div>"
+                : '<p class="modal-vazio">Sem dados detalhados.</p>');
+
+            partes.push('<h4 class="detalhe-secao"><span class="material-symbols-rounded" ' +
+                'style="vertical-align:-5px;color:var(--primary)">folder_open</span> Documentos (' + docs.length + ")</h4>");
+            partes.push(docs.length
+                ? '<div class="anexo-lista">' + docs.map(docCard).join("") + "</div>"
+                : '<p class="modal-vazio">Nenhum documento anexado.</p>');
+
+            partes.push('<h4 class="detalhe-secao"><span class="material-symbols-rounded" ' +
+                'style="vertical-align:-5px;color:var(--primary)">history</span> Histórico do atendimento</h4>');
+            partes.push(hist);
+
+            modalBody.innerHTML = partes.join("");
+        }
+
+        corpo.addEventListener("click", function (e) {
+            const btn = e.target.closest("[data-ver]");
+            if (btn) abrirDetalhe(btn.dataset.ver, btn.dataset.modulo);
+        });
+
+        document.getElementById("modal-fechar").addEventListener("click", fecharModal);
+        overlay.addEventListener("click", function (e) { if (e.target === overlay) fecharModal(); });
+        document.addEventListener("keydown", function (e) {
+            if (e.key === "Escape" && !overlay.hidden) fecharModal();
         });
 
         document.getElementById('btn-atualizar').addEventListener('click', carregar);

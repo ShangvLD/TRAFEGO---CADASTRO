@@ -78,6 +78,17 @@ function menuDaConta(usuario) {
     itens.push({ href: '/admin/usuarios', rotulo: 'Usuários', icone: 'group' });
     itens.push({ href: '/admin/formulario', rotulo: 'Configurar formulário', icone: 'tune' });
   }
+
+  // Relatórios fica no menu da CONTA, e não na navegação principal, porque é
+  // uma leitura gerencial — consultada de vez em quando, não a cada cadastro.
+  // Misturá-la com o trabalho do dia a dia foi o que deixou a tela de
+  // acompanhamento poluída.
+  //
+  // Visível a quem enxerga algum painel: quem só preenche formulário vê apenas
+  // as próprias solicitações, e um indicador sobre elas não diria nada.
+  if (usuario && papeis.paineisDoPapel(usuario.papel).length) {
+    itens.push({ href: '/relatorios', rotulo: 'Relatórios', icone: 'monitoring' });
+  }
   return itens;
 }
 

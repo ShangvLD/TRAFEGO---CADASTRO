@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatórios — Tráfego | Jomed</title>
+    <link rel="icon" type="image/png" href="/img/logo-jomed.png">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
+
+    <link rel="stylesheet" href="/css/base.css">
+    <link rel="stylesheet" href="/css/paginas.css">
+    <link rel="stylesheet" href="/css/acompanhamento.css">
+</head>
+<body class="has-header">
+
+    <header class="app-header">
+        <div class="app-header__inner">
+            <div class="brand">
+                <div class="brand-logo">
+                    <img src="/img/logo-jomed.png" alt="Jomed Transportes e Logística">
+                </div>
+                <div class="brand-text">
+                    <h1>Tráfego</h1>
+                    <span>Relatórios</span>
+                </div>
+            </div>
+
+            <nav class="main-nav" id="main-nav" aria-label="Menu principal"></nav>
+
+            <div class="header-actions">
+                <button class="user-chip" id="user-chip" type="button" title="Conta">
+                    <div class="user-avatar" id="user-avatar">··</div>
+                    <span class="user-name" id="user-name">Carregando...</span>
+                    <span class="material-symbols-rounded" style="font-size:18px;color:rgba(255,255,255,0.75)">expand_more</span>
+                </button>
+                <div class="user-menu" id="user-menu">
+                    <div class="user-menu__info">
+                        <strong id="menu-nome">—</strong>
+                        <small id="menu-email">—</small>
+                        <small id="menu-papel" class="menu-papel">—</small>
+                    </div>
+                    <div id="menu-conta-itens"></div>
+                    <button type="button" class="danger" id="btn-sair">
+                        <span class="material-symbols-rounded">logout</span> Sair
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="page-container">
+
+        <section class="card card--hero">
+            <h2>Relatórios</h2>
+            <p>Indicadores, tempos e exportação. Os números respeitam os filtros abaixo — mudou o filtro, mudaram os cards.</p>
+        </section>
+
+        <section class="card">
+            <div class="card-header">
+                <h3><span class="material-symbols-rounded" style="color:var(--primary);vertical-align:-5px">filter_alt</span> Filtros</h3>
+                <div class="acoes-painel">
+                    <button class="btn btn--secundario" id="btn-exportar" type="button">
+                        <span class="material-symbols-rounded">table_view</span>
+                        <span id="btn-exportar-txt">Exportar para Excel</span>
+                    </button>
+                    <button class="badge is-info" id="btn-limpar" type="button" style="border:none;cursor:pointer">
+                        <span class="material-symbols-rounded" style="font-size:16px">filter_alt_off</span> Limpar
+                    </button>
+                    <button class="badge is-info" id="btn-atualizar" type="button" style="border:none;cursor:pointer">
+                        <span class="material-symbols-rounded" style="font-size:16px">refresh</span> Atualizar
+                    </button>
+                </div>
+            </div>
+
+            <div class="acomp-filtros">
+                <div class="acomp-filtro">
+                    <label for="f-de">Período — de</label>
+                    <input type="date" id="f-de">
+                </div>
+                <div class="acomp-filtro">
+                    <label for="f-ate">até</label>
+                    <input type="date" id="f-ate">
+                </div>
+                <div class="acomp-filtro">
+                    <label for="f-cliente">Cliente</label>
+                    <select id="f-cliente"><option value="">Todos</option></select>
+                </div>
+                <div class="acomp-filtro">
+                    <label for="f-modulo">Formulário</label>
+                    <select id="f-modulo"><option value="">Todos</option></select>
+                </div>
+                <div class="acomp-filtro">
+                    <label for="f-status">Status</label>
+                    <select id="f-status"><option value="">Todos</option></select>
+                </div>
+                <div class="acomp-filtro">
+                    <label for="f-prio">Prioridade</label>
+                    <select id="f-prio"><option value="">Todas</option></select>
+                </div>
+                <div class="acomp-filtro">
+                    <label for="f-responsavel">Responsável</label>
+                    <select id="f-responsavel"><option value="">Todos</option></select>
+                </div>
+                <div class="acomp-filtro">
+                    <label for="f-motorista">Motorista</label>
+                    <input type="search" id="f-motorista" placeholder="Nome">
+                </div>
+                <div class="acomp-filtro">
+                    <label for="f-proprietario">Proprietário</label>
+                    <input type="search" id="f-proprietario" placeholder="Nome ou razão social">
+                </div>
+                <div class="acomp-filtro">
+                    <label for="f-placa">Placa</label>
+                    <input type="search" id="f-placa" placeholder="ABC1D23">
+                </div>
+            </div>
+        </section>
+
+        <div class="acomp-cards" id="cards"></div>
+
+        <section class="card">
+            <div class="card-header">
+                <h3><span class="material-symbols-rounded" style="color:var(--primary);vertical-align:-5px">table_rows</span> Dados</h3>
+                <span class="acomp-contagem" id="contagem" style="margin:0"></span>
+            </div>
+
+            <div class="table-wrap">
+                <table class="data-table acomp-tabela">
+                    <thead>
+                        <tr>
+                            <th>Enviado</th>
+                            <th>Formulário</th>
+                            <th>Motorista</th>
+                            <th>Clientes</th>
+                            <th>Prio.</th>
+                            <th>Responsável</th>
+                            <th>P/ assumir</th>
+                            <th>Total</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="corpo">
+                        <tr><td colspan="9">
+                            <div class="empty-state">
+                                <span class="material-symbols-rounded">hourglass_empty</span>
+                                <h4>Carregando...</h4>
+                            </div>
+                        </td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <script src="/js/app.js"></script>
+    <script src="/js/validacao.js"></script>
+    <script src="/js/zip.js"></script>
+    <script src="/js/xlsx.js"></script>
+    <script>
+        const corpo = document.getElementById('corpo');
+        const elCards = document.getElementById('cards');
+        const elContagem = document.getElementById('contagem');
+
+        let TUDO = [];
+
+        function esc(txt) {
+            const d = document.createElement('div');
+            d.textContent = txt == null ? '' : String(txt);
+            return d.innerHTML;
+        }
+
+        const dataHora = (v) => (window.dataHoraBR ? window.dataHoraBR(v) : (v || '—'));
+        const semAcento = (t) =>
+            String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
+
+        const CLASSE = {
+            espera: 'is-warning', andamento: 'is-info', externo: 'is-parcial',
+            aprovado: 'is-success', reprovado: 'is-danger', 'meio-termo': 'is-parcial',
+        };
+
+        function situacaoDe(s) {
+            if (s.situacao) return s.situacao;
+            const st = s.status_geral || s.status || 'pendente';
+            return { situacao: st, rotulo: st[0].toUpperCase() + st.slice(1), cor: 'espera' };
+        }
+
+        // ------------------------------------------------------------------
+        // Filtros
+        //
+        // Todos no navegador, sobre a lista inteira. É o mesmo raciocínio da
+        // tela de acompanhamento: com esta ordem de grandeza, filtrar aqui
+        // responde no mesmo quadro e o card recalcula junto. O que muda é que
+        // aqui são NOVE filtros combinados — no servidor, cada combinação
+        // seria uma consulta diferente.
+        // ------------------------------------------------------------------
+        const val = (id) => document.getElementById(id).value;
+
+        function filtrar() {
+            const de = val('f-de'), ate = val('f-ate');
+            const cliente = val('f-cliente'), modulo = val('f-modulo');
+            const status = val('f-status'), prio = val('f-prio'), resp = val('f-responsavel');
+            const mot = semAcento(val('f-motorista').trim());
+            const pro = semAcento(val('f-proprietario').trim());
+            const pla = semAcento(val('f-placa').trim()).replace(/[^A-Z0-9]/g, '');
+
+            return TUDO.filter((s) => {
+                if (modulo && s.modulo !== modulo) return false;
+                if (status && situacaoDe(s).situacao !== status) return false;
+                if (prio && (!s.prioridade || s.prioridade.id !== prio)) return false;
+                if (resp && (s.responsavel || '') !== resp) return false;
+                if (cliente && !(s.clientes || []).some((c) => c.toUpperCase() === cliente)) return false;
+                if (mot && !semAcento(s.condutor || s.solicitante_nome).includes(mot)) return false;
+                if (pro && !semAcento(s.proprietario).includes(pro)) return false;
+                if (pla && !(s.placas || []).some((p) => semAcento(p).replace(/[^A-Z0-9]/g, '').includes(pla))) return false;
+
+                // Data local, não o texto UTC do banco: pelo texto cru, um
+                // cadastro das 23 h cairia no dia seguinte e sumiria do período.
+                if (de || ate) {
+                    const d = window.comoData ? window.comoData(s.criado_em) : null;
+                    if (!d) return false;
+                    const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
+                                '-' + String(d.getDate()).padStart(2, '0');
+                    if (de && iso < de) return false;
+                    if (ate && iso > ate) return false;
+                }
+                return true;
+            });
+        }
+
+        // ------------------------------------------------------------------
+        // Indicadores
+        // ------------------------------------------------------------------
+        function media(valores) {
+            const v = valores.filter((n) => typeof n === 'number');
+            return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : null;
+        }
+
+        function emTexto(min) {
+            if (min == null) return '—';
+            const h = Math.floor(min / 60), r = min % 60;
+            if (!h) return r + ' min';
+            return r ? h + ' h ' + r + ' min' : h + ' h';
+        }
+
+        function desenharCards(lista) {
+            const conta = (sit) => lista.filter((s) => situacaoDe(s).situacao === sit).length;
+
+            // Tempo médio só de quem TERMINOU. Incluir cadastro em curso
+            // puxaria a média para baixo e faria o número melhorar sozinho a
+            // cada envio novo — o oposto do que um indicador deve fazer.
+            const fechados = lista.filter((s) => s.tempos && s.situacao && s.situacao.finalizado);
+
+            const cards = [
+                { rot: 'Solicitações', icone: 'inbox', val: lista.length, cor: 'espera' },
+                { rot: 'Aprovadas', icone: 'check_circle', val: conta('aprovado'), cor: 'aprovado' },
+                { rot: 'Reprovadas', icone: 'cancel', val: conta('reprovado') + conta('reprovado_rdo'), cor: 'reprovado' },
+                { rot: 'Em análise', icone: 'schedule', val: conta('em_analise'), cor: 'espera' },
+                { rot: 'Aguardando RDO', icone: 'travel_explore', val: conta('aguardando_rdo'), cor: 'espera' },
+                { rot: 'Em andamento', icone: 'engineering', val: conta('em_andamento'), cor: 'andamento' },
+                { rot: 'Pendente Shopee', icone: 'hourglass_top', val: conta('pendente_shopee'), cor: 'externo' },
+                { rot: 'Pendente Amazon', icone: 'hourglass_top', val: conta('pendente_amazon'), cor: 'externo' },
+                { rot: 'Aprovado em parte', icone: 'rule', val: conta('aprovado_em_parte'), cor: 'meio-termo' },
+                { rot: 'Tempo médio', icone: 'timer', val: emTexto(media(fechados.map((s) => s.tempos.totalMin))), cor: 'tempo', tempo: true },
+                { rot: 'Média p/ assumir', icone: 'timer_play', val: emTexto(media(lista.map((s) => s.tempos && s.tempos.paraAssumirMin))), cor: 'tempo', tempo: true },
+            ];
+
+            elCards.innerHTML = cards.map((c) =>
+                `<div class="acomp-card acomp-card--${c.cor === 'meio-termo' ? 'externo' : c.cor}${c.tempo ? ' acomp-card--tempo' : ''}">
+                    <div class="acomp-card__rot"><span class="material-symbols-rounded">${c.icone}</span>${c.rot}</div>
+                    <div class="acomp-card__val">${esc(String(c.val))}</div>
+                </div>`
+            ).join('');
+        }
+
+        // ------------------------------------------------------------------
+        // Tabela
+        // ------------------------------------------------------------------
+        function linha(s) {
+            const t = s.tempos || {};
+            const sit = situacaoDe(s);
+            return `<tr>
+                <td>${esc(dataHora(s.criado_em))}</td>
+                <td><span class="badge is-info">${esc(s.moduloRotulo || '—')}</span></td>
+                <td>${esc(s.condutor || s.solicitante_nome || '—')}</td>
+                <td>${esc(s.assunto || '—')}</td>
+                <td>${s.prioridade ? `<span class="acomp-prio" title="${esc(s.prioridade.rotulo)}">${s.prioridade.bolinha}</span>` : '<span class="acomp-nada">—</span>'}</td>
+                <td>${s.responsavel ? esc(s.responsavel) : '<span class="acomp-nada">—</span>'}</td>
+                <td>${t.paraAssumir ? esc(t.paraAssumir) : '<span class="acomp-nada">—</span>'}</td>
+                <td>${sit.finalizado && t.total ? esc(t.total) : (t.decorrido ? `<span class="${t.atrasado ? 'acomp-atrasado' : ''}">${esc(t.decorrido)}</span>` : '<span class="acomp-nada">—</span>')}</td>
+                <td><span class="badge ${CLASSE[sit.cor] || 'is-warning'}">${esc(sit.rotulo)}</span></td>
+            </tr>`;
+        }
+
+        function desenhar() {
+            const lista = filtrar();
+            desenharCards(lista);
+            elContagem.textContent = lista.length === TUDO.length
+                ? `${TUDO.length} solicitação(ões)`
+                : `${lista.length} de ${TUDO.length} solicitação(ões)`;
+
+            corpo.innerHTML = lista.length
+                ? lista.map(linha).join('')
+                : `<tr><td colspan="9"><div class="empty-state">
+                       <span class="material-symbols-rounded">filter_alt_off</span>
+                       <h4>Nenhuma solicitação com esses filtros</h4>
+                   </div></td></tr>`;
+        }
+
+        // ------------------------------------------------------------------
+        // Exportação
+        //
+        // Exporta o que está FILTRADO, não a base inteira: quem montou o
+        // recorte na tela espera a planilha com o mesmo recorte. E leva mais
+        // colunas do que a tabela mostra — na planilha o espaço não é escasso,
+        // e é justamente lá que se cruza dado.
+        // ------------------------------------------------------------------
+        const COLUNAS = [
+            { titulo: 'Nº', largura: 8, valor: (s) => s.id },
+            { titulo: 'Enviado', largura: 18, valor: (s) => dataHora(s.criado_em) },
+            { titulo: 'Formulário', largura: 14, valor: (s) => s.moduloRotulo || '' },
+            { titulo: 'Solicitante', largura: 30, valor: (s) => s.solicitante_email || s.solicitante_nome || '' },
+            { titulo: 'Motorista', largura: 32, valor: (s) => s.condutor || '' },
+            { titulo: 'Proprietário', largura: 32, valor: (s) => s.proprietario || '' },
+            { titulo: 'Placas', largura: 20, valor: (s) => (s.placas || []).join(' / ') },
+            { titulo: 'Clientes', largura: 34, valor: (s) => s.assunto || '' },
+            { titulo: 'Prioridade', largura: 22, valor: (s) => (s.prioridade ? s.prioridade.rotulo : '') },
+            { titulo: 'Status', largura: 20, valor: (s) => situacaoDe(s).rotulo },
+            { titulo: 'Responsável', largura: 26, valor: (s) => s.responsavel || '' },
+            { titulo: 'Assumido em', largura: 18, valor: (s) => (s.assumido_em ? dataHora(s.assumido_em) : '') },
+            // Tempos em MINUTOS: número, para somar e fazer média na planilha.
+            // O texto "1 h 20 min" seria bonito e inútil numa coluna de cálculo.
+            { titulo: 'Min. p/ assumir', largura: 15, valor: (s) => (s.tempos && s.tempos.paraAssumirMin) },
+            { titulo: 'Min. operacional', largura: 16, valor: (s) => (s.tempos && s.tempos.operacionalMin) },
+            { titulo: 'Min. total', largura: 12, valor: (s) => (s.tempos && s.tempos.totalMin) },
+            { titulo: 'Previsão (min)', largura: 14, valor: (s) => (s.previsao && s.previsao.minutos) },
+            { titulo: 'Dependência externa', largura: 26, valor: (s) => (s.previsao && s.previsao.externa ? s.previsao.externa.clientes.join(' / ') : '') },
+            { titulo: 'Observação', largura: 40, valor: (s) => s.observacao || '' },
+        ];
+
+        function exportar() {
+            const lista = filtrar();
+            if (!lista.length) return alert('Nenhuma solicitação com esses filtros.');
+
+            const btn = document.getElementById('btn-exportar');
+            const txt = document.getElementById('btn-exportar-txt');
+            btn.disabled = true;
+            txt.textContent = 'Gerando...';
+
+            try {
+                const blob = window.gerarXlsx(
+                    COLUNAS.map((c) => ({ titulo: c.titulo, largura: c.largura })),
+                    lista.map((s) => COLUNAS.map((c) => {
+                        const v = c.valor(s);
+                        return v == null ? '' : v;
+                    })),
+                    'Solicitações'
+                );
+                const hoje = new Date();
+                const p = (n) => String(n).padStart(2, '0');
+                window.baixarBlob(blob, `relatorio_${p(hoje.getDate())}-${p(hoje.getMonth() + 1)}-${hoje.getFullYear()}.xlsx`);
+                txt.textContent = `${lista.length} linha(s) exportada(s)`;
+                setTimeout(() => { txt.textContent = 'Exportar para Excel'; }, 3000);
+            } catch (e) {
+                alert('Não foi possível gerar a planilha: ' + e.message);
+                txt.textContent = 'Exportar para Excel';
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // Opções dos filtros, a partir do que existe nos dados
+        // ------------------------------------------------------------------
+        function opcoes(id, pares, rotuloVazio) {
+            const sel = document.getElementById(id);
+            const atual = sel.value;
+            sel.innerHTML = `<option value="">${rotuloVazio}</option>` +
+                pares.map(([v, r]) => `<option value="${esc(v)}">${esc(r)}</option>`).join('');
+            sel.value = atual;
+        }
+
+        function montarFiltros(dados) {
+            const clientes = new Set();
+            const status = new Map();
+            const responsaveis = new Set();
+            for (const s of TUDO) {
+                for (const c of s.clientes || []) clientes.add(c.toUpperCase());
+                const sit = situacaoDe(s);
+                if (!status.has(sit.situacao)) status.set(sit.situacao, sit.rotulo);
+                if (s.responsavel) responsaveis.add(s.responsavel);
+            }
+
+            opcoes('f-cliente', [...clientes].sort().map((c) => [c, c]), 'Todos');
+            opcoes('f-status', [...status], 'Todos');
+            opcoes('f-responsavel', [...responsaveis].sort().map((r) => [r, r]), 'Todos');
+            opcoes('f-modulo', (dados.modulos || []).map((m) => [m.slug, m.rotulo]), 'Todos');
+            opcoes('f-prio', ((window.Validacao && window.Validacao.PRIORIDADES) || [])
+                .map((p) => [p.id, p.bolinha + ' ' + p.rotulo]), 'Todas');
+        }
+
+        async function carregar() {
+            try {
+                const r = await fetch('/api/relatorios');
+                if (r.status === 401) { window.location.href = '/login'; return; }
+                const j = await r.json();
+                if (!j.ok) throw new Error(j.erro || 'Sem permissão.');
+                TUDO = j.solicitacoes || [];
+                montarFiltros(j);
+                desenhar();
+            } catch (e) {
+                corpo.innerHTML = `<tr><td colspan="9"><div class="empty-state">
+                    <span class="material-symbols-rounded">wifi_off</span>
+                    <h4>Erro ao carregar</h4><p>${esc(e.message)}</p>
+                </div></td></tr>`;
+            }
+        }
+
+        for (const id of ['f-de', 'f-ate', 'f-motorista', 'f-proprietario', 'f-placa']) {
+            document.getElementById(id).addEventListener('input', desenhar);
+        }
+        for (const id of ['f-cliente', 'f-modulo', 'f-status', 'f-prio', 'f-responsavel']) {
+            document.getElementById(id).addEventListener('change', desenhar);
+        }
+
+        document.getElementById('btn-limpar').addEventListener('click', () => {
+            for (const el of document.querySelectorAll('.acomp-filtro input, .acomp-filtro select')) el.value = '';
+            desenhar();
+        });
+
+        document.getElementById('btn-exportar').addEventListener('click', exportar);
+        document.getElementById('btn-atualizar').addEventListener('click', carregar);
+        carregar();
+    </script>
+</body>
+</html>

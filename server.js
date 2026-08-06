@@ -232,6 +232,103 @@ app.get('/minhas-solicitacoes', exigirLogin, (req, res) => {
   res.sendFile(path.join(VIEWS, 'minhas-solicitacoes.html'));
 });
 
+// Relatórios: leitura gerencial, separada do acompanhamento do dia a dia.
+// Restrita a quem enxerga algum painel — quem só preenche formulário vê
+// apenas as próprias solicitações, e um indicador sobre elas não diria nada.
+app.get('/relatorios', exigirLogin, (req, res) => {
+  if (!papeis.paineisDoPapel(req.session.usuario.papel).length) {
+    // Mesma conduta das outras páginas restritas: manda para a home do papel,
+    // em vez de uma tela de erro. Quem chegou aqui digitou a URL ou seguiu um
+    // link antigo — não é um caso a explicar, é um caminho a corrigir.
+    return res.redirect(paginaInicialPorPapel(req.session.usuario.papel));
+  }
+  res.sendFile(path.join(VIEWS, 'relatorios.html'));
+});
+
+/**
+ * Dados do relatório: TODAS as solicitações dos módulos que a pessoa acompanha.
+ *
+ * Diferente de /api/solicitacoes, que é do painel do terceiro. Aqui vem tudo
+ * junto, com o módulo marcado em cada linha, porque o relatório é gerencial e
+ * a pergunta é sobre o conjunto.
+ */
+app.get(
+  '/api/relatorios',
+  exigirLogin,
+  wrap(async (req, res) => {
+    const u = req.session.usuario;
+    const slugs = papeis.paineisDoPapel(u.papel);
+    if (!slugs.length) return res.status(403).json({ ok: false, erro: 'Sem permissão.' });
+
+    const porModulo = await Promise.all(
+      slugs.map(async (slug) => {
+        const dados = dadosDe(slug);
+        const modulo = acharModulo(slug);
+        if (!dados || !modulo) return [];
+        const linhas = await dados.listar();
+        return linhas.map((s) => ({ ...s, modulo: slug, moduloRotulo: modulo.rotuloCurto }));
+      })
+    );
+
+    // O RDO é restrito a admin, e o relatório não é exceção.
+    const podeVerRdo = papeis.ehAdmin(u.papel);
+    const lista = porModulo.flat().map((s) => (podeVerRdo ? s : semRdo(s)));
+
+    res.json({
+      ok: true,
+      podeVerRdo,
+      modulos: slugs.map((s) => ({ slug: s, rotulo: acharModulo(s).rotuloCurto })),
+      solicitacoes: lista.sort((a, b) => String(b.criado_em).localeCompare(String(a.criado_em))),
+    });
+  })
+);
+
+/**
+ * Tudo sobre UMA solicitação: contato, documentos e histórico.
+ *
+ * Serve o "Ver" da tela de acompanhamento. Quem envia precisa consultar o que
+ * mandou sem depender de quem analisa — e sem virar mais uma coluna na grade,
+ * que foi o que deixou a tela pesada.
+ *
+ * Acesso: o DONO da solicitação, ou quem acompanha o painel daquele módulo.
+ * Amarrar só ao painel esconderia do solicitante o próprio cadastro.
+ */
+app.get(
+  '/api/modulos/:slug/solicitacoes/:id/detalhe',
+  exigirLogin,
+  wrap(async (req, res) => {
+    const m = acharModulo(req.params.slug);
+    const id = Number(req.params.id);
+    if (!m || !Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Pedido inválido.' });
+
+    const dados = dadosDe(m.slug);
+    const s = dados && (await dados.buscarPorId(id));
+    if (!s) return res.status(404).json({ ok: false, erro: 'Solicitação não encontrada.' });
+
+    const u = req.session.usuario;
+    const dono = String(s.solicitante_email || '').toLowerCase() === String(u.email).toLowerCase();
+    const acompanha = papeis.podePainel(u.papel, m.slug);
+    if (!dono && !acompanha) return res.status(403).json({ ok: false, erro: 'Sem permissão.' });
+
+    // O comprovante do RDO é restrito a admin, aqui como em qualquer lugar.
+    let docs = await documentos.listar(m.slug, id);
+    if (!papeis.ehAdmin(u.papel)) {
+      docs = docs.filter((d) => String(d.tipo).toUpperCase() !== fluxo.DOC_RDO);
+    }
+
+    res.json({
+      ok: true,
+      solicitacao: papeis.ehAdmin(u.papel) ? s : semRdo(s),
+      documentos: await documentos.comUrls(docs, {
+        rotaDeDownload: (d) => `/api/modulos/${m.slug}/solicitacoes/${id}/documentos/${d.id}/baixar`,
+      }),
+      // Quem passou pelo cadastro, inclusive quem já saiu — é o histórico que
+      // responde "com quem eu falo sobre isso" depois que a pessoa trocou.
+      historico: await atendimentos.historico(m.slug, id),
+    });
+  })
+);
+
 // ---- Páginas dos módulos, geradas a partir do registro -------------------
 //
 // Cada módulo ganha /cadastro/<slug> e /painel/<slug>. O módulo com view
