@@ -71,7 +71,7 @@ completo: **12 indicadores**, **7 filtros** e **13 colunas**.
 |---|---|
 | Em análise | enviado, ninguém assumiu |
 | Aguardando RDO | assumido, falta responder o RDO |
-| Em andamento | alguém assumiu |
+| Em andamento | RDO liberado, decidindo os clientes |
 | Pendente Shopee / Amazon | esperando retorno externo |
 | Reprovado no RDO | parou na pesquisa interna |
 | Aprovado / Reprovado / **Aprovado em parte** | terminado |
@@ -142,11 +142,20 @@ Obrigatório **sem valor padrão**, de propósito: com um padrão silencioso tod
 mundo deixa no padrão e a informação some. Quem envia sabe se o motorista vai
 carregar em seguida; a fila não tem como adivinhar.
 
-**A fila já vem ordenada do servidor**, não de cada tela — telas ordenando por
-conta própria acabariam discordando sobre quem é o próximo. Empate mantém o
-mais antigo na frente. Cadastro enviado antes do campo existir fica com
-prioridade nula, vai para o fim e mostra um traço, em vez de fingir "pode
-aguardar" — seria inventar uma escolha que ninguém fez.
+### Ordem da lista
+
+A lista chega **por data, da mais recente para a mais antiga** — é como ela é
+lida no dia a dia. Um botão nos dois painéis alterna para a **fila**:
+"Ordenar por prioridade" ⇄ "Ordenar por chegada".
+
+Impor a prioridade sempre escondia o cadastro que acabou de chegar atrás de uma
+fila de urgentes antigos, e nem toda leitura da lista é "quem atendo agora".
+Com o botão, quem quer a fila pede a fila.
+
+Na fila, o grau que o solicitante preencheu manda, e dentro do mesmo grau quem
+esperou mais vem primeiro. Cadastro enviado antes do campo existir vai para o
+fim e mostra um traço, em vez de fingir "pode aguardar" — seria inventar uma
+escolha que ninguém fez.
 
 ---
 
