@@ -81,8 +81,8 @@ async function semear() {
           await q(
             `INSERT INTO cfg_campos
                (modulo, campo_id, rotulo, tipo, secao, icone, obrigatorio, ativo,
-                ordem, largura, dica, placeholder, opcoes, max_tamanho)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
+                ordem, largura, dica, placeholder, opcoes, max_tamanho, sistema)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT (modulo, campo_id) DO NOTHING`,
             [
               modulo.slug,
@@ -98,6 +98,7 @@ async function semear() {
               c.placeholder || null,
               c.opcoes ? JSON.stringify(c.opcoes) : null,
               c.max || null,
+              c.sistema ? 1 : 0,
             ]
           );
         }
@@ -267,6 +268,10 @@ async function paraAdmin(slug) {
     documentos: docs,
     perguntas: perg,
     tiposDeCampo: TIPOS_DE_CAMPO,
+    // Seções já usadas neste formulário, para o admin escolher em vez de
+    // digitar — digitando, "Condutor" e "condutor " viram duas seções, e a
+    // pergunta nova aparece num grupo solto no formulário.
+    secoesExistentes: [...new Set(perg.map((p) => p.secao).filter(Boolean))].sort(),
     modulos: MODULOS.map((m) => ({ slug: m.slug, rotulo: m.rotulo })),
   };
 }
@@ -282,7 +287,7 @@ async function perguntas(slug, { apenasAtivas = true } = {}) {
   const linhas = await db
     .prepare(
       `SELECT id, campo_id, rotulo, tipo, secao, icone, obrigatorio, ativo,
-              ordem, largura, dica, placeholder, opcoes, max_tamanho
+              ordem, largura, dica, placeholder, opcoes, max_tamanho, sistema
          FROM cfg_campos
         WHERE modulo = ?
           ${apenasAtivas ? 'AND ativo = 1' : ''}
@@ -305,6 +310,8 @@ async function perguntas(slug, { apenasAtivas = true } = {}) {
     placeholder: l.placeholder,
     opcoes: l.opcoes ? JSON.parse(l.opcoes) : null,
     max: l.max_tamanho,
+    // Campo do qual outra coisa depende: editavel, mas nao excluivel.
+    sistema: l.sistema === 1,
   }));
 }
 
@@ -336,16 +343,79 @@ async function secoesDoModulo(slug) {
   return [...porSecao.values()];
 }
 
+/* ---------------------------------------------------------------------------
+   Tipos de pergunta
+
+   Cada tipo declara O QUE ele precisa configurar. A tela do admin lê daqui e
+   mostra só os campos pertinentes — perguntar "máximo de caracteres" numa data
+   ou "quantas opções" num número é ruído que faz a pessoa duvidar da escolha.
+
+   "config" é o contrato com a tela:
+     limite   pede um máximo de caracteres/dígitos (com padrão e teto)
+     opcoes   pede a lista de escolhas
+
+   ACRESCENTAR UM TIPO é acrescentar uma entrada aqui. A tela, a validação e a
+   gravação leem desta lista — nenhuma delas tem a própria cópia.
+
+   Os tipos com VALIDAÇÃO DE NEGÓCIO (CPF, placa, telefone) continuam
+   existindo, mas fora do construtor: eles conferem dígito verificador e
+   formato, e alimentam as tabelas estruturadas. Quem monta formulário escolhe
+   entre os tipos genéricos; os validados são do desenho do sistema.
+   ------------------------------------------------------------------------- */
+
 const TIPOS_DE_CAMPO = [
-  { valor: 'texto', rotulo: 'Texto livre' },
-  { valor: 'nome', rotulo: 'Nome completo' },
-  { valor: 'cpf', rotulo: 'CPF' },
-  { valor: 'cpf_cnpj', rotulo: 'CPF ou CNPJ' },
-  { valor: 'telefone', rotulo: 'Telefone' },
-  { valor: 'email', rotulo: 'E-mail' },
-  { valor: 'placa', rotulo: 'Placa de veículo' },
-  { valor: 'selecao', rotulo: 'Escolha entre opções' },
+  {
+    valor: 'data', rotulo: 'Data', icone: 'event',
+    ajuda: 'Campo de data, com o seletor do navegador.',
+    config: [],
+  },
+  {
+    valor: 'selecao', rotulo: 'Lista suspensa', icone: 'arrow_drop_down_circle',
+    ajuda: 'Quem preenche escolhe uma das opções que você definir.',
+    config: ['opcoes'],
+  },
+  {
+    valor: 'texto', rotulo: 'Texto curto', icone: 'short_text',
+    ajuda: 'Uma linha. Bom para nome, código, referência.',
+    config: ['limite'],
+    limitePadrao: 100, limiteMax: 255,
+  },
+  {
+    valor: 'texto_longo', rotulo: 'Texto longo', icone: 'notes',
+    ajuda: 'Várias linhas. Bom para observação e descrição.',
+    config: ['limite'],
+    limitePadrao: 500, limiteMax: 4000,
+  },
+  {
+    valor: 'numero', rotulo: 'Número', icone: 'pin',
+    ajuda: 'Só dígitos. Letra e símbolo são recusados.',
+    config: ['limite'],
+    limitePadrao: 10, limiteMax: 30,
+  },
+  {
+    valor: 'anexo', rotulo: 'Anexo (arquivo)', icone: 'attach_file',
+    ajuda: 'Pede um arquivo: PDF, JPG ou PNG.',
+    config: [],
+  },
+  // Tipos com validação própria, mantidos para as perguntas que já existem e
+  // para quem precisar de conferência de verdade.
+  { valor: 'nome', rotulo: 'Nome completo', icone: 'badge', ajuda: 'Exige nome e sobrenome.', config: [], avancado: true },
+  { valor: 'cpf', rotulo: 'CPF (com validação)', icone: 'fingerprint', ajuda: 'Confere o dígito verificador.', config: [], avancado: true },
+  { valor: 'cpf_cnpj', rotulo: 'CPF ou CNPJ (com validação)', icone: 'business', ajuda: 'Aceita os dois, conferindo o dígito.', config: [], avancado: true },
+  { valor: 'telefone', rotulo: 'Telefone (com validação)', icone: 'call', ajuda: 'Confere DDD e quantidade de dígitos.', config: [], avancado: true },
+  { valor: 'email', rotulo: 'E-mail (com validação)', icone: 'mail', ajuda: 'Confere o formato.', config: [], avancado: true },
+  { valor: 'placa', rotulo: 'Placa (com validação)', icone: 'directions_car', ajuda: 'Aceita o formato antigo e o Mercosul.', config: [], avancado: true },
 ];
+
+function acharTipo(valor) {
+  return TIPOS_DE_CAMPO.find((t) => t.valor === valor) || null;
+}
+
+/** O tipo pede este item de configuração? */
+function tipoPede(valor, item) {
+  const t = acharTipo(valor);
+  return !!(t && t.config.includes(item));
+}
 
 /** Transforma o rótulo em identificador técnico (mesma regra dos documentos). */
 function idTecnico(texto) {
@@ -358,11 +428,13 @@ function idTecnico(texto) {
 }
 
 /** Cria uma pergunta em um módulo. */
-async function criarPergunta({ modulo, rotulo, tipo = 'texto', secao, obrigatorio = false, opcoes = null }) {
+async function criarPergunta({ modulo, rotulo, tipo = 'texto', secao, obrigatorio = false, opcoes = null, maxTamanho = null }) {
   await garantirSemeado();
 
   if (!acharModulo(modulo)) return { ok: false, erro: 'Módulo inválido.' };
-  if (!TIPOS_DE_CAMPO.some((t) => t.valor === tipo)) return { ok: false, erro: 'Tipo de campo inválido.' };
+
+  const espec = acharTipo(tipo);
+  if (!espec) return { ok: false, erro: 'Tipo de campo inválido.' };
 
   const rot = limparTexto(rotulo);
   if (!rot) return { ok: false, erro: 'Informe o texto da pergunta.' };
@@ -370,14 +442,27 @@ async function criarPergunta({ modulo, rotulo, tipo = 'texto', secao, obrigatori
   const campoId = idTecnico(rot);
   if (!campoId) return { ok: false, erro: 'O texto da pergunta precisa ter letras ou números.' };
 
-  // Tipo "seleção" sem opções não daria escolha nenhuma a quem preenche.
+  // ---- Opções: só para quem pede, e sem opção repetida ----
   let opcoesLimpas = null;
-  if (tipo === 'selecao') {
+  if (tipoPede(tipo, 'opcoes')) {
     const lista = (Array.isArray(opcoes) ? opcoes : String(opcoes || '').split(','))
       .map((o) => limparTexto(o).toUpperCase())
       .filter(Boolean);
-    if (!lista.length) return { ok: false, erro: 'Informe as opções, separadas por vírgula.' };
+    if (lista.length < 2) {
+      // Uma opção só não é escolha: se o valor é fixo, não precisa perguntar.
+      return { ok: false, erro: 'A lista precisa de pelo menos 2 opções.' };
+    }
     opcoesLimpas = JSON.stringify([...new Set(lista)]);
+  }
+
+  // ---- Limite de caracteres: só para quem pede, dentro do teto do tipo ----
+  let limite = null;
+  if (tipoPede(tipo, 'limite')) {
+    const n = Number(maxTamanho);
+    limite = Number.isInteger(n) && n > 0 ? n : espec.limitePadrao;
+    if (limite > espec.limiteMax) {
+      return { ok: false, erro: `O máximo para "${espec.rotulo}" é ${espec.limiteMax}.` };
+    }
   }
 
   const existente = await db
@@ -391,10 +476,11 @@ async function criarPergunta({ modulo, rotulo, tipo = 'texto', secao, obrigatori
 
   const r = await db
     .prepare(
-      `INSERT INTO cfg_campos (modulo, campo_id, rotulo, tipo, secao, obrigatorio, ativo, ordem, opcoes)
-       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?) RETURNING id`
+      `INSERT INTO cfg_campos
+         (modulo, campo_id, rotulo, tipo, secao, obrigatorio, ativo, ordem, opcoes, max_tamanho)
+       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?) RETURNING id`
     )
-    .run(modulo, campoId, rot, tipo, limparTexto(secao) || 'Dados', obrigatorio ? 1 : 0, ordem, opcoesLimpas);
+    .run(modulo, campoId, rot, tipo, limparTexto(secao) || 'Dados', obrigatorio ? 1 : 0, ordem, opcoesLimpas, limite);
 
   return { ok: true, id: r.lastInsertRowid, campoId, rotulo: rot };
 }
@@ -468,8 +554,20 @@ async function excluirDocumento(id) {
  */
 async function excluirPergunta(id) {
   await garantirSemeado();
-  const alvo = await db.prepare('SELECT rotulo FROM cfg_campos WHERE id = ?').get(id);
+  const alvo = await db.prepare('SELECT rotulo, sistema FROM cfg_campos WHERE id = ?').get(id);
   if (!alvo) return { ok: false, erro: 'Pergunta não encontrada.' };
+
+  // Campo do sistema não sai. Ele alimenta tabela estruturada, nomeia pasta de
+  // anexo ou entra numa regra de negócio — apagar não daria erro na hora,
+  // daria dado faltando semanas depois, sem ninguém ligar uma coisa à outra.
+  // Desativar continua permitido: tira do formulário sem sumir do sistema.
+  if (alvo.sistema === 1) {
+    return {
+      ok: false,
+      erro: `"${alvo.rotulo}" é um campo do sistema e não pode ser excluído. ` +
+            'Você pode desativá-lo para que ele não apareça no formulário.',
+    };
+  }
 
   const r = await db.prepare('DELETE FROM cfg_campos WHERE id = ?').run(id);
   return { ok: r.changes > 0, rotulo: alvo.rotulo };
@@ -613,6 +711,8 @@ async function renomearDocumento(id, rotulo) {
 }
 
 module.exports = {
+  acharTipo,
+  tipoPede,
   garantirSemeado,
   // leitura
   operacoesAtivas,

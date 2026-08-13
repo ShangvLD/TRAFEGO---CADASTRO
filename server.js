@@ -53,6 +53,23 @@ if (EM_PRODUCAO) app.set('trust proxy', 1);
 // Pequeno auxiliar: deixa handlers assíncronos encaminharem erros ao Express.
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
+/**
+ * Quem pode CONFIGURAR formulário: admin, ou quem acompanha algum painel.
+ *
+ * Quem trata o cadastro no dia a dia é quem descobre que falta uma pergunta —
+ * exigir admin para isso transforma um ajuste de cinco segundos num pedido que
+ * espera. Incluir e editar, então, é de quem opera.
+ *
+ * EXCLUIR não: apagar pergunta joga fora as respostas já dadas nela, e isso não
+ * volta. Fica com o admin (ver exigirAdmin nas rotas DELETE).
+ */
+function exigirConfigurarFormulario(req, res, next) {
+  const u = req.session && req.session.usuario;
+  if (!u) return res.status(401).json({ ok: false, erro: 'Não autenticado.' });
+  if (papeis.ehAdmin(u.papel) || papeis.paineisDoPapel(u.papel).length) return next();
+  return res.status(403).json({ ok: false, erro: 'Sem permissão para configurar formulários.' });
+}
+
 // --------------------------------------------------------------------------
 // Middlewares base
 // --------------------------------------------------------------------------
@@ -605,7 +622,7 @@ app.get(
 app.get(
   '/api/admin/formulario',
   exigirLogin,
-  exigirAdmin,
+  exigirConfigurarFormulario,
   wrap(async (req, res) => {
     const slug = String(req.query.modulo || 'terceiro');
     if (!acharModulo(slug)) return res.status(404).json({ ok: false, erro: 'Módulo não encontrado.' });
@@ -617,7 +634,7 @@ app.get(
 app.post(
   '/api/admin/operacoes',
   exigirLogin,
-  exigirAdmin,
+  exigirConfigurarFormulario,
   wrap(async (req, res) => {
     const r = await configFormulario.criarOperacao((req.body || {}).nome);
     if (!r.ok) return res.status(400).json({ ok: false, erro: r.erro });
@@ -629,7 +646,7 @@ app.post(
 app.patch(
   '/api/admin/operacoes/:id',
   exigirLogin,
-  exigirAdmin,
+  exigirConfigurarFormulario,
   wrap(async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
@@ -644,7 +661,7 @@ app.patch(
 app.post(
   '/api/admin/documentos',
   exigirLogin,
-  exigirAdmin,
+  exigirConfigurarFormulario,
   wrap(async (req, res) => {
     const { modulo, codigo, rotulo, temValidade, obrigatorio } = req.body || {};
     const r = await configFormulario.criarDocumento({
@@ -663,7 +680,7 @@ app.post(
 app.patch(
   '/api/admin/documentos/:id',
   exigirLogin,
-  exigirAdmin,
+  exigirConfigurarFormulario,
   wrap(async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
@@ -1112,7 +1129,7 @@ for (const m of MODULOS) {
 app.post(
   '/api/admin/perguntas',
   exigirLogin,
-  exigirAdmin,
+  exigirConfigurarFormulario,
   wrap(async (req, res) => {
     const { modulo, rotulo, tipo, secao, obrigatorio, opcoes } = req.body || {};
     const r = await configFormulario.criarPergunta({
@@ -1131,7 +1148,7 @@ app.post(
 app.patch(
   '/api/admin/perguntas/:id',
   exigirLogin,
-  exigirAdmin,
+  exigirConfigurarFormulario,
   wrap(async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });

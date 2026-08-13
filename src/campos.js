@@ -113,12 +113,98 @@ const CAMPOS_CANDIDATO = [
   },
 ];
 
+/* ---------------------------------------------------------------------------
+   Terceiro
+
+   Estes campos estavam escritos à mão em views/cadastro.html. Trazê-los para
+   cá é o que permite editá-los na tela de configuração — antes, mudar um
+   rótulo exigia deploy.
+
+   "sistema: true" marca o campo que OUTRA COISA depende. Ele continua
+   editável em tudo (rótulo, ordem, seção, obrigatoriedade, tipo, limite), mas
+   não pode ser EXCLUÍDO:
+
+     condutor_nome           nome da pasta dos anexos (NOME_CPF)
+     condutor_cpf            identifica o motorista e evita duplicar cadastro
+     proprietario_documento  deduplica o proprietário entre cadastros
+     placa_cavalo/carreta    contam itens na previsão de conclusão
+     prioridade              ordena a fila de atendimento
+
+   Apagar um desses não daria erro na hora — daria dado faltando semanas
+   depois, no painel e na exportação, sem ninguém ligar uma coisa à outra.
+   --------------------------------------------------------------------------- */
+
+const CAMPOS_TERCEIRO = [
+  {
+    secao: 'Condutor',
+    icone: 'person',
+    campos: [
+      { id: 'condutor_nome', rotulo: 'Nome do condutor', tipo: 'nome', obrigatorio: true, largura: 'larga', sistema: true },
+      { id: 'condutor_cpf', rotulo: 'CPF do condutor', tipo: 'cpf', obrigatorio: true, dica: 'Conferido pelo dígito verificador', sistema: true },
+      { id: 'condutor_email', rotulo: 'E-mail do condutor', tipo: 'email', obrigatorio: false, largura: 'larga' },
+      { id: 'condutor_telefone', rotulo: 'Contato do condutor', tipo: 'telefone', obrigatorio: true },
+      { id: 'cnh_numero', rotulo: 'Número da CNH', tipo: 'texto', obrigatorio: true, max: 11 },
+      { id: 'cnh_categoria', rotulo: 'Categoria da CNH', tipo: 'selecao', obrigatorio: true,
+        opcoes: ['A', 'B', 'C', 'D', 'E', 'AB', 'AC', 'AD', 'AE'] },
+      { id: 'cnh_validade', rotulo: 'Validade da CNH', tipo: 'data', obrigatorio: true, dica: 'Precisa estar em dia' },
+    ],
+  },
+  {
+    secao: 'Proprietário',
+    icone: 'handshake',
+    campos: [
+      { id: 'proprietario_nome', rotulo: 'Proprietário', tipo: 'texto', obrigatorio: false, largura: 'larga', max: 120 },
+      { id: 'proprietario_documento', rotulo: 'CPF / CNPJ do proprietário', tipo: 'cpf_cnpj', obrigatorio: false, sistema: true },
+      { id: 'proprietario_telefone', rotulo: 'Contato do proprietário', tipo: 'telefone', obrigatorio: false },
+      { id: 'proprietario_pis', rotulo: 'Código PIS', tipo: 'texto', obrigatorio: false, max: 14,
+        dica: 'Só para proprietário pessoa física' },
+    ],
+  },
+  {
+    secao: 'Veículo',
+    icone: 'local_shipping',
+    campos: [
+      { id: 'placa_cavalo', rotulo: 'Placa do cavalo', tipo: 'placa', obrigatorio: false, sistema: true },
+      { id: 'placa_carreta', rotulo: 'Placa da carreta', tipo: 'placa', obrigatorio: false, sistema: true },
+    ],
+  },
+  {
+    secao: 'Rastreamento',
+    icone: 'my_location',
+    campos: [
+      { id: 'tag', rotulo: 'TAG de pedágio', tipo: 'selecao', obrigatorio: false,
+        opcoes: ['CONECT CAR', 'SEM PARAR', 'VELOE'] },
+      { id: 'rastreador', rotulo: 'Rastreador', tipo: 'selecao', obrigatorio: false,
+        opcoes: ['SASCAR', 'AUTOTRAC', 'ONIXSAT', 'OMNILINK'] },
+      { id: 'rastreador_id', rotulo: 'Rastreador ID', tipo: 'texto', obrigatorio: false, max: 60,
+        placeholder: 'Número do equipamento' },
+    ],
+  },
+  {
+    secao: 'Prioridade',
+    icone: 'priority_high',
+    campos: [
+      { id: 'prioridade', rotulo: 'Grau de importância do cadastro', tipo: 'selecao', obrigatorio: true,
+        largura: 'larga', sistema: true,
+        opcoes: ['VAI CARREGAR EM INSTANTES', 'URGENTE', 'PODE AGUARDAR'] },
+    ],
+  },
+  {
+    secao: 'Observações',
+    icone: 'chat',
+    campos: [
+      { id: 'obs', rotulo: 'Observações', tipo: 'texto_longo', obrigatorio: false, largura: 'larga', max: 2000 },
+    ],
+  },
+];
+
 const CAMPOS_POR_MODULO = {
+  terceiro: CAMPOS_TERCEIRO,
   agregado: CAMPOS_AGREGADO,
   candidato: CAMPOS_CANDIDATO,
 };
 
-/** Todas as seções de um módulo (vazio se o módulo tiver formulário próprio). */
+/** Todas as seções de um módulo. */
 function secoesDe(slug) {
   return CAMPOS_POR_MODULO[String(slug || '').toLowerCase()] || [];
 }
