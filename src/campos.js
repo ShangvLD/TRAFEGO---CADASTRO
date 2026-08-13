@@ -114,11 +114,19 @@ const CAMPOS_CANDIDATO = [
 ];
 
 /* ---------------------------------------------------------------------------
-   Terceiro
+   Terceiro — CÓPIA FIEL de views/cadastro.html
 
-   Estes campos estavam escritos à mão em views/cadastro.html. Trazê-los para
-   cá é o que permite editá-los na tela de configuração — antes, mudar um
-   rótulo exigia deploy.
+   Estes campos estão escritos à mão em views/cadastro.html. Trazê-los para cá
+   é o que permite editá-los na tela de configuração — antes, mudar um rótulo
+   exigia deploy.
+
+   FIEL é o ponto: rótulo, seção, ordem, obrigatoriedade, dica e placeholder
+   são os do formulário que o time preenche hoje, não uma versão arrumada
+   deles. A primeira semeadura normalizou os nomes ("Contato Motorista:" virou
+   "Contato do condutor", a seção CNH foi fundida em Condutor) e isso teria
+   virado uma mudança silenciosa na tela no dia em que ela passar a ser montada
+   a partir daqui. Quem quiser arrumar arruma pela tela de configuração, que é
+   o lugar onde a mudança fica visível e reversível.
 
    "sistema: true" marca o campo que OUTRA COISA depende. Ele continua
    editável em tudo (rótulo, ordem, seção, obrigatoriedade, tipo, limite), mas
@@ -139,33 +147,56 @@ const CAMPOS_TERCEIRO = [
     secao: 'Condutor',
     icone: 'person',
     campos: [
-      { id: 'condutor_nome', rotulo: 'Nome do condutor', tipo: 'nome', obrigatorio: true, largura: 'larga', sistema: true },
-      { id: 'condutor_cpf', rotulo: 'CPF do condutor', tipo: 'cpf', obrigatorio: true, dica: 'Conferido pelo dígito verificador', sistema: true },
-      { id: 'condutor_email', rotulo: 'E-mail do condutor', tipo: 'email', obrigatorio: false, largura: 'larga' },
-      { id: 'condutor_telefone', rotulo: 'Contato do condutor', tipo: 'telefone', obrigatorio: true },
-      { id: 'cnh_numero', rotulo: 'Número da CNH', tipo: 'texto', obrigatorio: true, max: 11 },
-      { id: 'cnh_categoria', rotulo: 'Categoria da CNH', tipo: 'selecao', obrigatorio: true,
+      { id: 'condutor_nome', rotulo: 'Condutor', tipo: 'nome', obrigatorio: true, largura: 'larga',
+        placeholder: 'Nome completo do condutor', sistema: true },
+      { id: 'condutor_cpf', rotulo: 'CPF', tipo: 'cpf', obrigatorio: true,
+        placeholder: '000.000.000-00', dica: 'Conferido pelo dígito verificador', sistema: true },
+      { id: 'condutor_telefone', rotulo: 'Contato Motorista:', tipo: 'telefone', obrigatorio: true,
+        placeholder: '(47) 98869-7821' },
+      { id: 'condutor_email', rotulo: 'EMAIL', tipo: 'email', obrigatorio: false, largura: 'larga',
+        placeholder: 'email@exemplo.com' },
+    ],
+  },
+  {
+    // Seção própria no formulário antigo, com a explicação de que os três
+    // campos são novos (não existiam no Forms) e OPCIONAIS. A semeadura os
+    // trouxe como obrigatórios, o que nem o formulário nem validarCadastro()
+    // pedem — validarCnhNumero e companhia têm obrigatorio = false.
+    secao: 'CNH',
+    icone: 'badge',
+    campos: [
+      { id: 'cnh_numero', rotulo: 'Número da CNH', tipo: 'texto', obrigatorio: false, max: 14,
+        placeholder: '11 dígitos' },
+      { id: 'cnh_categoria', rotulo: 'Categoria', tipo: 'selecao', obrigatorio: false,
         opcoes: ['A', 'B', 'C', 'D', 'E', 'AB', 'AC', 'AD', 'AE'] },
-      { id: 'cnh_validade', rotulo: 'Validade da CNH', tipo: 'data', obrigatorio: true, dica: 'Precisa estar em dia' },
+      { id: 'cnh_validade', rotulo: 'Validade', tipo: 'data', obrigatorio: false },
     ],
   },
   {
     secao: 'Proprietário',
     icone: 'handshake',
     campos: [
-      { id: 'proprietario_nome', rotulo: 'Proprietário', tipo: 'texto', obrigatorio: false, largura: 'larga', max: 120 },
-      { id: 'proprietario_documento', rotulo: 'CPF / CNPJ do proprietário', tipo: 'cpf_cnpj', obrigatorio: false, sistema: true },
-      { id: 'proprietario_telefone', rotulo: 'Contato do proprietário', tipo: 'telefone', obrigatorio: false },
+      { id: 'proprietario_nome', rotulo: 'Proprietário', tipo: 'texto', obrigatorio: false, max: 120,
+        placeholder: 'Nome ou razão social' },
+      { id: 'proprietario_documento', rotulo: 'CPF / CNPJ do proprietário', tipo: 'cpf_cnpj', obrigatorio: false,
+        placeholder: 'Opcional', dica: 'Novo — não existe no Forms', sistema: true },
+      { id: 'proprietario_telefone', rotulo: 'Contato Prop', tipo: 'telefone', obrigatorio: false,
+        placeholder: '(11) 96304-0076' },
+      // No formulário antigo este campo só aparece quando o documento é CPF —
+      // empresa não tem PIS. A configuração ainda não sabe expressar "aparece
+      // quando", então aqui ele fica como campo comum e opcional.
       { id: 'proprietario_pis', rotulo: 'Código PIS', tipo: 'texto', obrigatorio: false, max: 14,
-        dica: 'Só para proprietário pessoa física' },
+        placeholder: '000.00000.00-0', dica: 'Opcional — proprietário pessoa física' },
     ],
   },
   {
     secao: 'Veículo',
     icone: 'local_shipping',
     campos: [
-      { id: 'placa_cavalo', rotulo: 'Placa do cavalo', tipo: 'placa', obrigatorio: false, sistema: true },
-      { id: 'placa_carreta', rotulo: 'Placa da carreta', tipo: 'placa', obrigatorio: false, sistema: true },
+      { id: 'placa_cavalo', rotulo: 'Placa Cavalo', tipo: 'placa', obrigatorio: false,
+        placeholder: 'ABC1D23', sistema: true },
+      { id: 'placa_carreta', rotulo: 'Placa Carreta', tipo: 'placa', obrigatorio: false,
+        placeholder: 'XYZ4321', sistema: true },
     ],
   },
   {
@@ -181,7 +212,7 @@ const CAMPOS_TERCEIRO = [
     ],
   },
   {
-    secao: 'Prioridade',
+    secao: 'Grau de importância',
     icone: 'priority_high',
     campos: [
       { id: 'prioridade', rotulo: 'Grau de importância do cadastro', tipo: 'selecao', obrigatorio: true,
@@ -193,7 +224,8 @@ const CAMPOS_TERCEIRO = [
     secao: 'Observações',
     icone: 'chat',
     campos: [
-      { id: 'obs', rotulo: 'Observações', tipo: 'texto_longo', obrigatorio: false, largura: 'larga', max: 2000 },
+      { id: 'obs', rotulo: 'OBS', tipo: 'texto_longo', obrigatorio: false, largura: 'larga', max: 2000,
+        placeholder: 'Opcional' },
     ],
   },
 ];

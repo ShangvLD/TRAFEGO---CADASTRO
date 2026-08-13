@@ -10,6 +10,7 @@
     "seed": "node src/seed.js",
     "criar-usuario": "node src/criar-usuario.js",
     "consultar": "node src/consultar.js",
+    "copiar-campos": "node src/copiar-campos.js",
     "testar-webhook": "node src/testar-webhook.js",
     "testar-validacao": "node src/testar-validacao.js",
     "importar": "node src/importar-csv.js",

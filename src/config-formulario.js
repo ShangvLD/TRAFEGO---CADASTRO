@@ -427,6 +427,60 @@ function idTecnico(texto) {
     .replace(/^_+|_+$/g, '');
 }
 
+/**
+ * Limpa a lista de opções de uma lista suspensa.
+ * Devolve { ok, valor } com o JSON pronto para gravar, ou { ok:false, erro }.
+ */
+function limparOpcoes(opcoes) {
+  const lista = (Array.isArray(opcoes) ? opcoes : String(opcoes == null ? '' : opcoes).split(','))
+    .map((o) => limparTexto(o).toUpperCase())
+    .filter(Boolean);
+
+  const semRepetidas = [...new Set(lista)];
+  if (semRepetidas.length < 2) {
+    // Uma opção só não é escolha: se o valor é fixo, não precisa perguntar.
+    return { ok: false, erro: 'A lista precisa de pelo menos 2 opções.' };
+  }
+  return { ok: true, valor: JSON.stringify(semRepetidas) };
+}
+
+/**
+ * Confere o limite de caracteres contra o teto do tipo.
+ * Valor ausente ou inválido cai no padrão do tipo — em vez de recusar, o
+ * construtor assume o que o próprio tipo declara.
+ */
+function limparLimite(espec, maxTamanho) {
+  const n = Number(maxTamanho);
+  const limite = Number.isInteger(n) && n > 0 ? n : espec.limitePadrao;
+  if (limite > espec.limiteMax) {
+    return { ok: false, erro: `O máximo para "${espec.rotulo}" é ${espec.limiteMax}.` };
+  }
+  return { ok: true, valor: limite };
+}
+
+/**
+ * Reaproveita a grafia de uma seção que o módulo já tem.
+ *
+ * Sem isto, "Condutor" e "condutor " viram DUAS seções, e a pergunta nova
+ * aparece num grupo solto logo abaixo do grupo certo — com o mesmo nome, para
+ * quem olha. A comparação usa o mesmo idTecnico dos campos: ignora acento,
+ * caixa e pontuação.
+ */
+async function normalizarSecao(modulo, secao) {
+  const limpa = limparTexto(secao);
+  if (!limpa) return '';
+
+  const chave = idTecnico(limpa);
+  if (!chave) return limpa;
+
+  const existentes = await db
+    .prepare('SELECT DISTINCT secao FROM cfg_campos WHERE modulo = ?')
+    .all(modulo);
+
+  const igual = existentes.find((l) => idTecnico(l.secao) === chave);
+  return igual ? igual.secao : limpa;
+}
+
 /** Cria uma pergunta em um módulo. */
 async function criarPergunta({ modulo, rotulo, tipo = 'texto', secao, obrigatorio = false, opcoes = null, maxTamanho = null }) {
   await garantirSemeado();
@@ -445,24 +499,17 @@ async function criarPergunta({ modulo, rotulo, tipo = 'texto', secao, obrigatori
   // ---- Opções: só para quem pede, e sem opção repetida ----
   let opcoesLimpas = null;
   if (tipoPede(tipo, 'opcoes')) {
-    const lista = (Array.isArray(opcoes) ? opcoes : String(opcoes || '').split(','))
-      .map((o) => limparTexto(o).toUpperCase())
-      .filter(Boolean);
-    if (lista.length < 2) {
-      // Uma opção só não é escolha: se o valor é fixo, não precisa perguntar.
-      return { ok: false, erro: 'A lista precisa de pelo menos 2 opções.' };
-    }
-    opcoesLimpas = JSON.stringify([...new Set(lista)]);
+    const r = limparOpcoes(opcoes);
+    if (!r.ok) return r;
+    opcoesLimpas = r.valor;
   }
 
   // ---- Limite de caracteres: só para quem pede, dentro do teto do tipo ----
   let limite = null;
   if (tipoPede(tipo, 'limite')) {
-    const n = Number(maxTamanho);
-    limite = Number.isInteger(n) && n > 0 ? n : espec.limitePadrao;
-    if (limite > espec.limiteMax) {
-      return { ok: false, erro: `O máximo para "${espec.rotulo}" é ${espec.limiteMax}.` };
-    }
+    const r = limparLimite(espec, maxTamanho);
+    if (!r.ok) return r;
+    limite = r.valor;
   }
 
   const existente = await db
@@ -480,34 +527,148 @@ async function criarPergunta({ modulo, rotulo, tipo = 'texto', secao, obrigatori
          (modulo, campo_id, rotulo, tipo, secao, obrigatorio, ativo, ordem, opcoes, max_tamanho)
        VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?) RETURNING id`
     )
-    .run(modulo, campoId, rot, tipo, limparTexto(secao) || 'Dados', obrigatorio ? 1 : 0, ordem, opcoesLimpas, limite);
+    .run(
+      modulo,
+      campoId,
+      rot,
+      tipo,
+      (await normalizarSecao(modulo, secao)) || 'Dados',
+      obrigatorio ? 1 : 0,
+      ordem,
+      opcoesLimpas,
+      limite
+    );
 
   return { ok: true, id: r.lastInsertRowid, campoId, rotulo: rot };
 }
 
-/** Atualiza uma pergunta: rótulo, obrigatoriedade ou estado. */
-async function atualizarPergunta(id, { rotulo, obrigatorio, ativo }) {
+/**
+ * Atualiza uma pergunta.
+ *
+ * Aceita rótulo, tipo, seção, obrigatoriedade, estado, configuração do tipo
+ * (opções / limite) e ordem. Só o que vier no objeto é tocado — assim a tela
+ * pode mandar um interruptor sozinho ou o formulário inteiro pela mesma rota.
+ *
+ * Um único UPDATE no fim: gravar campo a campo deixaria a linha meio trocada
+ * se a validação do próximo campo falhasse.
+ *
+ * @returns { ok: true } ou { ok: false, erro }
+ */
+async function atualizarPergunta(id, campos = {}) {
   await garantirSemeado();
-  let mexeu = false;
 
-  if (typeof rotulo === 'string') {
-    const rot = limparTexto(rotulo);
-    if (rot) {
-      // O campo_id NÃO muda junto: ele é a chave dos dados já gravados, e
-      // renomear a chave desligaria as respostas antigas da pergunta.
-      const r = await db.prepare('UPDATE cfg_campos SET rotulo = ? WHERE id = ?').run(rot, id);
-      mexeu = r.changes > 0 || mexeu;
+  const atual = await db
+    .prepare('SELECT id, modulo, tipo, opcoes, max_tamanho FROM cfg_campos WHERE id = ?')
+    .get(id);
+  if (!atual) return { ok: false, erro: 'Pergunta não encontrada.', naoEncontrada: true };
+
+  const colunas = [];
+  const valores = [];
+  const marcar = (coluna, valor) => {
+    colunas.push(`${coluna} = ?`);
+    valores.push(valor);
+  };
+
+  if (typeof campos.rotulo === 'string') {
+    const rot = limparTexto(campos.rotulo);
+    if (!rot) return { ok: false, erro: 'Informe o texto da pergunta.' };
+    // O campo_id NÃO muda junto: ele é a chave dos dados já gravados, e
+    // renomear a chave desligaria as respostas antigas da pergunta.
+    marcar('rotulo', rot);
+  }
+
+  if (typeof campos.obrigatorio === 'boolean') marcar('obrigatorio', campos.obrigatorio ? 1 : 0);
+  if (typeof campos.ativo === 'boolean') marcar('ativo', campos.ativo ? 1 : 0);
+
+  if (campos.secao !== undefined) {
+    const secao = await normalizarSecao(atual.modulo, campos.secao);
+    if (!secao) return { ok: false, erro: 'Informe a seção da pergunta.' };
+    marcar('secao', secao);
+  }
+
+  if (campos.ordem !== undefined) {
+    const n = Number(campos.ordem);
+    if (!Number.isInteger(n) || n < 0) return { ok: false, erro: 'Ordem inválida.' };
+    marcar('ordem', n);
+  }
+
+  // ---- Tipo e a configuração que ele exige ----
+  const tipoFinal = typeof campos.tipo === 'string' && campos.tipo ? campos.tipo : atual.tipo;
+  const espec = acharTipo(tipoFinal);
+  if (!espec) return { ok: false, erro: 'Tipo de campo inválido.' };
+
+  const trocouTipo = tipoFinal !== atual.tipo;
+  if (trocouTipo) marcar('tipo', tipoFinal);
+
+  // Trocar o tipo REVALIDA a configuração: virar "lista suspensa" sem opções
+  // não pode passar, e o que a lista suspensa deixou para trás não pode ficar.
+  if (tipoPede(tipoFinal, 'opcoes')) {
+    if (campos.opcoes !== undefined || trocouTipo) {
+      const atuais = atual.opcoes ? JSON.parse(atual.opcoes) : null;
+      const r = limparOpcoes(campos.opcoes !== undefined ? campos.opcoes : atuais);
+      if (!r.ok) return r;
+      marcar('opcoes', r.valor);
     }
+  } else if (trocouTipo && atual.opcoes !== null) {
+    // Dado morto: "número" não tem opção, e deixá-las na linha faria a próxima
+    // volta ao tipo antigo ressuscitar uma lista que ninguém revisou.
+    marcar('opcoes', null);
   }
-  if (typeof obrigatorio === 'boolean') {
-    const r = await db.prepare('UPDATE cfg_campos SET obrigatorio = ? WHERE id = ?').run(obrigatorio ? 1 : 0, id);
-    mexeu = r.changes > 0 || mexeu;
+
+  if (tipoPede(tipoFinal, 'limite')) {
+    if (campos.maxTamanho !== undefined || trocouTipo) {
+      const bruto = campos.maxTamanho !== undefined ? campos.maxTamanho : atual.max_tamanho;
+      const r = limparLimite(espec, bruto);
+      if (!r.ok) return r;
+      marcar('max_tamanho', r.valor);
+    }
+  } else if (trocouTipo && atual.max_tamanho !== null) {
+    marcar('max_tamanho', null);
   }
-  if (typeof ativo === 'boolean') {
-    const r = await db.prepare('UPDATE cfg_campos SET ativo = ? WHERE id = ?').run(ativo ? 1 : 0, id);
-    mexeu = r.changes > 0 || mexeu;
+
+  if (!colunas.length) return { ok: false, erro: 'Nada a alterar.' };
+
+  valores.push(id);
+  const r = await db
+    .prepare(`UPDATE cfg_campos SET ${colunas.join(', ')} WHERE id = ?`)
+    .run(...valores);
+
+  return r.changes > 0 ? { ok: true } : { ok: false, erro: 'Pergunta não encontrada.', naoEncontrada: true };
+}
+
+/**
+ * Regrava a ordem das perguntas de um módulo.
+ *
+ * Recebe a lista COMPLETA de ids na ordem desejada. Aceitar um pedaço seria
+ * pior do que parece: as perguntas de fora ficariam com a numeração antiga,
+ * intercalando-se com a nova de um jeito que ninguém pediu.
+ */
+async function reordenarPerguntas(modulo, ids) {
+  await garantirSemeado();
+
+  if (!acharModulo(modulo)) return { ok: false, erro: 'Módulo inválido.' };
+
+  const lista = (Array.isArray(ids) ? ids : []).map(Number).filter(Number.isInteger);
+  if (!lista.length) return { ok: false, erro: 'Informe a nova ordem das perguntas.' };
+  if (new Set(lista).size !== lista.length) return { ok: false, erro: 'A ordem tem perguntas repetidas.' };
+
+  const doModulo = await db.prepare('SELECT id FROM cfg_campos WHERE modulo = ?').all(modulo);
+  const conhecidos = new Set(doModulo.map((l) => Number(l.id)));
+
+  if (lista.some((id) => !conhecidos.has(id))) {
+    return { ok: false, erro: 'A ordem cita uma pergunta que não é deste formulário.' };
   }
-  return mexeu;
+  if (lista.length !== doModulo.length) {
+    return { ok: false, erro: 'Envie a ordem completa das perguntas do formulário.' };
+  }
+
+  await db.transacao(async (q) => {
+    for (let i = 0; i < lista.length; i++) {
+      await q('UPDATE cfg_campos SET ordem = ? WHERE id = ? AND modulo = ?', [i + 1, lista[i], modulo]);
+    }
+  });
+
+  return { ok: true, total: lista.length };
 }
 
 // ---------------------------------------------------------------------------
@@ -735,6 +896,8 @@ module.exports = {
   definirOperacoesDoDocumento,
   criarPergunta,
   atualizarPergunta,
+  reordenarPerguntas,
+  normalizarSecao,
   // exclusões
   excluirOperacao,
   excluirDocumento,

@@ -415,25 +415,395 @@
     font-size: 18px;
 }
 
-/* O formulário de nova pergunta tem mais controles que os outros. */
-#form-pergunta select,
-#form-pergunta input[type="text"] {
+/* --------------------------------------------------------------------------
+   Lista de perguntas, agrupada por seção
+
+   O formulário sai agrupado por seção; a lista da configuração mostra o mesmo
+   agrupamento para as setas de ordem fazerem sentido — subir/descer move
+   dentro do grupo, que é o único movimento visível para quem preenche.
+   -------------------------------------------------------------------------- */
+.lista-perguntas .grupo-perg + .grupo-perg {
+    margin-top: var(--space-4);
+}
+
+.grupo-perg__titulo {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 4px var(--space-3);
+    margin-bottom: 2px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border);
+}
+
+.grupo-perg__titulo small {
+    padding: 0 7px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-muted);
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+
+.item-perg .perg-texto {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    min-width: 0;
+    flex: 1;
+}
+
+/* A pergunta aberta no construtor fica marcada: sem isso, rolar até o
+   formulário preenchido e não lembrar qual linha ele veio é fácil. */
+.item-perg.em-edicao {
+    background: var(--primary-soft);
+    box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.tag-sistema {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 8px 1px 5px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-muted);
+    color: var(--text-secondary);
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}
+
+.tag-sistema .material-symbols-rounded {
+    font-size: 13px;
+}
+
+.perg-acoes {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.btn-icone {
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    padding: 4px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: color var(--transition), background var(--transition);
+}
+
+.btn-icone:hover:not(:disabled) {
+    color: var(--primary-darker);
+    background: var(--primary-soft);
+}
+
+.btn-icone:disabled {
+    opacity: 0.25;
+    cursor: default;
+}
+
+.btn-icone .material-symbols-rounded {
+    font-size: 18px;
+}
+
+/* --------------------------------------------------------------------------
+   Construtor de perguntas
+
+   Um passo por linha, numerado: a ordem em que as decisões são tomadas importa
+   (o tipo decide qual configuração aparece no passo 3).
+   -------------------------------------------------------------------------- */
+.construtor {
+    margin-top: var(--space-5);
+    padding: var(--space-5);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface-muted);
+}
+
+.construtor.editando {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+.construtor__cabeca {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-5);
+    padding-bottom: var(--space-3);
+    border-bottom: 1px solid var(--border);
+}
+
+.construtor__cabeca h4 {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.construtor__cabeca h4 .material-symbols-rounded {
+    font-size: 20px;
+    color: var(--primary);
+}
+
+/* O identificador técnico não muda ao renomear — dizer isso onde a pessoa
+   renomeia evita a pergunta "por que o campo continua com o nome velho?". */
+.construtor__id {
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+}
+
+.construtor__cabeca .btn--pequeno {
+    margin-left: auto;
+}
+
+.btn--pequeno {
+    padding: 6px 12px;
+    font-size: 0.82rem;
+}
+
+.construtor__passo + .construtor__passo {
+    margin-top: var(--space-5);
+}
+
+.construtor__rotulo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: var(--space-2);
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.construtor__num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+
+.construtor__ajuda {
+    margin: 6px 0 0;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.construtor input[type="text"],
+.construtor input[type="number"],
+.construtor select {
     padding: 10px 14px;
     border: 1px solid var(--border);
     border-radius: var(--radius);
     font: inherit;
     font-size: 0.92rem;
-    background: var(--surface-muted);
+    background: var(--surface);
+    color: var(--text);
 }
 
-#form-pergunta #nova-pergunta { flex: 2; min-width: 180px; }
-#form-pergunta #nova-pergunta-secao { flex: 1; min-width: 130px; }
-#form-pergunta #nova-pergunta-opcoes { flex: 1; min-width: 160px; }
-
-#form-pergunta select:focus,
-#form-pergunta input[type="text"]:focus {
+.construtor input[type="text"]:focus,
+.construtor input[type="number"]:focus,
+.construtor select:focus {
     outline: none;
     border-color: var(--primary);
-    background: var(--surface);
     box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+.construtor #nova-pergunta {
+    width: 100%;
+}
+
+.construtor__acoes {
+    margin-top: var(--space-6);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border);
+}
+
+/* ---- Passo 2: tipo ---- */
+.tipo-escolha {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.tipo-escolha select {
+    flex: 1;
+    max-width: 340px;
+    font-weight: 600;
+}
+
+.tipo-icone {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border-radius: var(--radius);
+    background: var(--primary-soft);
+    color: var(--primary-darker);
+}
+
+/* ---- Passo 3: configuração do tipo ---- */
+.cfg-limite {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+}
+
+.cfg-limite label {
+    font-size: 0.86rem;
+    color: var(--text);
+}
+
+.cfg-limite input {
+    width: 110px;
+}
+
+.cfg-limite__teto {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+
+.cfg-opcoes__quantas {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-3);
+}
+
+.cfg-opcoes__quantas label {
+    font-size: 0.86rem;
+    color: var(--text);
+}
+
+.cfg-opcoes__quantas input {
+    width: 90px;
+}
+
+.cfg-opcoes__lista {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.opcao-linha {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.opcao-num {
+    width: 22px;
+    flex-shrink: 0;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-align: right;
+}
+
+.opcao-linha .opcao-valor {
+    flex: 1;
+    max-width: 380px;
+    text-transform: uppercase;
+}
+
+.btn-linha {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: var(--space-3);
+    padding: 6px 12px 6px 8px;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--primary-darker);
+    font: inherit;
+    font-size: 0.84rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.btn-linha:hover {
+    background: var(--primary-soft);
+    border-style: solid;
+}
+
+.btn-linha .material-symbols-rounded {
+    font-size: 17px;
+}
+
+/* ---- Passo 5: seção ---- */
+.secao-escolha {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+}
+
+.secao-escolha select {
+    min-width: 220px;
+}
+
+.secao-escolha input {
+    flex: 1;
+    min-width: 220px;
+    max-width: 340px;
+}
+
+/* --------------------------------------------------------------------------
+   Aviso de divergência
+
+   Só aparece no formulário do terceiro, enquanto a tela de preenchimento dele
+   não for montada a partir desta configuração. Some quando isso acontecer.
+   -------------------------------------------------------------------------- */
+.nota-divergencia {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    margin: 0 0 var(--space-4);
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius);
+    border-left: 3px solid var(--warning);
+    background: var(--warning-soft);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--text);
+}
+
+.nota-divergencia .material-symbols-rounded {
+    font-size: 20px;
+    color: var(--warning);
+    flex-shrink: 0;
+}
+
+.nota-divergencia code {
+    padding: 1px 5px;
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.6);
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 0.8rem;
 }

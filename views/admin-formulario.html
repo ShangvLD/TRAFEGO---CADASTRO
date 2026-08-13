@@ -92,6 +92,7 @@
         <section class="card" id="card-perguntas" style="margin-top:var(--space-6)">
             <div class="card-header">
                 <h3><span class="material-symbols-rounded" style="color:var(--primary);vertical-align:-5px">quiz</span> Perguntas do formulário</h3>
+                <span class="badge is-info" id="contagem-perguntas">—</span>
             </div>
             <p class="form-secao__ajuda" id="ajuda-perguntas">
                 As perguntas que aparecem para quem preenche. O <strong>tipo</strong> define como o
@@ -99,19 +100,120 @@
                 e o Mercosul, e assim por diante.
             </p>
 
-            <div class="lista-cfg" id="lista-perguntas"></div>
+            <!-- O formulário do terceiro ainda é HTML fixo: enquanto for, editar
+                 aqui não muda a tela que o time preenche. Dizer isso é feio, mas
+                 menos feio do que a pessoa editar e achar que aplicou. -->
+            <p class="nota-divergencia" id="nota-terceiro" hidden>
+                <span class="material-symbols-rounded">warning</span>
+                <span>
+                    <strong>Este formulário ainda é desenhado à mão.</strong>
+                    A tela de cadastro do terceiro (<code>/cadastro</code>) tem os 18 campos
+                    escritos direto no HTML, e a validação dele é a de <code>validarCadastro</code>.
+                    Enquanto for assim, <strong>o que você mudar aqui não muda nada para quem
+                    preenche</strong> — a configuração está pronta, quem falta converter é a tela.
+                </span>
+            </p>
 
-            <form class="add-linha" id="form-pergunta">
-                <input type="text" id="nova-pergunta" placeholder="Texto da pergunta (ex.: Número do RNTRC)" maxlength="80" required>
-                <select id="nova-pergunta-tipo"></select>
-                <input type="text" id="nova-pergunta-secao" placeholder="Seção (ex.: Condutor)" maxlength="40">
-                <input type="text" id="nova-pergunta-opcoes" placeholder="Opções separadas por vírgula" maxlength="200" hidden>
-                <label class="check-inline">
-                    <input type="checkbox" id="nova-pergunta-obrig"> obrigatória
-                </label>
-                <button type="submit" class="btn btn--primario">
-                    <span class="material-symbols-rounded">add</span> Adicionar
-                </button>
+            <div class="lista-cfg lista-perguntas" id="lista-perguntas"></div>
+
+            <!-- Construtor: pergunta -> tipo -> configuração do tipo ->
+                 obrigatoriedade -> seção. A configuração do meio muda conforme
+                 o tipo escolhido; o que não se aplica não aparece. -->
+            <form class="construtor" id="form-pergunta">
+                <div class="construtor__cabeca">
+                    <h4 id="construtor-titulo">
+                        <span class="material-symbols-rounded">add_circle</span> Nova pergunta
+                    </h4>
+                    <span class="construtor__id" id="construtor-id" hidden></span>
+                    <button type="button" class="btn btn--secundario btn--pequeno" id="btn-cancelar-edicao" hidden>
+                        <span class="material-symbols-rounded">close</span> Cancelar edição
+                    </button>
+                </div>
+
+                <!-- 1 · pergunta -->
+                <div class="construtor__passo">
+                    <label class="construtor__rotulo" for="nova-pergunta">
+                        <span class="construtor__num">1</span> Pergunta
+                    </label>
+                    <input type="text" id="nova-pergunta" maxlength="80" required
+                           placeholder="O que aparece para quem preenche (ex.: Número do RNTRC)">
+                </div>
+
+                <!-- 2 · tipo -->
+                <div class="construtor__passo">
+                    <label class="construtor__rotulo" for="nova-pergunta-tipo">
+                        <span class="construtor__num">2</span> Tipo de resposta
+                    </label>
+                    <div class="tipo-escolha">
+                        <span class="material-symbols-rounded tipo-icone" id="tipo-icone">short_text</span>
+                        <select id="nova-pergunta-tipo"></select>
+                    </div>
+                    <p class="construtor__ajuda" id="tipo-ajuda"></p>
+                </div>
+
+                <!-- 3 · configuração do tipo (aparece conforme o tipo) -->
+                <div class="construtor__passo" id="bloco-config" hidden>
+                    <span class="construtor__rotulo">
+                        <span class="construtor__num">3</span> Configuração
+                    </span>
+
+                    <div class="cfg-limite" id="cfg-limite" hidden>
+                        <label for="nova-pergunta-limite">Máximo de caracteres</label>
+                        <input type="number" id="nova-pergunta-limite" min="1" step="1">
+                        <span class="cfg-limite__teto" id="cfg-limite-teto"></span>
+                    </div>
+
+                    <div class="cfg-opcoes" id="cfg-opcoes" hidden>
+                        <div class="cfg-opcoes__quantas">
+                            <label for="quantas-opcoes">Quantas opções?</label>
+                            <input type="number" id="quantas-opcoes" min="2" max="30" step="1" value="3">
+                            <button type="button" class="btn btn--secundario btn--pequeno" id="btn-gerar-opcoes">
+                                <span class="material-symbols-rounded">list</span> Gerar campos
+                            </button>
+                        </div>
+                        <div class="cfg-opcoes__lista" id="lista-opcoes"></div>
+                        <button type="button" class="btn-linha" id="btn-add-opcao">
+                            <span class="material-symbols-rounded">add</span> Acrescentar opção
+                        </button>
+                        <p class="construtor__ajuda">
+                            As opções são gravadas em MAIÚSCULAS, como no restante do sistema.
+                            Repetidas são descartadas; a lista precisa de pelo menos 2.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- 4 · obrigatoriedade -->
+                <div class="construtor__passo">
+                    <span class="construtor__rotulo">
+                        <span class="construtor__num">4</span> Obrigatoriedade
+                    </span>
+                    <label class="check-inline">
+                        <input type="checkbox" id="nova-pergunta-obrig">
+                        Trava o envio enquanto não for respondida
+                    </label>
+                </div>
+
+                <!-- 5 · seção -->
+                <div class="construtor__passo">
+                    <label class="construtor__rotulo" for="nova-pergunta-secao">
+                        <span class="construtor__num">5</span> Seção do formulário
+                    </label>
+                    <div class="secao-escolha">
+                        <select id="nova-pergunta-secao"></select>
+                        <input type="text" id="nova-pergunta-secao-nova" maxlength="40" hidden
+                               placeholder="Nome da seção nova (ex.: Rastreamento)">
+                    </div>
+                    <p class="construtor__ajuda">
+                        Escolha uma seção existente sempre que couber — "Condutor" e "condutor"
+                        digitados solto viram dois grupos com o mesmo nome no formulário.
+                    </p>
+                </div>
+
+                <div class="construtor__acoes">
+                    <button type="submit" class="btn btn--primario" id="btn-salvar-pergunta">
+                        <span class="material-symbols-rounded">add</span> Adicionar pergunta
+                    </button>
+                </div>
             </form>
         </section>
 
@@ -168,15 +270,34 @@
 
         const elListaPerg = document.getElementById('lista-perguntas');
         const selTipo = document.getElementById('nova-pergunta-tipo');
-        const inpOpcoes = document.getElementById('nova-pergunta-opcoes');
+        const selSecao = document.getElementById('nova-pergunta-secao');
+        const inpSecaoNova = document.getElementById('nova-pergunta-secao-nova');
         const selModulo = document.getElementById('sel-modulo');
         let MODULO = new URLSearchParams(location.search).get('modulo') || 'terceiro';
-        let cfg = { operacoes: [], operacoesDoModulo: [], documentos: [], modulos: [] };
+        let cfg = {
+            operacoes: [], operacoesDoModulo: [], documentos: [], modulos: [],
+            perguntas: [], tiposDeCampo: [], secoesExistentes: [],
+        };
 
+        // Excluir pergunta é só do admin (a rota DELETE exige). Esconder o botão
+        // não é a segurança — é não oferecer o que vai ser recusado.
+        let EH_ADMIN = false;
+        document.addEventListener('usuario-carregado', (ev) => {
+            EH_ADMIN = !!(ev.detail && ev.detail.ehAdmin);
+            if (cfg.perguntas.length) desenharPerguntas();
+        });
+
+        // Pergunta sendo editada (null = o construtor está criando uma nova).
+        let editandoId = null;
+
+        /** A especificação de um tipo de campo, como o servidor a descreve. */
+        function especDoTipo(tipo) {
+            return (cfg.tiposDeCampo || []).find((x) => x.valor === tipo) || null;
+        }
 
         /** Rótulo legível de um tipo de campo. */
         function rotuloDoTipo(tipo) {
-            const t = (cfg.tiposDeCampo || []).find((x) => x.valor === tipo);
+            const t = especDoTipo(tipo);
             return t ? t.rotulo : tipo;
         }
 
@@ -222,9 +343,13 @@
                 operacoesDoModulo: j.operacoesDoModulo || j.operacoes,
                 documentos: j.documentos,
                 modulos: j.modulos || [],
+                perguntas: j.perguntas || [],
+                tiposDeCampo: j.tiposDeCampo || [],
+                secoesExistentes: j.secoesExistentes || [],
             };
             desenharSeletor();
             desenharTipos();
+            desenharSecoes();
             desenhar();
             marcarStatus('Carregado', 'is-info');
         }
@@ -279,8 +404,8 @@
                         '<td class=col-doc><strong>' + esc(d.rotulo) + '</strong>' +
                         (d.temValidade ? '<span class=doc-tag>validade</span>' : '') +
                         '<small>' + esc(d.codigo) + '</small></td>' +
-                        '<td><label class=switch><input type=checkbox class=chk-obrig data-id= + d.id + ' +
-                        (d.obrigatorio ? ' checked' : '') + '><span class=	rilho></span></label></td>' +
+                        '<td><label class=switch><input type=checkbox class=chk-obrig data-id="' + d.id + '"' +
+                        (d.obrigatorio ? ' checked' : '') + '><span class=trilho></span></label></td>' +
                         '</tr>').join('')
                     : '<tr><td class=carregando>Nenhum documento configurado.</td></tr>';
                 desenharListas();
@@ -289,6 +414,10 @@
 
             if (!cfg.documentos.length) {
                 elMatrizCorpo.innerHTML = '<tr><td class="carregando">Nenhum documento configurado.</td></tr>';
+                // As listas laterais e as perguntas não dependem da matriz:
+                // sair aqui sem desenhá-las deixava a tela quase vazia num
+                // módulo que ainda não tem documento nenhum.
+                desenharListas();
                 return;
             }
 
@@ -353,24 +482,94 @@
                 '</div>'
             ).join('');
 
-            // ---- Perguntas ----
-            elListaPerg.innerHTML = (cfg.perguntas || []).length
-                ? cfg.perguntas.map((p) =>
-                    '<div class="item-cfg">' +
-                        '<label class="switch">' +
-                            '<input type="checkbox" data-perg-ativo="' + p.id + '"' + (p.ativo ? ' checked' : '') + '>' +
-                            '<span class="trilho"></span>' +
-                        '</label>' +
-                        '<span class="item-nome' + (p.ativo ? '' : ' apagado') + '">' + esc(p.rotulo) + '</span>' +
-                        '<span class="perg-meta">' + esc(p.secao) + ' · ' + esc(rotuloDoTipo(p.tipo)) +
-                            (p.opcoes ? ' (' + esc(p.opcoes.join(', ')) + ')' : '') + '</span>' +
-                        '<label class="check-inline perg-obrig" title="Obrigatória">' +
-                            '<input type="checkbox" data-perg-obrig="' + p.id + '"' + (p.obrigatorio ? ' checked' : '') + '> obrig.' +
-                        '</label>' +
-                        botaoExcluir('perguntas', p.id, p.rotulo, 'a pergunta') +
-                    '</div>'
-                ).join('')
-                : '<p class="form-secao__ajuda">Este formulário não usa perguntas configuráveis.</p>';
+            desenharPerguntas();
+        }
+
+        // ------------------------------------------------------------------
+        // Lista de perguntas
+        //
+        // Agrupada por SEÇÃO, porque é assim que o formulário sai: as setas
+        // movem a pergunta dentro do seu grupo, que é o único movimento que o
+        // preenchedor enxerga (mudar de grupo é mudar a seção, no passo 5).
+        // ------------------------------------------------------------------
+        function desenharPerguntas() {
+            const lista = cfg.perguntas || [];
+            const contagem = document.getElementById('contagem-perguntas');
+            const nota = document.getElementById('nota-terceiro');
+
+            nota.hidden = MODULO !== 'terceiro';
+            contagem.textContent = lista.length
+                ? lista.length + ' pergunta(s) · ' + lista.filter((p) => p.ativo).length + ' no ar'
+                : 'nenhuma';
+
+            if (!lista.length) {
+                elListaPerg.innerHTML = '<p class="form-secao__ajuda">Este formulário ainda não tem perguntas.</p>';
+                return;
+            }
+
+            // A ordem dentro da seção é a ordem da lista (já vem ordenada).
+            const grupos = [];
+            for (const p of lista) {
+                let g = grupos.find((x) => x.secao === p.secao);
+                if (!g) grupos.push((g = { secao: p.secao, itens: [] }));
+                g.itens.push(p);
+            }
+
+            elListaPerg.innerHTML = grupos.map((g) =>
+                '<div class="grupo-perg">' +
+                    '<div class="grupo-perg__titulo">' + esc(g.secao) +
+                        '<small>' + g.itens.length + '</small>' +
+                    '</div>' +
+                    g.itens.map((p, i) => linhaPergunta(p, i === 0, i === g.itens.length - 1)).join('') +
+                '</div>'
+            ).join('');
+        }
+
+        /** Resumo da configuração do tipo, para a pessoa conferir sem abrir a edição. */
+        function metaDaPergunta(p) {
+            const partes = [rotuloDoTipo(p.tipo)];
+            if (p.opcoes && p.opcoes.length) partes.push(p.opcoes.join(' / '));
+            else if (p.max) partes.push('até ' + p.max);
+            return partes.join(' · ');
+        }
+
+        function botaoIcone(attr, id, icone, titulo, desabilitado) {
+            return '<button type="button" class="btn-icone" data-' + attr + '="' + id + '"' +
+                   (desabilitado ? ' disabled' : '') + ' title="' + esc(titulo) + '">' +
+                   '<span class="material-symbols-rounded">' + icone + '</span></button>';
+        }
+
+        function linhaPergunta(p, primeira, ultima) {
+            // Campo do sistema: editável em tudo, mas não excluível — ele
+            // alimenta tabela estruturada, nomeia a pasta do anexo ou entra no
+            // cálculo da fila. Desativar continua valendo.
+            const excluir = EH_ADMIN && !p.sistema
+                ? botaoExcluir('perguntas', p.id, p.rotulo, 'a pergunta')
+                : '';
+
+            return '<div class="item-cfg item-perg' + (editandoId === p.id ? ' em-edicao' : '') + '">' +
+                '<label class="switch" title="' + (p.ativo ? 'No formulário' : 'Fora do formulário') + '">' +
+                    '<input type="checkbox" data-perg-ativo="' + p.id + '"' + (p.ativo ? ' checked' : '') + '>' +
+                    '<span class="trilho"></span>' +
+                '</label>' +
+                '<span class="perg-texto">' +
+                    '<span class="item-nome' + (p.ativo ? '' : ' apagado') + '">' + esc(p.rotulo) + '</span>' +
+                    (p.sistema
+                        ? '<span class="tag-sistema" title="Alimenta o painel, a pasta dos anexos ou a fila — pode ser desativado, não excluído">' +
+                          '<span class="material-symbols-rounded">lock</span> do sistema</span>'
+                        : '') +
+                    '<span class="perg-meta">' + esc(metaDaPergunta(p)) + '</span>' +
+                '</span>' +
+                '<label class="check-inline perg-obrig" title="Obrigatória">' +
+                    '<input type="checkbox" data-perg-obrig="' + p.id + '"' + (p.obrigatorio ? ' checked' : '') + '> obrig.' +
+                '</label>' +
+                '<span class="perg-acoes">' +
+                    botaoIcone('subir', p.id, 'arrow_upward', 'Subir na seção', primeira) +
+                    botaoIcone('descer', p.id, 'arrow_downward', 'Descer na seção', ultima) +
+                    botaoIcone('editar', p.id, 'edit', 'Editar esta pergunta', false) +
+                '</span>' +
+                excluir +
+            '</div>';
         }
 
         // ------------------------------------------------------------------
@@ -476,41 +675,294 @@
             if (ok) { input.value = ''; validade.checked = false; await carregar(); }
         });
 
-        // ---- Tipos de pergunta no seletor ----
+        // ==================================================================
+        // CONSTRUTOR DE PERGUNTAS
+        //
+        // Pergunta -> tipo -> configuração do tipo -> obrigatoriedade -> seção.
+        // O passo 3 é montado a partir do "config" que o próprio tipo declara
+        // (src/config-formulario.js): perguntar "máximo de caracteres" numa data
+        // ou "quantas opções" num número é ruído que faz duvidar da escolha.
+        // ==================================================================
+        const formPergunta = document.getElementById('form-pergunta');
+        const inpPergunta = document.getElementById('nova-pergunta');
+        const inpObrig = document.getElementById('nova-pergunta-obrig');
+        const inpLimite = document.getElementById('nova-pergunta-limite');
+        const elBlocoConfig = document.getElementById('bloco-config');
+        const elCfgLimite = document.getElementById('cfg-limite');
+        const elCfgOpcoes = document.getElementById('cfg-opcoes');
+        const elListaOpcoes = document.getElementById('lista-opcoes');
+        const btnSalvarPerg = document.getElementById('btn-salvar-pergunta');
+        const btnCancelarEdicao = document.getElementById('btn-cancelar-edicao');
+
+        /** Tipos no seletor, separados: os do construtor e os que validam sozinhos. */
         function desenharTipos() {
-            if (selTipo.options.length || !(cfg.tiposDeCampo || []).length) return;
-            selTipo.innerHTML = cfg.tiposDeCampo
-                .map((tp) => '<option value="' + esc(tp.valor) + '">' + esc(tp.rotulo) + '</option>')
-                .join('');
+            const tipos = cfg.tiposDeCampo || [];
+            if (!tipos.length || selTipo.options.length) return;
+
+            const opcao = (t) => '<option value="' + esc(t.valor) + '">' + esc(t.rotulo) + '</option>';
+            const genericos = tipos.filter((t) => !t.avancado);
+            const avancados = tipos.filter((t) => t.avancado);
+
+            selTipo.innerHTML =
+                '<optgroup label="Resposta comum">' + genericos.map(opcao).join('') + '</optgroup>' +
+                (avancados.length
+                    ? '<optgroup label="Com validação de negócio">' + avancados.map(opcao).join('') + '</optgroup>'
+                    : '');
+            aplicarTipo();
         }
 
-        // Só o tipo "seleção" precisa de opções — o campo aparece quando ele é
-        // escolhido, para não poluir o formulário nos outros casos.
-        selTipo.addEventListener('change', () => {
-            inpOpcoes.hidden = selTipo.value !== 'selecao';
-            if (inpOpcoes.hidden) inpOpcoes.value = '';
+        /**
+         * Mostra a configuração do tipo escolhido — e só ela.
+         * `valores` vem preenchido quando o construtor abre em modo de edição.
+         */
+        function aplicarTipo(valores) {
+            const t = especDoTipo(selTipo.value);
+            if (!t) return;
+
+            document.getElementById('tipo-icone').textContent = t.icone || 'help';
+            document.getElementById('tipo-ajuda').textContent = t.avancado
+                ? t.ajuda + ' A conferência é do sistema — não há o que configurar.'
+                : t.ajuda;
+
+            const pedeLimite = (t.config || []).includes('limite');
+            const pedeOpcoes = (t.config || []).includes('opcoes');
+
+            elCfgLimite.hidden = !pedeLimite;
+            elCfgOpcoes.hidden = !pedeOpcoes;
+            elBlocoConfig.hidden = !pedeLimite && !pedeOpcoes;
+
+            if (pedeLimite) {
+                inpLimite.max = t.limiteMax;
+                document.getElementById('cfg-limite-teto').textContent =
+                    'padrão ' + t.limitePadrao + ', máximo ' + t.limiteMax;
+
+                const atual = valores && valores.limite ? Number(valores.limite) : Number(inpLimite.value);
+                // Trocar "texto longo" (4000) para "texto curto" (255) precisa
+                // baixar o número junto, senão o salvar volta com erro de teto.
+                inpLimite.value = atual > 0 && atual <= t.limiteMax ? atual : t.limitePadrao;
+            }
+
+            if (pedeOpcoes) {
+                const jaTem = lerOpcoes();
+                const vindas = valores && valores.opcoes && valores.opcoes.length ? valores.opcoes : null;
+                desenharOpcoes(vindas || (jaTem.length ? jaTem : ['', '', '']));
+            }
+        }
+
+        selTipo.addEventListener('change', () => aplicarTipo());
+
+        // ---- Construtor de opções da lista suspensa ----
+        function desenharOpcoes(lista) {
+            elListaOpcoes.innerHTML = (lista || []).map((valor, i) =>
+                '<div class="opcao-linha">' +
+                    '<span class="opcao-num">' + (i + 1) + '</span>' +
+                    '<input type="text" class="opcao-valor" maxlength="60" value="' + esc(valor) + '"' +
+                        ' placeholder="Opção ' + (i + 1) + '">' +
+                    '<button type="button" class="btn-icone" data-remover-opcao title="Remover esta opção">' +
+                        '<span class="material-symbols-rounded">close</span></button>' +
+                '</div>'
+            ).join('');
+        }
+
+        function lerOpcoes() {
+            return [...elListaOpcoes.querySelectorAll('.opcao-valor')]
+                .map((i) => i.value.trim())
+                .filter(Boolean);
+        }
+
+        document.getElementById('btn-gerar-opcoes').addEventListener('click', () => {
+            const quantas = Math.max(2, Math.min(30, Number(document.getElementById('quantas-opcoes').value) || 2));
+            const atuais = [...elListaOpcoes.querySelectorAll('.opcao-valor')].map((i) => i.value);
+            // O que já foi digitado é preservado: gerar 5 depois de digitar 2
+            // não pode apagar as duas.
+            const lista = Array.from({ length: quantas }, (_, i) => atuais[i] || '');
+            desenharOpcoes(lista);
+            const primeiroVazio = [...elListaOpcoes.querySelectorAll('.opcao-valor')].find((i) => !i.value);
+            if (primeiroVazio) primeiroVazio.focus();
         });
 
-        document.getElementById('form-pergunta').addEventListener('submit', async (ev) => {
-            ev.preventDefault();
-            const rotulo = document.getElementById('nova-pergunta');
-            const secao = document.getElementById('nova-pergunta-secao');
-            const obrig = document.getElementById('nova-pergunta-obrig');
+        document.getElementById('btn-add-opcao').addEventListener('click', () => {
+            const lista = [...elListaOpcoes.querySelectorAll('.opcao-valor')].map((i) => i.value);
+            lista.push('');
+            desenharOpcoes(lista);
+            const campos = elListaOpcoes.querySelectorAll('.opcao-valor');
+            campos[campos.length - 1].focus();
+        });
 
-            const ok = await enviar('/api/admin/perguntas', 'POST', {
+        elListaOpcoes.addEventListener('click', (ev) => {
+            const btn = ev.target.closest('[data-remover-opcao]');
+            if (!btn) return;
+            const linhas = [...elListaOpcoes.querySelectorAll('.opcao-linha')];
+            const i = linhas.indexOf(btn.closest('.opcao-linha'));
+            const lista = linhas.map((l) => l.querySelector('.opcao-valor').value);
+            lista.splice(i, 1);
+            desenharOpcoes(lista);
+        });
+
+        // ---- Seletor de seção ----
+        //
+        // Lista suspensa com as seções que o formulário já tem, mais "nova".
+        // Digitando livre, "Condutor" e "condutor " viram dois grupos.
+        function desenharSecoes(selecionada) {
+            const secoes = cfg.secoesExistentes || [];
+            const alvo = selecionada != null ? selecionada : selSecao.value;
+
+            selSecao.innerHTML =
+                secoes.map((s) => '<option value="' + esc(s) + '">' + esc(s) + '</option>').join('') +
+                '<option value="__nova">+ Criar uma seção nova...</option>';
+
+            selSecao.value = secoes.includes(alvo) ? alvo : (secoes.length ? secoes[0] : '__nova');
+            aplicarSecao();
+        }
+
+        function aplicarSecao() {
+            const nova = selSecao.value === '__nova';
+            inpSecaoNova.hidden = !nova;
+            if (!nova) inpSecaoNova.value = '';
+        }
+
+        selSecao.addEventListener('change', () => {
+            aplicarSecao();
+            if (!inpSecaoNova.hidden) inpSecaoNova.focus();
+        });
+
+        function secaoEscolhida() {
+            return selSecao.value === '__nova' ? inpSecaoNova.value.trim() : selSecao.value;
+        }
+
+        // ---- Edição: o MESMO construtor, preenchido ----
+        function editarPergunta(id) {
+            const p = (cfg.perguntas || []).find((x) => x.id === id);
+            if (!p) return;
+
+            editandoId = id;
+            inpPergunta.value = p.rotulo;
+            selTipo.value = p.tipo;
+            inpObrig.checked = p.obrigatorio;
+            desenharSecoes(p.secao);
+            aplicarTipo({ limite: p.max, opcoes: p.opcoes });
+
+            document.getElementById('construtor-titulo').innerHTML =
+                '<span class="material-symbols-rounded">edit</span> Editando uma pergunta';
+
+            // O campo_id é a chave dos dados já gravados: renomear a pergunta
+            // NÃO o muda, senão as respostas antigas se desligariam dela.
+            const elId = document.getElementById('construtor-id');
+            elId.hidden = false;
+            elId.textContent = 'identificador: ' + p.campoId + (p.sistema ? ' · campo do sistema' : '');
+
+            btnCancelarEdicao.hidden = false;
+            btnSalvarPerg.innerHTML = '<span class="material-symbols-rounded">save</span> Salvar alterações';
+            formPergunta.classList.add('editando');
+
+            desenharPerguntas();
+            formPergunta.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            inpPergunta.focus();
+        }
+
+        function sairDaEdicao() {
+            editandoId = null;
+            formPergunta.reset();
+            formPergunta.classList.remove('editando');
+            document.getElementById('construtor-titulo').innerHTML =
+                '<span class="material-symbols-rounded">add_circle</span> Nova pergunta';
+            document.getElementById('construtor-id').hidden = true;
+            btnCancelarEdicao.hidden = true;
+            btnSalvarPerg.innerHTML = '<span class="material-symbols-rounded">add</span> Adicionar pergunta';
+            desenharOpcoes(['', '', '']);
+            desenharSecoes();
+            aplicarTipo();
+        }
+
+        btnCancelarEdicao.addEventListener('click', () => {
+            sairDaEdicao();
+            desenharPerguntas();
+        });
+
+        // ---- Ordem: sobe/desce dentro da seção ----
+        //
+        // Manda a lista COMPLETA de ids na ordem nova. O servidor renumera de 1
+        // a N — assim a ordem não depende de quantas vezes já foi mexida.
+        async function moverPergunta(id, passo) {
+            const lista = (cfg.perguntas || []).slice();
+            const i = lista.findIndex((p) => p.id === id);
+            if (i < 0) return;
+
+            // Vizinha do MESMO grupo: o formulário agrupa por seção, então
+            // passar na frente de uma pergunta de outra seção não move nada na
+            // tela de quem preenche.
+            let j = -1;
+            for (let k = i + passo; k >= 0 && k < lista.length; k += passo) {
+                if (lista[k].secao === lista[i].secao) { j = k; break; }
+            }
+            if (j < 0) return;
+
+            const troca = lista[i];
+            lista[i] = lista[j];
+            lista[j] = troca;
+
+            const ok = await enviar('/api/admin/perguntas/ordem', 'POST', {
                 modulo: MODULO,
-                rotulo: rotulo.value,
-                tipo: selTipo.value,
-                secao: secao.value,
-                obrigatorio: obrig.checked,
-                opcoes: inpOpcoes.value,
+                ids: lista.map((p) => p.id),
             });
+            if (ok) await carregar();
+        }
+
+        document.addEventListener('click', (ev) => {
+            const btn = ev.target.closest('[data-subir], [data-descer], [data-editar]');
+            if (!btn) return;
+            if (btn.dataset.editar) return editarPergunta(Number(btn.dataset.editar));
+            if (btn.dataset.subir) return moverPergunta(Number(btn.dataset.subir), -1);
+            return moverPergunta(Number(btn.dataset.descer), 1);
+        });
+
+        // ---- Gravação: o mesmo formulário cria e edita ----
+        formPergunta.addEventListener('submit', async (ev) => {
+            ev.preventDefault();
+
+            const t = especDoTipo(selTipo.value);
+            if (!t) return avisar('Escolha o tipo da resposta.', 'erro');
+
+            const secao = secaoEscolhida();
+            if (!secao) {
+                avisar('Dê um nome à seção nova.', 'erro');
+                inpSecaoNova.focus();
+                return;
+            }
+
+            const corpo = {
+                modulo: MODULO,
+                rotulo: inpPergunta.value,
+                tipo: selTipo.value,
+                secao,
+                obrigatorio: inpObrig.checked,
+            };
+
+            if ((t.config || []).includes('opcoes')) {
+                const opcoes = lerOpcoes();
+                if (opcoes.length < 2) {
+                    // Mesma regra do servidor, dita antes da viagem: uma opção
+                    // só não é escolha.
+                    avisar('A lista precisa de pelo menos 2 opções preenchidas.', 'erro');
+                    return;
+                }
+                corpo.opcoes = opcoes;
+            }
+            if ((t.config || []).includes('limite')) {
+                corpo.maxTamanho = Number(inpLimite.value) || t.limitePadrao;
+            }
+
+            const ok = editandoId
+                ? await enviar('/api/admin/perguntas/' + editandoId, 'PATCH', corpo)
+                : await enviar('/api/admin/perguntas', 'POST', corpo);
+
             if (ok) {
-                rotulo.value = '';
-                secao.value = '';
-                inpOpcoes.value = '';
-                obrig.checked = false;
+                avisar(editandoId ? 'Pergunta atualizada.' : 'Pergunta acrescentada.', 'ok');
+                sairDaEdicao();
                 await carregar();
+                // Mantém a seção que acabou de ser usada: quem acrescenta uma
+                // pergunta quase sempre acrescenta a próxima no mesmo grupo.
+                desenharSecoes(secao);
             }
         });
 

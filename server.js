@@ -1120,18 +1120,22 @@ for (const m of MODULOS) {
 }
 
 // --------------------------------------------------------------------------
-// PERGUNTAS (campos) do formulário — somente admin
+// PERGUNTAS (campos) do formulário
 //
-// Valem para os módulos que usam a tela genérica (agregado, candidato). O
-// módulo terceiro tem formulário próprio, escrito à mão, e não é montado a
-// partir desta configuração.
+// Incluir e editar é de quem opera o painel (exigirConfigurarFormulario);
+// EXCLUIR é só do admin, mais abaixo.
+//
+// A configuração vale para os três módulos, mas quem se DESENHA a partir dela
+// hoje é só a tela genérica (agregado, candidato). O módulo terceiro ainda tem
+// formulário escrito à mão em views/cadastro.html — editar um rótulo dele aqui
+// muda o painel e a validação, não a tela que o time preenche.
 // --------------------------------------------------------------------------
 app.post(
   '/api/admin/perguntas',
   exigirLogin,
   exigirConfigurarFormulario,
   wrap(async (req, res) => {
-    const { modulo, rotulo, tipo, secao, obrigatorio, opcoes } = req.body || {};
+    const { modulo, rotulo, tipo, secao, obrigatorio, opcoes, maxTamanho } = req.body || {};
     const r = await configFormulario.criarPergunta({
       modulo: modulo || 'agregado',
       rotulo,
@@ -1139,9 +1143,23 @@ app.post(
       secao,
       obrigatorio: !!obrigatorio,
       opcoes,
+      maxTamanho,
     });
     if (!r.ok) return res.status(400).json({ ok: false, erro: r.erro });
     res.status(201).json(r);
+  })
+);
+
+// Nova ordem das perguntas de um módulo (a lista completa de ids, na ordem).
+app.post(
+  '/api/admin/perguntas/ordem',
+  exigirLogin,
+  exigirConfigurarFormulario,
+  wrap(async (req, res) => {
+    const { modulo, ids } = req.body || {};
+    const r = await configFormulario.reordenarPerguntas(modulo, ids);
+    if (!r.ok) return res.status(400).json({ ok: false, erro: r.erro });
+    res.json(r);
   })
 );
 
@@ -1154,12 +1172,19 @@ app.patch(
     if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
 
     const b = req.body || {};
-    const mexeu = await configFormulario.atualizarPergunta(id, {
+    const r = await configFormulario.atualizarPergunta(id, {
       rotulo: b.rotulo,
       obrigatorio: b.obrigatorio,
       ativo: b.ativo,
+      tipo: b.tipo,
+      secao: b.secao,
+      opcoes: b.opcoes,
+      maxTamanho: b.maxTamanho,
+      ordem: b.ordem,
     });
-    if (!mexeu) return res.status(404).json({ ok: false, erro: 'Pergunta não encontrada ou nada a alterar.' });
+    if (!r.ok) {
+      return res.status(r.naoEncontrada ? 404 : 400).json({ ok: false, erro: r.erro });
+    }
     res.json({ ok: true });
   })
 );
