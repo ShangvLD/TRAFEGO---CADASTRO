@@ -21,10 +21,19 @@
    Cada pergunta e cada anexo declara a que ele pertence (coluna "escopo" em
    cfg_campos e cfg_documentos):
 
-     geral      aparece em toda pesquisa de cadastro (prioridade, observação)
-     motorista  é do condutor  (CPF, CNH, comprovante de residência)
-     veiculo    é do cavalo    (placa do cavalo, CRLV do cavalo, ANTT)
-     carreta    é da carreta   (placa da carreta, CRLV da carreta)
+     solicitacao  aparece nas CINCO modalidades. É o que descreve o pedido
+                  (grau de importância, observação) e o que pode ter MUDADO
+                  desde o cadastro — o proprietário: o motorista pode ter
+                  trocado de empresa, e a renovação precisa saber.
+     geral        é do cadastro e não muda: aparece nas quatro que criam
+                  cadastro, não na renovação.
+     motorista    é do condutor  (CPF, CNH, comprovante de residência)
+     veiculo      é do cavalo    (placa do cavalo, CRLV do cavalo, ANTT)
+     carreta      é da carreta   (placa da carreta, CRLV da carreta)
+
+   A diferença entre "solicitacao" e "geral" é o que decide o que a RENOVAÇÃO
+   pergunta. Sem ela, ou a renovação repete o cadastro inteiro, ou perde o dado
+   que muda entre uma pesquisa e outra. As duas coisas já aconteceram no papel.
 
    O escopo é EDITÁVEL na tela de configuração. Ele é um julgamento de negócio
    — "a conta bancária do proprietário é do veículo ou vale para tudo?" não é
@@ -33,8 +42,23 @@
    ========================================================================== */
 
 const ESCOPOS = [
-  { id: 'geral', rotulo: 'Toda pesquisa', icone: 'all_inclusive',
-    ajuda: 'Aparece em qualquer pesquisa de cadastro.' },
+  {
+    id: 'solicitacao',
+    rotulo: 'Toda pesquisa (inclusive renovação)',
+    icone: 'all_inclusive',
+    ajuda: 'Aparece nas cinco modalidades. Use para o que descreve o PEDIDO ' +
+           '(grau de importância, observação) e para o que PODE TER MUDADO desde ' +
+           'o cadastro — o proprietário, por exemplo: o motorista pode ter trocado ' +
+           'de empresa, e a renovação precisa saber disso.',
+  },
+  {
+    id: 'geral',
+    rotulo: 'Todo cadastro (menos renovação)',
+    icone: 'assignment',
+    ajuda: 'Aparece nas quatro pesquisas que criam cadastro, mas NÃO na renovação. ' +
+           'Use para o dado cadastral que não muda e já está gravado — repeti-lo ' +
+           'na renovação seria pedir de novo o que o sistema já tem.',
+  },
   { id: 'motorista', rotulo: 'Motorista', icone: 'person',
     ajuda: 'Só nas pesquisas que envolvem o condutor.' },
   { id: 'veiculo', rotulo: 'Veículo', icone: 'local_shipping',
@@ -43,6 +67,10 @@ const ESCOPOS = [
     ajuda: 'Só nas pesquisas que envolvem a carreta.' },
 ];
 
+// Pergunta nova nasce como dado de cadastro: é o caso comum, e o erro dele é
+// aparecer demais numa pesquisa específica — visível e fácil de corrigir. O
+// contrário (nascer como "solicitação") a faria vazar para a renovação, que é
+// justamente onde ninguém quer ver campo de cadastro.
 const ESCOPO_PADRAO = 'geral';
 
 function escopoValido(id) {
@@ -70,7 +98,7 @@ const TIPOS_PESQUISA = [
     resumo: 'Motorista, veículo, carreta e todos os anexos.',
     ajuda: 'A pesquisa inteira, como sempre foi: condutor, veículo, carreta, ' +
            'documentação e anexos. Use quando nada disso está cadastrado ainda.',
-    escopos: ['geral', 'motorista', 'veiculo', 'carreta'],
+    escopos: ['solicitacao', 'geral', 'motorista', 'veiculo', 'carreta'],
     renovacao: false,
   },
   {
@@ -80,7 +108,7 @@ const TIPOS_PESQUISA = [
     resumo: 'Só o condutor e os documentos dele.',
     ajuda: 'Pesquisa apenas do condutor: dados pessoais, CNH e os anexos dele. ' +
            'Nada de veículo ou carreta.',
-    escopos: ['geral', 'motorista'],
+    escopos: ['solicitacao', 'geral', 'motorista'],
     renovacao: false,
   },
   {
@@ -90,7 +118,7 @@ const TIPOS_PESQUISA = [
     resumo: 'Só o cavalo e os documentos dele.',
     ajuda: 'Pesquisa apenas do veículo: placa do cavalo, proprietário e os ' +
            'anexos do veículo. Nada de motorista ou carreta.',
-    escopos: ['geral', 'veiculo'],
+    escopos: ['solicitacao', 'geral', 'veiculo'],
     renovacao: false,
   },
   {
@@ -100,7 +128,7 @@ const TIPOS_PESQUISA = [
     resumo: 'Só a carreta e os documentos dela.',
     ajuda: 'Pesquisa apenas da carreta: placa e anexos da carreta. Nada de ' +
            'motorista ou veículo.',
-    escopos: ['geral', 'carreta'],
+    escopos: ['solicitacao', 'geral', 'carreta'],
     renovacao: false,
   },
   {
@@ -113,7 +141,7 @@ const TIPOS_PESQUISA = [
            'de pesquisa junto ao cliente ou à gerenciadora.',
     // Renovação não coleta cadastro: só o que vale para qualquer solicitação
     // (grau de importância, observação) mais a identificação do que renovar.
-    escopos: ['geral'],
+    escopos: ['solicitacao'],
     renovacao: true,
     alvos: ['motorista', 'veiculo', 'carreta'],
   },
@@ -195,8 +223,8 @@ function resolver(tipoId, alvoId) {
     // faltam — ver documentosPendentes em src/cadastros.js), então o escopo do
     // alvo entra aqui para o filtro de anexos. Os CAMPOS continuam só os
     // gerais: o cadastro já existe e não é perguntado de novo.
-    escopos: ['geral'],
-    escoposDeAnexo: ['geral', alvo],
+    escopos: ['solicitacao'],
+    escoposDeAnexo: ['solicitacao', 'geral', alvo],
     renovacao: true,
     identificacao: IDENTIFICACAO[alvo],
   };

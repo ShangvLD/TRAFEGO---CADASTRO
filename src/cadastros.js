@@ -114,10 +114,10 @@ function montarAssuntoLegado(operacoes) {
  *
  * Tudo numa transação: se qualquer passo falhar, nada é gravado.
  */
-async function criar(dados, solicitante, { extras = [], pesquisa = null, existente = null } = {}) {
+async function criar(dados, solicitante, { extras = [], campos = [], pesquisa = null, existente = null } = {}) {
   const assunto = montarAssuntoLegado(dados.operacoes);
   const detalhes = pesquisa && pesquisa.renovacao
-    ? montarDetalhesRenovacao(dados, pesquisa, existente, extras)
+    ? montarDetalhesRenovacao(dados, pesquisa, existente, campos)
     : montarDetalhesLegado(dados, extras);
 
   // Na renovação, as placas não vêm do formulário: vêm do cadastro que foi
@@ -258,20 +258,36 @@ async function criar(dados, solicitante, { extras = [], pesquisa = null, existen
    já existe (por CPF ou por placa) e abre uma solicitação nova de pesquisa.
    --------------------------------------------------------------------------- */
 
-/** Texto de detalhes de uma renovação — os 18 campos do cadastro não se aplicam. */
-function montarDetalhesRenovacao(d, pesquisa, existente, extras = []) {
+/**
+ * Texto de detalhes de uma renovação.
+ *
+ * Começa dizendo o que foi renovado e QUEM foi encontrado (o cadastro que já
+ * existia), e depois lista o que foi realmente perguntado desta vez — que são
+ * os campos de escopo "solicitacao": grau de importância, observação e o
+ * proprietário, que pode ter mudado desde o cadastro.
+ *
+ * Percorre a lista de campos em vez de citá-los por nome: marcar uma pergunta
+ * como "toda pesquisa" na tela de configuração passa a incluí-la aqui sozinho.
+ */
+function montarDetalhesRenovacao(d, pesquisa, existente, campos = []) {
   const partes = [['Renovação', String(pesquisa.alvo || '').toUpperCase()]];
 
   if (existente && existente.resumo) {
     for (const [rotulo, valor] of existente.resumo) partes.push([rotulo, valor]);
   }
-  if (d.prioridade) partes.push(['Prioridade', rotuloPrioridade(d.prioridade) || d.prioridade]);
-  if (d.obs) partes.push(['OBS', d.obs]);
 
-  for (const extra of extras) {
-    const valor = d[extra.id];
+  for (const campo of campos) {
+    let valor = d[campo.id];
     if (valor === undefined || valor === null || valor === '') continue;
-    partes.push([extra.rotulo, valor]);
+
+    // Os mesmos formatos do cadastro completo, para o painel exibir igual.
+    if (campo.id === 'prioridade') valor = rotuloPrioridade(valor) || valor;
+    else if (campo.tipo === 'cpf') valor = formatarCpf(valor);
+    else if (campo.tipo === 'cpf_cnpj') valor = formatarDocumento(valor);
+    else if (campo.tipo === 'telefone') valor = formatarTelefone(valor);
+    else if (campo.tipo === 'placa') valor = formatarPlaca(valor);
+
+    partes.push([campo.rotulo, valor]);
   }
 
   return partes.map(([rotulo, valor]) => `${rotulo}: ${valor == null ? '' : valor}`).join(' | ');
@@ -446,6 +462,7 @@ async function validarECriar(entrada, solicitante) {
 
   const criado = await criar(dados, solicitante, {
     extras,
+    campos,
     pesquisa: { tipo: recorte.tipo, alvo: recorte.alvo, renovacao: recorte.renovacao },
     existente,
   });

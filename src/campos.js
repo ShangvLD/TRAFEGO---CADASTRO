@@ -173,19 +173,23 @@ const CAMPOS_TERCEIRO = [
     ],
   },
   {
+    // Escopo "solicitacao": o proprietário aparece ATÉ na renovação. Ele não é
+    // dado fixo do motorista nem do veículo — quem é o dono pode ter mudado
+    // entre uma pesquisa e outra (o motorista trocou de empresa), e a renovação
+    // existe para levar a informação ATUAL ao cliente/gerenciadora.
     secao: 'Proprietário',
     icone: 'handshake',
     campos: [
-      { id: 'proprietario_nome', escopo: 'veiculo', rotulo: 'Proprietário', tipo: 'texto', obrigatorio: false, max: 120,
+      { id: 'proprietario_nome', escopo: 'solicitacao', rotulo: 'Proprietário', tipo: 'texto', obrigatorio: false, max: 120,
         placeholder: 'Nome ou razão social' },
-      { id: 'proprietario_documento', escopo: 'veiculo', rotulo: 'CPF / CNPJ do proprietário', tipo: 'cpf_cnpj', obrigatorio: false,
+      { id: 'proprietario_documento', escopo: 'solicitacao', rotulo: 'CPF / CNPJ do proprietário', tipo: 'cpf_cnpj', obrigatorio: false,
         placeholder: 'Opcional', dica: 'Novo — não existe no Forms', sistema: true },
-      { id: 'proprietario_telefone', escopo: 'veiculo', rotulo: 'Contato Prop', tipo: 'telefone', obrigatorio: false,
+      { id: 'proprietario_telefone', escopo: 'solicitacao', rotulo: 'Contato Prop', tipo: 'telefone', obrigatorio: false,
         placeholder: '(11) 96304-0076' },
       // No formulário antigo este campo só aparece quando o documento é CPF —
       // empresa não tem PIS. A configuração ainda não sabe expressar "aparece
       // quando", então aqui ele fica como campo comum e opcional.
-      { id: 'proprietario_pis', escopo: 'veiculo', rotulo: 'Código PIS', tipo: 'texto', obrigatorio: false, max: 14,
+      { id: 'proprietario_pis', escopo: 'solicitacao', rotulo: 'Código PIS', tipo: 'texto', obrigatorio: false, max: 14,
         placeholder: '000.00000.00-0', dica: 'Opcional — proprietário pessoa física' },
     ],
   },
@@ -215,7 +219,7 @@ const CAMPOS_TERCEIRO = [
     secao: 'Grau de importância',
     icone: 'priority_high',
     campos: [
-      { id: 'prioridade', escopo: 'geral', rotulo: 'Grau de importância do cadastro', tipo: 'selecao', obrigatorio: true,
+      { id: 'prioridade', escopo: 'solicitacao', rotulo: 'Grau de importância do cadastro', tipo: 'selecao', obrigatorio: true,
         largura: 'larga', sistema: true,
         opcoes: ['VAI CARREGAR EM INSTANTES', 'URGENTE', 'PODE AGUARDAR'] },
     ],
@@ -224,7 +228,7 @@ const CAMPOS_TERCEIRO = [
     secao: 'Observações',
     icone: 'chat',
     campos: [
-      { id: 'obs', escopo: 'geral', rotulo: 'OBS', tipo: 'texto_longo', obrigatorio: false, largura: 'larga', max: 2000,
+      { id: 'obs', escopo: 'solicitacao', rotulo: 'OBS', tipo: 'texto_longo', obrigatorio: false, largura: 'larga', max: 2000,
         placeholder: 'Opcional' },
     ],
   },
