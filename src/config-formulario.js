@@ -23,6 +23,7 @@ const db = require('./db');
 const { OPERACOES, TIPOS_DOCUMENTO, limparTexto, vazio } = require('./validacao');
 const { MODULOS, acharModulo } = require('./modulos');
 const campos = require('./campos');
+const pesquisas = require('./pesquisas');
 
 // ---------------------------------------------------------------------------
 // Semeadura
@@ -52,6 +53,7 @@ function documentosIniciaisDe(modulo) {
       temValidade: t.temValidade,
       obrigatorio: true,
       operacoes: t.operacoes || null,
+      escopo: t.escopo,
     }));
   }
   return [];
@@ -81,8 +83,8 @@ async function semear() {
           await q(
             `INSERT INTO cfg_campos
                (modulo, campo_id, rotulo, tipo, secao, icone, obrigatorio, ativo,
-                ordem, largura, dica, placeholder, opcoes, max_tamanho, sistema)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
+                ordem, largura, dica, placeholder, opcoes, max_tamanho, sistema, escopo)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT (modulo, campo_id) DO NOTHING`,
             [
               modulo.slug,
@@ -99,6 +101,7 @@ async function semear() {
               c.opcoes ? JSON.stringify(c.opcoes) : null,
               c.max || null,
               c.sistema ? 1 : 0,
+              pesquisas.normalizarEscopo(c.escopo),
             ]
           );
         }
@@ -115,8 +118,8 @@ async function semear() {
 
         const r = await q(
           `INSERT INTO cfg_documentos
-             (modulo, codigo, rotulo, ordem, tem_validade, ativo, todas_operacoes, obrigatorio, condicionado_a)
-           VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)
+             (modulo, codigo, rotulo, ordem, tem_validade, ativo, todas_operacoes, obrigatorio, condicionado_a, escopo)
+           VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
            ON CONFLICT (modulo, codigo) DO NOTHING
            RETURNING id`,
           [
@@ -128,6 +131,7 @@ async function semear() {
             todas,
             d.obrigatorio === false ? 0 : 1,
             d.condicionadoA || null,
+            pesquisas.normalizarEscopo(d.escopo),
           ]
         );
         if (!r.rows.length) continue; // já existia
@@ -195,7 +199,7 @@ async function documentos(slug, { apenasAtivos = true } = {}) {
   const linhas = await db
     .prepare(
       `SELECT d.id, d.codigo, d.rotulo, d.ordem, d.tem_validade, d.ativo,
-              d.todas_operacoes, d.obrigatorio, d.condicionado_a,
+              d.todas_operacoes, d.obrigatorio, d.condicionado_a, d.escopo,
               COALESCE(
                 (SELECT string_agg(o.nome, '|' ORDER BY o.ordem)
                    FROM cfg_documento_operacao vo
@@ -219,31 +223,65 @@ async function documentos(slug, { apenasAtivos = true } = {}) {
     ativo: l.ativo === 1,
     obrigatorio: l.obrigatorio === 1,
     condicionadoA: l.condicionado_a || null,
+    escopo: pesquisas.normalizarEscopo(l.escopo),
     todasOperacoes: l.todas_operacoes === 1,
     operacoes: l.operacoes_txt ? l.operacoes_txt.split('|') : [],
   }));
 }
 
-/** O que o formulário de um módulo precisa saber. */
-async function paraFormulario(slug) {
+/**
+ * O que o formulário de um módulo precisa saber.
+ *
+ * @param opcoes.tipoPesquisa  completo | motorista | veiculo | carreta | renovacao
+ * @param opcoes.alvo          na renovação: motorista | veiculo | carreta
+ *
+ * O TIPO DE PESQUISA recorta a lista pelo escopo de cada pergunta e de cada
+ * anexo. Sem tipo, devolve tudo — que é o que o módulo genérico (agregado,
+ * candidato) espera, e o que "completo" faz de qualquer forma.
+ */
+async function paraFormulario(slug, { tipoPesquisa = null, alvo = null } = {}) {
   const modulo = acharModulo(slug);
+
+  const recorte = tipoPesquisa ? pesquisas.resolver(tipoPesquisa, alvo) : null;
+  if (recorte && !recorte.ok) return { ok: false, erro: recorte.erro };
+
   const [ops, docs, secoes] = await Promise.all([
     operacoesDoModulo(slug),
     documentos(slug, { apenasAtivos: true }),
     secoesDoModulo(slug),
   ]);
 
+  // Anexos e campos podem ter recortes diferentes: na renovação os CAMPOS são
+  // só os gerais (o cadastro já existe), mas os ANEXOS do alvo continuam
+  // valendo — é lá que entra a CNH vencida.
+  const escoposDeCampo = recorte ? recorte.escopos : null;
+  const escoposDeAnexo = recorte ? (recorte.escoposDeAnexo || recorte.escopos) : null;
+
+  const secoesFiltradas = escoposDeCampo
+    ? secoes
+        .map((s) => ({ ...s, campos: s.campos.filter((c) => pesquisas.escopoCabe(c.escopo, escoposDeCampo)) }))
+        .filter((s) => s.campos.length) // seção que ficou sem campo não aparece
+    : secoes;
+
+  const docsFiltrados = escoposDeAnexo
+    ? docs.filter((d) => pesquisas.escopoCabe(d.escopo, escoposDeAnexo))
+    : docs;
+
   return {
     modulo: slug,
-    secoes,
+    secoes: secoesFiltradas,
     operacoes: ops.map((o) => o.nome),
     operacoesObrigatorias: modulo ? modulo.operacoesObrigatorias !== false : true,
-    documentos: docs.map((d) => ({
+    pesquisa: recorte
+      ? { tipo: recorte.tipo, alvo: recorte.alvo, renovacao: recorte.renovacao, identificacao: recorte.identificacao }
+      : null,
+    documentos: docsFiltrados.map((d) => ({
       codigo: d.codigo,
       rotulo: d.rotulo,
       temValidade: d.temValidade,
       obrigatorio: d.obrigatorio,
       condicionadoA: d.condicionadoA,
+      escopo: d.escopo,
       // null = vale para todas as operações
       operacoes: d.todasOperacoes ? null : d.operacoes,
     })),
@@ -274,6 +312,10 @@ async function paraAdmin(slug) {
     documentos: docs,
     perguntas: perg,
     tiposDeCampo: TIPOS_DE_CAMPO,
+    // A que cada pergunta/anexo pertence — é o que o tipo de pesquisa usa para
+    // recortar o formulário.
+    escopos: pesquisas.ESCOPOS,
+    tiposDePesquisa: pesquisas.TIPOS_PESQUISA,
     // Seções já usadas neste formulário, para o admin escolher em vez de
     // digitar — digitando, "Condutor" e "condutor " viram duas seções, e a
     // pergunta nova aparece num grupo solto no formulário.
@@ -293,7 +335,7 @@ async function perguntas(slug, { apenasAtivas = true } = {}) {
   const linhas = await db
     .prepare(
       `SELECT id, campo_id, rotulo, tipo, secao, icone, obrigatorio, ativo,
-              ordem, largura, dica, placeholder, opcoes, max_tamanho, sistema
+              ordem, largura, dica, placeholder, opcoes, max_tamanho, sistema, escopo
          FROM cfg_campos
         WHERE modulo = ?
           ${apenasAtivas ? 'AND ativo = 1' : ''}
@@ -318,6 +360,7 @@ async function perguntas(slug, { apenasAtivas = true } = {}) {
     max: l.max_tamanho,
     // Campo do qual outra coisa depende: editavel, mas nao excluivel.
     sistema: l.sistema === 1,
+    escopo: pesquisas.normalizarEscopo(l.escopo),
   }));
 }
 
@@ -337,6 +380,7 @@ async function secoesDoModulo(slug) {
       id: p.campoId,
       rotulo: p.rotulo,
       tipo: p.tipo,
+      escopo: p.escopo,
       obrigatorio: p.obrigatorio,
       largura: p.largura || undefined,
       dica: p.dica || undefined,
@@ -488,7 +532,7 @@ async function normalizarSecao(modulo, secao) {
 }
 
 /** Cria uma pergunta em um módulo. */
-async function criarPergunta({ modulo, rotulo, tipo = 'texto', secao, obrigatorio = false, opcoes = null, maxTamanho = null }) {
+async function criarPergunta({ modulo, rotulo, tipo = 'texto', secao, obrigatorio = false, opcoes = null, maxTamanho = null, escopo = null }) {
   await garantirSemeado();
 
   if (!acharModulo(modulo)) return { ok: false, erro: 'Módulo inválido.' };
@@ -530,8 +574,8 @@ async function criarPergunta({ modulo, rotulo, tipo = 'texto', secao, obrigatori
   const r = await db
     .prepare(
       `INSERT INTO cfg_campos
-         (modulo, campo_id, rotulo, tipo, secao, obrigatorio, ativo, ordem, opcoes, max_tamanho)
-       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?) RETURNING id`
+         (modulo, campo_id, rotulo, tipo, secao, obrigatorio, ativo, ordem, opcoes, max_tamanho, escopo)
+       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?) RETURNING id`
     )
     .run(
       modulo,
@@ -542,7 +586,8 @@ async function criarPergunta({ modulo, rotulo, tipo = 'texto', secao, obrigatori
       obrigatorio ? 1 : 0,
       ordem,
       opcoesLimpas,
-      limite
+      limite,
+      pesquisas.normalizarEscopo(escopo)
     );
 
   return { ok: true, id: r.lastInsertRowid, campoId, rotulo: rot };
@@ -601,6 +646,12 @@ async function atualizarPergunta(id, mudancas = {}) {
     const secao = await normalizarSecao(atual.modulo, mudancas.secao);
     if (!secao) return { ok: false, erro: 'Informe a seção da pergunta.' };
     marcar('secao', secao);
+  }
+
+  if (mudancas.escopo !== undefined) {
+    // Escopo desconhecido vira "geral" em vez de erro: geral e o comportamento
+    // antigo (aparece sempre), entao o pior caso e mostrar demais, nao de menos.
+    marcar('escopo', pesquisas.normalizarEscopo(mudancas.escopo));
   }
 
   if (mudancas.ordem !== undefined) {
@@ -801,6 +852,15 @@ async function definirDocumentoAtivo(id, ativo) {
   return r.changes > 0;
 }
 
+/** A que o anexo pertence: motorista, veículo, carreta ou geral. */
+async function definirDocumentoEscopo(id, escopo) {
+  await garantirSemeado();
+  const r = await db
+    .prepare('UPDATE cfg_documentos SET escopo = ? WHERE id = ?')
+    .run(pesquisas.normalizarEscopo(escopo), id);
+  return r.changes > 0;
+}
+
 async function definirDocumentoObrigatorio(id, obrigatorio) {
   await garantirSemeado();
   const r = await db
@@ -840,7 +900,7 @@ async function definirOperacoesDoDocumento(id, { todas, operacaoIds = [] }) {
 }
 
 /** Cria um tipo de documento em um módulo. */
-async function criarDocumento({ modulo, codigo, rotulo, temValidade = false, obrigatorio = true }) {
+async function criarDocumento({ modulo, codigo, rotulo, temValidade = false, obrigatorio = true, escopo = null }) {
   await garantirSemeado();
 
   if (!acharModulo(modulo)) return { ok: false, erro: 'Módulo inválido.' };
@@ -872,10 +932,10 @@ async function criarDocumento({ modulo, codigo, rotulo, temValidade = false, obr
   const r = await db
     .prepare(
       `INSERT INTO cfg_documentos
-         (modulo, codigo, rotulo, ordem, tem_validade, ativo, todas_operacoes, obrigatorio)
-       VALUES (?, ?, ?, ?, ?, 1, 1, ?) RETURNING id`
+         (modulo, codigo, rotulo, ordem, tem_validade, ativo, todas_operacoes, obrigatorio, escopo)
+       VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?) RETURNING id`
     )
-    .run(modulo, cod, rot, ordem, temValidade ? 1 : 0, obrigatorio ? 1 : 0);
+    .run(modulo, cod, rot, ordem, temValidade ? 1 : 0, obrigatorio ? 1 : 0, pesquisas.normalizarEscopo(escopo));
   return { ok: true, id: r.lastInsertRowid, codigo: cod, rotulo: rot };
 }
 
@@ -910,6 +970,7 @@ module.exports = {
   renomearDocumento,
   definirDocumentoAtivo,
   definirDocumentoObrigatorio,
+  definirDocumentoEscopo,
   definirOperacoesDoDocumento,
   criarPergunta,
   atualizarPergunta,

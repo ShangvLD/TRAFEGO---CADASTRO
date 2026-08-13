@@ -823,3 +823,27 @@ a.anexo-card:hover {
 /* Grau de importância ao lado da data, no painel. Fica junto da data porque é
    nela que o olho pousa ao varrer a fila. */
 .prio-bolinha { font-size: 1rem; line-height: 1; margin-right: 2px; }
+
+/* Modalidade da pesquisa, na lista do painel e no acompanhamento. */
+.etiq-pesquisa {
+    display: inline-block;
+    margin-top: 3px;
+    padding: 1px 8px;
+    border-radius: var(--radius-pill);
+    background: var(--primary-soft);
+    color: var(--primary-darker);
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+}
+
+/* Renovação é outro tipo de trabalho: o cadastro já existe. */
+.etiq-pesquisa--renovacao {
+    background: var(--warning-soft);
+    color: var(--warning);
+}
+
+.linha-renovacao td:first-child {
+    box-shadow: inset 3px 0 0 var(--warning);
+}

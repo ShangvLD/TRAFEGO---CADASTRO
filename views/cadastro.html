@@ -61,9 +61,48 @@
             <p>Preencha os dados do condutor, do proprietário e do veículo. Os campos são conferidos na hora — CPF, placa e validade da CNH são validados antes do envio, para a solicitação não voltar por erro de digitação.</p>
         </section>
 
+        <!-- ===================== TIPO DE PESQUISA ===================== -->
+        <!--
+            Primeira decisão da tela, e a que determina todo o resto: o que vem
+            abaixo (campos, anexos) é recortado pela modalidade escolhida.
+
+            A separação visual entre as quatro primeiras e a RENOVAÇÃO é
+            deliberada. São coisas diferentes: as primeiras CRIAM um cadastro,
+            a renovação usa um que já existe. Confundir as duas faz recadastrar
+            quem já está cadastrado.
+        -->
+        <section class="card" id="painel-pesquisa">
+            <div class="card-header">
+                <h3>
+                    <span class="material-symbols-rounded" style="color:var(--primary);vertical-align:-5px">travel_explore</span>
+                    Tipo de pesquisa
+                </h3>
+            </div>
+
+            <p class="form-secao__ajuda">
+                Escolha o que vai ser pesquisado. O formulário se ajusta: só aparecem os
+                campos e os anexos daquilo que você escolher.
+            </p>
+
+            <div class="tipos-pesquisa" id="tipos-pesquisa"></div>
+
+            <!-- Segunda pergunta, só na renovação. -->
+            <div class="renovacao-alvo" id="renovacao-alvo" hidden>
+                <div class="renovacao-alvo__titulo">
+                    <span class="material-symbols-rounded">help</span>
+                    O que você deseja renovar?
+                </div>
+                <div class="tipos-pesquisa tipos-pesquisa--alvo" id="alvos-renovacao"></div>
+            </div>
+        </section>
+
         <!-- ===================== FORMULÁRIO ===================== -->
         <section class="card" id="painel-form">
             <form id="form-cadastro" novalidate autocomplete="off">
+
+                <!-- Só na renovação: identifica o cadastro que já existe, em vez
+                     de perguntar tudo de novo. -->
+                <div id="bloco-renovacao"></div>
 
                 <!-- Todas as seções de campos são desenhadas a partir de
                      /api/config-formulario. O que aparece aqui é o que está
@@ -174,27 +213,144 @@
             documentos: V.TIPOS_DOCUMENTO.map((t) => ({
                 codigo: t.id, rotulo: t.rotulo, temValidade: t.temValidade, operacoes: t.operacoes,
             })),
+            pesquisa: null,
+            tiposDePesquisa: [],
         };
+
+        // Modalidade escolhida. O ALVO só existe na renovação.
+        let TIPO = 'completo';
+        let ALVO = null;
+        // Cadastro encontrado na renovação (null enquanto não achou).
+        let ENCONTRADO = null;
 
         /** Lista plana dos campos configurados — é o que a validação consome. */
         function camposConfigurados() {
             return CONFIG.secoes.flatMap((s) => s.campos || []);
         }
 
+        function ehRenovacao() {
+            return TIPO === 'renovacao';
+        }
+
+        /** A modalidade escolhida, como o servidor a descreve. */
+        function tipoAtual() {
+            return (CONFIG.tiposDePesquisa || []).find((t) => t.id === TIPO) || null;
+        }
+
         async function carregarConfig() {
             try {
-                const r = await fetch('/api/config-formulario');
-                if (!r.ok) return false;
-                const j = await r.json();
-                if (!j.ok) return false;
+                const params = new URLSearchParams({ tipoPesquisa: TIPO });
+                if (ALVO) params.set('alvo', ALVO);
 
+                const r = await fetch('/api/config-formulario?' + params.toString());
+                const j = await r.json().catch(() => ({}));
+
+                // A renovação sem alvo escolhido é recusada pelo servidor, e
+                // está certo — mas aqui é um estado normal da tela (a pessoa
+                // acabou de clicar em "Renovação"), não um erro a mostrar.
+                if (!r.ok || !j.ok) return false;
+
+                if (Array.isArray(j.tiposDePesquisa) && j.tiposDePesquisa.length) {
+                    CONFIG.tiposDePesquisa = j.tiposDePesquisa;
+                }
                 if (Array.isArray(j.operacoes) && j.operacoes.length) CONFIG.operacoes = j.operacoes;
                 if (Array.isArray(j.documentos)) CONFIG.documentos = j.documentos;
                 CONFIG.secoes = Array.isArray(j.secoes) ? j.secoes : [];
-                return CONFIG.secoes.length > 0;
+                CONFIG.pesquisa = j.pesquisa || null;
+                return true;
             } catch (e) {
                 return false;
             }
+        }
+
+        // ------------------------------------------------------------------
+        // Seletor de modalidade
+        // ------------------------------------------------------------------
+        function desenharTiposDePesquisa() {
+            const lista = CONFIG.tiposDePesquisa || [];
+            if (!lista.length) return;
+
+            const cartao = (t) =>
+                '<button type="button" class="tipo-pesquisa' + (t.id === TIPO ? ' escolhido' : '') +
+                    (t.renovacao ? ' tipo-pesquisa--renovacao' : '') + '" data-tipo="' + esc(t.id) + '">' +
+                    '<span class="material-symbols-rounded">' + esc(t.icone) + '</span>' +
+                    '<span class="tipo-pesquisa__nome">' + esc(t.rotulo) + '</span>' +
+                    '<span class="tipo-pesquisa__resumo">' + esc(t.resumo) + '</span>' +
+                '</button>';
+
+            const cadastro = lista.filter((t) => !t.renovacao);
+            const renovacao = lista.filter((t) => t.renovacao);
+
+            document.getElementById('tipos-pesquisa').innerHTML =
+                cadastro.map(cartao).join('') +
+                (renovacao.length ? '<div class="tipos-pesquisa__corte">ou</div>' + renovacao.map(cartao).join('') : '');
+
+            // ---- Segunda pergunta, só na renovação ----
+            const areaAlvo = document.getElementById('renovacao-alvo');
+            areaAlvo.hidden = !ehRenovacao();
+
+            if (ehRenovacao()) {
+                const tipo = tipoAtual();
+                const alvos = (tipo && tipo.alvos) || ['motorista', 'veiculo', 'carreta'];
+                document.getElementById('alvos-renovacao').innerHTML = alvos.map((id) => {
+                    const desc = lista.find((t) => t.id === id);
+                    return '<button type="button" class="tipo-pesquisa' + (id === ALVO ? ' escolhido' : '') + '" data-alvo="' + esc(id) + '">' +
+                        '<span class="material-symbols-rounded">' + esc(desc ? desc.icone : 'chevron_right') + '</span>' +
+                        '<span class="tipo-pesquisa__nome">' + esc(desc ? desc.rotulo : id) + '</span>' +
+                    '</button>';
+                }).join('');
+            }
+
+            // A ajuda longa do tipo escolhido, abaixo dos cartões.
+            const escolhido = tipoAtual();
+            const ajuda = document.getElementById('ajuda-pesquisa');
+            if (ajuda && escolhido) ajuda.textContent = escolhido.ajuda;
+        }
+
+        document.getElementById('painel-pesquisa').addEventListener('click', async (ev) => {
+            const botaoTipo = ev.target.closest('[data-tipo]');
+            const botaoAlvo = ev.target.closest('[data-alvo]');
+            if (!botaoTipo && !botaoAlvo) return;
+
+            if (botaoTipo) {
+                if (botaoTipo.dataset.tipo === TIPO) return;
+                TIPO = botaoTipo.dataset.tipo;
+                // Trocar de modalidade zera o alvo e o cadastro encontrado: eles
+                // pertenciam à escolha anterior.
+                ALVO = null;
+                ENCONTRADO = null;
+            } else {
+                if (botaoAlvo.dataset.alvo === ALVO) return;
+                ALVO = botaoAlvo.dataset.alvo;
+                ENCONTRADO = null;
+            }
+
+            desenharTiposDePesquisa();
+            await recarregarFormulario();
+        });
+
+        /**
+         * Refaz o formulário para a modalidade atual.
+         * A renovação sem alvo ainda não tem formulário: a tela pede a segunda
+         * escolha em vez de mostrar um formulário que não serve para nada.
+         */
+        async function recarregarFormulario() {
+            limparTodosOsErros();
+
+            if (ehRenovacao() && !ALVO) {
+                elSecoes.innerHTML = '';
+                document.getElementById('bloco-renovacao').innerHTML =
+                    '<p class="form-secao__ajuda">Escolha acima o que deseja renovar para continuar.</p>';
+                docsLista.innerHTML = '';
+                painelForm.hidden = false;
+                return;
+            }
+
+            elSecoes.innerHTML = '<p class="form-secao__ajuda">Carregando o formulário...</p>';
+            await carregarConfig();
+            desenharBlocoRenovacao();
+            desenharSecoes();
+            desenharDocumentos();
         }
 
         // ------------------------------------------------------------------
@@ -277,6 +433,106 @@
                 '</div>' +
             '</div>';
 
+        // ------------------------------------------------------------------
+        // RENOVAÇÃO: identificar o cadastro que já existe
+        //
+        // Nada de recadastrar. A pessoa informa o CPF ou a placa, o sistema
+        // procura, e mostra QUEM encontrou antes de deixar enviar — confirmar
+        // visualmente é o que evita renovar o cadastro errado.
+        // ------------------------------------------------------------------
+        function desenharBlocoRenovacao() {
+            const alvo = document.getElementById('bloco-renovacao');
+
+            if (!ehRenovacao() || !CONFIG.pesquisa || !CONFIG.pesquisa.identificacao) {
+                alvo.innerHTML = '';
+                return;
+            }
+
+            const ident = CONFIG.pesquisa.identificacao;
+            alvo.innerHTML =
+                '<div class="form-secao">' +
+                    '<div class="form-secao__titulo">' +
+                        '<span class="material-symbols-rounded">autorenew</span> Qual cadastro renovar' +
+                    '</div>' +
+                    '<p class="form-secao__ajuda">' +
+                        'Este cadastro já existe no sistema. Informe ' + esc(ident.rotulo.toLowerCase()) +
+                        ' para o sistema encontrá-lo — os dados dele não precisam ser preenchidos de novo.' +
+                    '</p>' +
+                    '<div class="campos">' +
+                        '<div class="campo" data-campo="' + esc(ident.campo) + '">' +
+                            '<label for="' + esc(ident.campo) + '">' + esc(ident.rotulo) +
+                                ' <span class="obrigatorio">*</span></label>' +
+                            '<input type="text" id="' + esc(ident.campo) + '" name="' + esc(ident.campo) + '"' +
+                                ' maxlength="' + (ident.tipo === 'cpf' ? 14 : 8) + '"' +
+                                (ident.tipo === 'cpf' ? ' inputmode="numeric"' : ' style="text-transform:uppercase"') +
+                                ' placeholder="' + esc(ident.placeholder) + '">' +
+                            '<span class="dica">' + esc(ident.dica) + '</span>' +
+                            '<span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div id="resultado-renovacao"></div>' +
+                '</div>';
+
+            const campo = document.getElementById(ident.campo);
+            aplicarMascara(campo, { id: ident.campo, tipo: ident.tipo });
+            // Procura ao sair do campo, não a cada tecla: um CPF pela metade
+            // nunca acha nada, e consultaria o servidor a cada dígito.
+            campo.addEventListener('blur', procurarCadastro);
+            campo.addEventListener('input', () => {
+                if (!ENCONTRADO) return;
+                ENCONTRADO = null;
+                document.getElementById('resultado-renovacao').innerHTML = '';
+                desenharDocumentos();
+            });
+        }
+
+        async function procurarCadastro() {
+            const ident = CONFIG.pesquisa && CONFIG.pesquisa.identificacao;
+            if (!ident) return;
+
+            const campo = document.getElementById(ident.campo);
+            const area = document.getElementById('resultado-renovacao');
+            const valor = (campo.value || '').trim();
+            if (!valor) { area.innerHTML = ''; return; }
+
+            area.innerHTML = '<p class="form-secao__ajuda">Procurando...</p>';
+
+            try {
+                const r = await fetch('/api/cadastros/existente?alvo=' + encodeURIComponent(ALVO) +
+                                      '&valor=' + encodeURIComponent(valor));
+                const j = await r.json().catch(() => ({}));
+
+                if (!j.ok || !j.achado) {
+                    ENCONTRADO = null;
+                    area.innerHTML =
+                        '<div class="renovacao-achado renovacao-achado--nao">' +
+                            '<span class="material-symbols-rounded">search_off</span>' +
+                            '<div>' + esc((j && j.erro) || ident.naoAchou) + '</div>' +
+                        '</div>';
+                    desenharDocumentos();
+                    return;
+                }
+
+                ENCONTRADO = j;
+                area.innerHTML =
+                    '<div class="renovacao-achado">' +
+                        '<span class="material-symbols-rounded">check_circle</span>' +
+                        '<div>' +
+                            '<strong>Cadastro encontrado.</strong>' +
+                            '<dl class="renovacao-resumo">' +
+                                j.resumo.map(([rotulo, v]) =>
+                                    '<div><dt>' + esc(rotulo) + '</dt><dd>' + esc(v) + '</dd></div>').join('') +
+                            '</dl>' +
+                        '</div>' +
+                    '</div>';
+
+                limparErro(ident.campo, true);
+                desenharDocumentos();
+            } catch (e) {
+                area.innerHTML = '<p class="form-secao__ajuda">Não foi possível consultar agora.</p>';
+            }
+        }
+
         function desenharSecoes() {
             if (!CONFIG.secoes.length) {
                 elSecoes.innerHTML =
@@ -334,9 +590,54 @@
          */
         function desenharDocumentos() {
             const marcadas = [...form.querySelectorAll('input[name=operacoes]:checked')].map((c) => c.value);
-            const aplicaveis = CONFIG.documentos.filter(
+            let aplicaveis = CONFIG.documentos.filter(
                 (d) => !d.operacoes || d.operacoes.some((op) => marcadas.includes(op))
             );
+
+            // ---- Renovação: só o que falta ou venceu ----
+            //
+            // O cadastro já existe, então repedir tudo seria justamente o que a
+            // renovação evita. O sistema olha o que aquele motorista/veículo já
+            // enviou e pede só o que não está em dia.
+            if (ehRenovacao()) {
+                if (!ENCONTRADO) {
+                    docsLista.innerHTML =
+                        '<p class="form-secao__ajuda">Identifique o cadastro acima para ver o que ainda falta.</p>';
+                    return;
+                }
+
+                const pendentes = ENCONTRADO.pendentes || [];
+                if (!pendentes.length) {
+                    docsLista.innerHTML =
+                        '<div class="doc-item"><span class="material-symbols-rounded" style="color:var(--success)">task_alt</span>' +
+                        '<span class="doc-rotulo">Nenhum anexo pendente — a documentação deste cadastro está em dia.</span></div>';
+                    return;
+                }
+
+                const marcaDaSituacao = {
+                    faltando: ['var(--danger-soft)', 'var(--danger)', 'faltando'],
+                    vencido: ['var(--danger-soft)', 'var(--danger)', 'vencido'],
+                    sem_validade: ['var(--warning-soft)', 'var(--warning)', 'sem validade'],
+                };
+
+                docsLista.innerHTML = pendentes.map((d) => {
+                    const [fundo, cor, texto] = marcaDaSituacao[d.situacao] || ['var(--surface-muted)', 'var(--text-secondary)', d.situacao];
+                    return '<div class="doc-item">' +
+                        '<span class="material-symbols-rounded">description</span>' +
+                        '<span class="doc-rotulo">' + esc(d.rotulo) + '</span>' +
+                        '<span class="doc-tag" style="background:' + fundo + ';color:' + cor + '">' + esc(texto) + '</span>' +
+                        '<span class="doc-motivo">' + esc(d.motivo || '') + '</span>' +
+                    '</div>';
+                }).join('');
+
+                const emDia = (ENCONTRADO.anexos || []).length - pendentes.length;
+                if (emDia > 0) {
+                    docsLista.innerHTML +=
+                        '<p class="form-secao__ajuda" style="margin:var(--space-2) 0 0">' +
+                        emDia + ' anexo(s) já estão em dia e não serão pedidos de novo.</p>';
+                }
+                return;
+            }
 
             docsLista.innerHTML = aplicaveis.map((d) => {
                 const especifico = d.operacoes
@@ -371,6 +672,17 @@
                 d[campo.id] = el ? el.value : '';
             }
             d.operacoes = [...form.querySelectorAll('input[name=operacoes]:checked')].map((c) => c.value);
+
+            // A modalidade viaja junto: o servidor revalida com ela, senão um
+            // POST direto contornaria o recorte.
+            d.tipoPesquisa = TIPO;
+            d.alvoRenovacao = ALVO;
+
+            const ident = CONFIG.pesquisa && CONFIG.pesquisa.identificacao;
+            if (ident) {
+                const el = document.getElementById(ident.campo);
+                d[ident.campo] = el ? el.value : '';
+            }
             return d;
         }
 
@@ -563,9 +875,14 @@
             if (!CONFIG.documentos || !CONFIG.documentos.length) return;
 
             const marcadas = (enviado && enviado.operacoes) || [];
-            const aplicaveis = CONFIG.documentos.filter(
-                (d) => !d.operacoes || d.operacoes.some((o) => marcadas.includes(o))
-            );
+
+            // Na renovação, os anexos a enviar são só os pendentes que o
+            // sistema apurou — a mesma lista que foi mostrada antes do envio.
+            const aplicaveis = ehRenovacao()
+                ? (ENCONTRADO && ENCONTRADO.pendentes) || []
+                : CONFIG.documentos.filter(
+                    (d) => !d.operacoes || d.operacoes.some((o) => marcadas.includes(o))
+                );
             if (!aplicaveis.length) return;
 
             area.hidden = false;
@@ -593,6 +910,25 @@
         form.addEventListener('submit', async (ev) => {
             ev.preventDefault();
             limparTodosOsErros();
+
+            // A renovação precisa do cadastro identificado antes de tudo — sem
+            // ele não há o que renovar, e o servidor recusaria de qualquer jeito.
+            if (ehRenovacao()) {
+                if (!ALVO) {
+                    avisoErrosTxt.textContent = 'Escolha o que deseja renovar: motorista, veículo ou carreta.';
+                    avisoErros.classList.add('visivel');
+                    return;
+                }
+                if (!ENCONTRADO) {
+                    const ident = CONFIG.pesquisa.identificacao;
+                    marcarErro(ident.campo, 'Informe ' + ident.rotulo.toLowerCase() + ' de um cadastro que já existe.');
+                    avisoErrosTxt.textContent = 'Identifique o cadastro que será renovado.';
+                    avisoErros.classList.add('visivel');
+                    const caixaIdent = caixa(ident.campo);
+                    if (caixaIdent) caixaIdent.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    return;
+                }
+            }
 
             const entrada = coletar();
             const { ok, erros } = V.validarCadastro(entrada, {
@@ -676,6 +1012,8 @@
         (async () => {
             elSecoes.innerHTML = '<p class="form-secao__ajuda">Carregando o formulário...</p>';
             await carregarConfig();
+            desenharTiposDePesquisa();
+            desenharBlocoRenovacao();
             desenharSecoes();
             desenharDocumentos();
         })();

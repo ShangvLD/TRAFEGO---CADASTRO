@@ -512,19 +512,23 @@ function validarPrioridade(valor, { obrigatorio = true } = {}) {
 // AMAZON — regra confirmada nos dados: dos 51 registros, NENHUM anexou esse
 // certificado sem ter uma dessas três operações.
 // ---------------------------------------------------------------------------
+// O "escopo" diz a quem o anexo pertence, e é o que permite a pesquisa só do
+// motorista não pedir o CRLV da carreta. Como tudo na configuração, é editável
+// em /admin/formulario — isto aqui é a semente.
 const TIPOS_DOCUMENTO = [
-  { id: 'CNH',                   rotulo: 'CNH do condutor',                  ocorrencias: 41, temValidade: true,  operacoes: null },
-  { id: 'CRLV_CAVALO',           rotulo: 'CRLV do cavalo',                   ocorrencias: 30, temValidade: true,  operacoes: null },
-  { id: 'COMPROVANTE_RESIDENCIA',rotulo: 'Comprovante de residência',        ocorrencias: 27, temValidade: false, operacoes: null },
-  { id: 'CRLV_CARRETA',          rotulo: 'CRLV da carreta',                  ocorrencias: 26, temValidade: true,  operacoes: null },
-  { id: 'FOTO_CONDUTOR_CNH',     rotulo: 'Foto do condutor segurando a CNH', ocorrencias: 22, temValidade: false, operacoes: null },
-  { id: 'ANTT',                  rotulo: 'ANTT',                             ocorrencias: 20, temValidade: true,  operacoes: null },
+  { id: 'CNH',                   rotulo: 'CNH do condutor',                  ocorrencias: 41, temValidade: true,  operacoes: null, escopo: 'motorista' },
+  { id: 'CRLV_CAVALO',           rotulo: 'CRLV do cavalo',                   ocorrencias: 30, temValidade: true,  operacoes: null, escopo: 'veiculo' },
+  { id: 'COMPROVANTE_RESIDENCIA',rotulo: 'Comprovante de residência',        ocorrencias: 27, temValidade: false, operacoes: null, escopo: 'motorista' },
+  { id: 'CRLV_CARRETA',          rotulo: 'CRLV da carreta',                  ocorrencias: 26, temValidade: true,  operacoes: null, escopo: 'carreta' },
+  { id: 'FOTO_CONDUTOR_CNH',     rotulo: 'Foto do condutor segurando a CNH', ocorrencias: 22, temValidade: false, operacoes: null, escopo: 'motorista' },
+  { id: 'ANTT',                  rotulo: 'ANTT',                             ocorrencias: 20, temValidade: true,  operacoes: null, escopo: 'veiculo' },
   {
     id: 'CERT_DIRECAO_SEGURA',
     rotulo: 'Certificado de Direção Segura (SEST SENAT)',
     ocorrencias: 19,
     temValidade: true,
     operacoes: ['MERCADO LIVRE', 'SHOPEE', 'AMAZON'],
+    escopo: 'motorista',
   },
 ];
 

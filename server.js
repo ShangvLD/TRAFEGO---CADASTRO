@@ -26,6 +26,7 @@ const usuarios = require('./src/usuarios');
 const solicitacoes = require('./src/solicitacoes');
 const cadastros = require('./src/cadastros');
 const configFormulario = require('./src/config-formulario');
+const pesquisas = require('./src/pesquisas');
 const { MODULOS, acharModulo, rotaFormulario, rotaPainel } = require('./src/modulos');
 const papeis = require('./src/papeis');
 const { dadosDe } = require('./src/modulo-servico');
@@ -238,11 +239,10 @@ app.get('/', (req, res) => {
   res.redirect('/login');
 });
 
-// Área do solicitante (formulário do Microsoft Forms embutido). Pertence ao
-// fluxo de terceiro, então usa a mesma permissão do módulo.
-app.get('/solicitante', exigirLogin, exigirFormulario('terceiro'), (req, res) => {
-  res.sendFile(path.join(VIEWS, 'solicitante.html'));
-});
+// A rota /solicitante (Microsoft Forms embutido numa iframe) foi removida: o
+// formulário nativo cobre o mesmo caso com validação na hora, e duas portas de
+// entrada com regras diferentes só geravam divergência. O WEBHOOK do Forms
+// continua ativo mais abaixo — quem responde por fora do Portal ainda entra.
 
 // Acompanhamento das próprias solicitações, de todos os módulos liberados.
 app.get('/minhas-solicitacoes', exigirLogin, (req, res) => {
@@ -590,11 +590,50 @@ app.delete(
 // para montar os campos. A ESCRITA é só do admin.
 // --------------------------------------------------------------------------
 // Configuração do módulo TERCEIRO (rota histórica, usada por views/cadastro.html).
+//
+// O TIPO DE PESQUISA recorta o que volta: "motorista" não devolve a placa da
+// carreta nem o CRLV dela. Sem o parâmetro, devolve tudo — que é o que
+// "completo" faz, e mantém compatível quem chamar sem saber da modalidade.
 app.get(
   '/api/config-formulario',
   exigirLogin,
   wrap(async (req, res) => {
-    res.json({ ok: true, ...(await configFormulario.paraFormulario('terceiro')) });
+    const r = await configFormulario.paraFormulario('terceiro', {
+      tipoPesquisa: req.query.tipoPesquisa || null,
+      alvo: req.query.alvo || null,
+    });
+    if (r.ok === false) return res.status(400).json({ ok: false, erro: r.erro });
+
+    res.json({ ok: true, ...r, tiposDePesquisa: pesquisas.TIPOS_PESQUISA });
+  })
+);
+
+// Encontra o cadastro que uma RENOVAÇÃO vai renovar, e diz quais anexos dele
+// estão vencidos ou faltando. A tela chama enquanto a pessoa digita o CPF ou a
+// placa, para mostrar quem foi encontrado antes de enviar.
+app.get(
+  '/api/cadastros/existente',
+  exigirLogin,
+  wrap(async (req, res) => {
+    const recorte = pesquisas.resolver('renovacao', req.query.alvo);
+    if (!recorte.ok) return res.status(400).json({ ok: false, erro: recorte.erro });
+
+    const escoposDeAnexo = recorte.escoposDeAnexo || recorte.escopos;
+    const docs = (await configFormulario.documentos('terceiro', { apenasAtivos: true }))
+      .filter((d) => pesquisas.escopoCabe(d.escopo, escoposDeAnexo));
+
+    const r = await cadastros.acharParaRenovar(recorte.alvo, req.query.valor, {
+      documentosDoModulo: docs,
+    });
+
+    if (!r.ok) {
+      const erro = r.erro === 'naoAchou' ? recorte.identificacao.naoAchou : r.erro;
+      // 200 com achado:false, e não 404: "não encontrei" é uma resposta
+      // esperada enquanto a pessoa digita, não uma falha da requisição.
+      return res.json({ ok: true, achado: false, erro });
+    }
+
+    res.json({ ok: true, achado: true, resumo: r.resumo, anexos: r.anexos, pendentes: r.pendentes });
   })
 );
 
@@ -663,13 +702,14 @@ app.post(
   exigirLogin,
   exigirConfigurarFormulario,
   wrap(async (req, res) => {
-    const { modulo, codigo, rotulo, temValidade, obrigatorio } = req.body || {};
+    const { modulo, codigo, rotulo, temValidade, obrigatorio, escopo } = req.body || {};
     const r = await configFormulario.criarDocumento({
       modulo: modulo || 'terceiro',
       codigo,
       rotulo,
       temValidade,
       obrigatorio: obrigatorio !== false,
+      escopo,
     });
     if (!r.ok) return res.status(400).json({ ok: false, erro: r.erro });
     res.status(201).json(r);
@@ -696,6 +736,9 @@ app.patch(
     }
     if (typeof b.obrigatorio === 'boolean') {
       mexeu = (await configFormulario.definirDocumentoObrigatorio(id, b.obrigatorio)) || mexeu;
+    }
+    if (typeof b.escopo === 'string') {
+      mexeu = (await configFormulario.definirDocumentoEscopo(id, b.escopo)) || mexeu;
     }
     if (typeof b.todas === 'boolean') {
       const ids = Array.isArray(b.operacaoIds) ? b.operacaoIds.map(Number).filter(Number.isInteger) : [];
@@ -1135,7 +1178,7 @@ app.post(
   exigirLogin,
   exigirConfigurarFormulario,
   wrap(async (req, res) => {
-    const { modulo, rotulo, tipo, secao, obrigatorio, opcoes, maxTamanho } = req.body || {};
+    const { modulo, rotulo, tipo, secao, obrigatorio, opcoes, maxTamanho, escopo } = req.body || {};
     const r = await configFormulario.criarPergunta({
       modulo: modulo || 'agregado',
       rotulo,
@@ -1144,6 +1187,7 @@ app.post(
       obrigatorio: !!obrigatorio,
       opcoes,
       maxTamanho,
+      escopo,
     });
     if (!r.ok) return res.status(400).json({ ok: false, erro: r.erro });
     res.status(201).json(r);
@@ -1181,6 +1225,7 @@ app.patch(
       opcoes: b.opcoes,
       maxTamanho: b.maxTamanho,
       ordem: b.ordem,
+      escopo: b.escopo,
     });
     if (!r.ok) {
       return res.status(r.naoEncontrada ? 404 : 400).json({ ok: false, erro: r.erro });

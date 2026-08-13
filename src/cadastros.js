@@ -24,8 +24,9 @@
 const db = require('./db');
 const {
   validarCadastro, formatarCpf, formatarTelefone, formatarPlaca, formatarPis, acharPrioridade,
-  CAMPOS_DO_TERCEIRO,
+  apenasDigitos, normalizarPlaca, CAMPOS_DO_TERCEIRO,
 } = require('./validacao');
+const pesquisasCfg = require('./pesquisas');
 
 const rotuloPrioridade = (id) => (acharPrioridade(id) || {}).rotulo;
 
@@ -113,9 +114,17 @@ function montarAssuntoLegado(operacoes) {
  *
  * Tudo numa transação: se qualquer passo falhar, nada é gravado.
  */
-async function criar(dados, solicitante, { extras = [] } = {}) {
+async function criar(dados, solicitante, { extras = [], pesquisa = null, existente = null } = {}) {
   const assunto = montarAssuntoLegado(dados.operacoes);
-  const detalhes = montarDetalhesLegado(dados, extras);
+  const detalhes = pesquisa && pesquisa.renovacao
+    ? montarDetalhesRenovacao(dados, pesquisa, existente, extras)
+    : montarDetalhesLegado(dados, extras);
+
+  // Na renovação, as placas não vêm do formulário: vêm do cadastro que foi
+  // identificado. Aqui as duas origens viram uma só, para o resto da gravação
+  // não precisar saber de onde veio.
+  const placaCavalo = (existente && existente.placaCavalo) || dados.placa_cavalo || null;
+  const placaCarreta = (existente && existente.placaCarreta) || dados.placa_carreta || null;
 
   return db.transacao(async (q) => {
     // ---- Condutor: upsert por CPF ----------------------------------------
@@ -123,29 +132,37 @@ async function criar(dados, solicitante, { extras = [] } = {}) {
     // de operação). Atualizamos os dados dele e reaproveitamos o registro, em
     // vez de duplicar. COALESCE preserva o que já havia quando o campo novo
     // vem vazio — não deixamos um recadastro incompleto apagar dado bom.
-    const condutor = await q(
-      `INSERT INTO condutores (cpf, nome, email, telefone, cnh_numero, cnh_categoria, cnh_validade)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT (cpf) DO UPDATE SET
-         nome          = excluded.nome,
-         email         = COALESCE(excluded.email, condutores.email),
-         telefone      = COALESCE(excluded.telefone, condutores.telefone),
-         cnh_numero    = COALESCE(excluded.cnh_numero, condutores.cnh_numero),
-         cnh_categoria = COALESCE(excluded.cnh_categoria, condutores.cnh_categoria),
-         cnh_validade  = COALESCE(excluded.cnh_validade, condutores.cnh_validade),
-         atualizado_em = ${db.AGORA_SQL}
-       RETURNING id`,
-      [
-        dados.condutor_cpf,
-        dados.condutor_nome,
-        dados.condutor_email || null,
-        dados.condutor_telefone || null,
-        dados.cnh_numero || null,
-        dados.cnh_categoria || null,
-        dados.cnh_validade || null,
-      ]
-    );
-    const condutorId = condutor.rows[0].id;
+    //
+    // SEM CPF NÃO HÁ CONDUTOR: a pesquisa de veículo ou de carreta não pergunta
+    // motorista nenhum, e a renovação usa o condutor que já existe. A coluna
+    // condutor_id em solicitacao_cadastro é anulável exatamente para isso.
+    let condutorId = existente ? existente.condutorId || null : null;
+
+    if (!condutorId && dados.condutor_cpf) {
+      const condutor = await q(
+        `INSERT INTO condutores (cpf, nome, email, telefone, cnh_numero, cnh_categoria, cnh_validade)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (cpf) DO UPDATE SET
+           nome          = excluded.nome,
+           email         = COALESCE(excluded.email, condutores.email),
+           telefone      = COALESCE(excluded.telefone, condutores.telefone),
+           cnh_numero    = COALESCE(excluded.cnh_numero, condutores.cnh_numero),
+           cnh_categoria = COALESCE(excluded.cnh_categoria, condutores.cnh_categoria),
+           cnh_validade  = COALESCE(excluded.cnh_validade, condutores.cnh_validade),
+           atualizado_em = ${db.AGORA_SQL}
+         RETURNING id`,
+        [
+          dados.condutor_cpf,
+          dados.condutor_nome,
+          dados.condutor_email || null,
+          dados.condutor_telefone || null,
+          dados.cnh_numero || null,
+          dados.cnh_categoria || null,
+          dados.cnh_validade || null,
+        ]
+      );
+      condutorId = condutor.rows[0].id;
+    }
 
     // ---- Proprietário: upsert por documento -------------------------------
     // Sem documento informado não há chave para deduplicar, então grava solto.
@@ -182,8 +199,8 @@ async function criar(dados, solicitante, { extras = [] } = {}) {
 
     // ---- Veículos: registra as placas no catálogo -------------------------
     for (const [placa, tipo] of [
-      [dados.placa_cavalo, 'cavalo'],
-      [dados.placa_carreta, 'carreta'],
+      [placaCavalo, 'cavalo'],
+      [placaCarreta, 'carreta'],
     ]) {
       if (!placa) continue;
       await q(
@@ -196,10 +213,19 @@ async function criar(dados, solicitante, { extras = [] } = {}) {
     // ---- Solicitação (formato legado, que o painel lê) --------------------
     const s = await q(
       `INSERT INTO solicitacoes
-         (solicitante_nome, solicitante_email, assunto, detalhes, origem, prioridade)
-       VALUES (?, ?, ?, ?, 'portal', ?)
+         (solicitante_nome, solicitante_email, assunto, detalhes, origem, prioridade,
+          tipo_pesquisa, alvo_renovacao)
+       VALUES (?, ?, ?, ?, 'portal', ?, ?, ?)
        RETURNING id`,
-      [solicitante.nome, solicitante.email, assunto, detalhes, dados.prioridade || null]
+      [
+        solicitante.nome,
+        solicitante.email,
+        assunto,
+        detalhes,
+        dados.prioridade || null,
+        pesquisa ? pesquisa.tipo : null,
+        pesquisa ? pesquisa.alvo || null : null,
+      ]
     );
     const solicitacaoId = s.rows[0].id;
 
@@ -212,8 +238,8 @@ async function criar(dados, solicitante, { extras = [] } = {}) {
         solicitacaoId,
         condutorId,
         proprietarioId,
-        dados.placa_cavalo || null,
-        dados.placa_carreta || null,
+        placaCavalo,
+        placaCarreta,
         dados.tag || null,
         dados.rastreador || null,
         dados.rastreador_id || null,
@@ -223,6 +249,133 @@ async function criar(dados, solicitante, { extras = [] } = {}) {
 
     return { id: solicitacaoId, condutor_id: condutorId, proprietario_id: proprietarioId };
   });
+}
+
+/* ---------------------------------------------------------------------------
+   RENOVAÇÃO
+
+   O item já tem cadastro. Nada de recadastrar: o formulário identifica o que
+   já existe (por CPF ou por placa) e abre uma solicitação nova de pesquisa.
+   --------------------------------------------------------------------------- */
+
+/** Texto de detalhes de uma renovação — os 18 campos do cadastro não se aplicam. */
+function montarDetalhesRenovacao(d, pesquisa, existente, extras = []) {
+  const partes = [['Renovação', String(pesquisa.alvo || '').toUpperCase()]];
+
+  if (existente && existente.resumo) {
+    for (const [rotulo, valor] of existente.resumo) partes.push([rotulo, valor]);
+  }
+  if (d.prioridade) partes.push(['Prioridade', rotuloPrioridade(d.prioridade) || d.prioridade]);
+  if (d.obs) partes.push(['OBS', d.obs]);
+
+  for (const extra of extras) {
+    const valor = d[extra.id];
+    if (valor === undefined || valor === null || valor === '') continue;
+    partes.push([extra.rotulo, valor]);
+  }
+
+  return partes.map(([rotulo, valor]) => `${rotulo}: ${valor == null ? '' : valor}`).join(' | ');
+}
+
+/**
+ * Anexos que o cadastro existente já tem, por tipo.
+ * Os documentos ficam presos a uma SOLICITAÇÃO, não ao condutor ou à placa —
+ * então o caminho é pelas solicitações anteriores daquele mesmo item.
+ */
+async function anexosJaEnviados(alvo, chave) {
+  const onde = {
+    motorista: 'sc.condutor_id = ?',
+    veiculo: 'sc.placa_cavalo = ?',
+    carreta: 'sc.placa_carreta = ?',
+  }[alvo];
+  if (!onde) return new Map();
+
+  const linhas = await db
+    .prepare(
+      `SELECT d.tipo,
+              max(d.enviado_em) AS enviado_em,
+              max(d.validade)   AS validade
+         FROM documentos d
+         JOIN solicitacao_cadastro sc ON sc.solicitacao_id = d.solicitacao_id
+        WHERE d.modulo = 'terceiro' AND ${onde}
+        GROUP BY d.tipo`
+    )
+    .all(chave);
+
+  return new Map(linhas.map((l) => [String(l.tipo).toUpperCase(), l]));
+}
+
+/**
+ * Encontra o cadastro que a renovação vai renovar.
+ *
+ * @returns { ok:true, existente, resumo, anexos } ou { ok:false, erro }
+ *   anexos — só os que FALTAM ou estão VENCIDOS. Um documento com validade que
+ *   ninguém registrou entra como pendente de propósito: não saber a validade
+ *   não é prova de que está válido, e a renovação existe justamente para o
+ *   cliente reavaliar o que venceu.
+ */
+async function acharParaRenovar(alvo, valor, { documentosDoModulo = [], hoje = null } = {}) {
+  const bruto = String(valor || '').trim();
+  if (!bruto) return { ok: false, erro: 'Informe o que deseja renovar.' };
+
+  let existente = null;
+  let resumo = [];
+  let chave = null;
+
+  if (alvo === 'motorista') {
+    const cpf = apenasDigitos(bruto);
+    const c = await db
+      .prepare('SELECT id, cpf, nome, telefone, cnh_numero, cnh_categoria, cnh_validade FROM condutores WHERE cpf = ?')
+      .get(cpf);
+    if (!c) return { ok: false, erro: 'naoAchou' };
+
+    existente = { condutorId: c.id };
+    chave = c.id;
+    resumo = [
+      ['Condutor', c.nome],
+      ['CPF', formatarCpf(c.cpf)],
+      ['Contato MOT', c.telefone ? formatarTelefone(c.telefone) : ''],
+      ['CNH', c.cnh_numero || ''],
+      ['Categoria CNH', c.cnh_categoria || ''],
+      ['Validade CNH', c.cnh_validade ? formatarDataBr(c.cnh_validade) : ''],
+    ].filter(([, v]) => v);
+  } else {
+    const placa = normalizarPlaca(bruto);
+    const v = await db.prepare('SELECT id, placa, tipo FROM veiculos WHERE placa = ?').get(placa);
+    if (!v) return { ok: false, erro: 'naoAchou' };
+
+    existente = alvo === 'carreta' ? { placaCarreta: v.placa } : { placaCavalo: v.placa };
+    chave = v.placa;
+    resumo = [[alvo === 'carreta' ? 'Placa Carreta' : 'Placa Cavalo', formatarPlaca(v.placa)]];
+  }
+
+  const jaEnviados = await anexosJaEnviados(alvo, chave);
+  const referencia = hoje || new Date().toISOString().slice(0, 10);
+
+  const anexos = documentosDoModulo.map((doc) => {
+    const enviado = jaEnviados.get(String(doc.codigo).toUpperCase());
+
+    if (!enviado) {
+      return { ...doc, situacao: 'faltando', motivo: 'Nunca foi enviado para este cadastro.' };
+    }
+    if (doc.temValidade && !enviado.validade) {
+      return { ...doc, situacao: 'sem_validade', enviadoEm: enviado.enviado_em,
+               motivo: 'Já foi enviado, mas sem validade registrada.' };
+    }
+    if (doc.temValidade && enviado.validade < referencia) {
+      return { ...doc, situacao: 'vencido', enviadoEm: enviado.enviado_em, validade: enviado.validade,
+               motivo: `Venceu em ${formatarDataBr(enviado.validade)}.` };
+    }
+    return { ...doc, situacao: 'ok', enviadoEm: enviado.enviado_em, validade: enviado.validade || null };
+  });
+
+  return {
+    ok: true,
+    existente: { ...existente, resumo },
+    resumo,
+    anexos,
+    pendentes: anexos.filter((a) => a.situacao !== 'ok'),
+  };
 }
 
 /**
@@ -239,21 +392,45 @@ async function validarECriar(entrada, solicitante) {
   // config-formulario -> validacao, e cadastros -> config-formulario.
   const configFormulario = require('./config-formulario');
 
-  const [operacoes, perguntas] = await Promise.all([
+  // ---- Qual modalidade foi escolhida ------------------------------------
+  const recorte = pesquisasCfg.resolver(entrada.tipoPesquisa, entrada.alvoRenovacao);
+  if (!recorte.ok) return { ok: false, erros: { tipoPesquisa: recorte.erro } };
+
+  const [operacoes, perguntas, docs] = await Promise.all([
     configFormulario.operacoesAtivas(),
     // Só as ATIVAS: campo desativado não foi mostrado, e o que não foi
     // mostrado não pode ser exigido nem gravado.
     configFormulario.perguntas('terceiro', { apenasAtivas: true }),
+    configFormulario.documentos('terceiro', { apenasAtivos: true }),
   ]);
 
-  const campos = perguntas.map((p) => ({
-    id: p.campoId,
-    rotulo: p.rotulo,
-    tipo: p.tipo,
-    obrigatorio: p.obrigatorio,
-    opcoes: p.opcoes,
-    max: p.max,
-  }));
+  // O RECORTE vale aqui também, não só na tela: a pesquisa de motorista não
+  // pode exigir a placa do cavalo só porque alguém mandou um POST direto.
+  const campos = perguntas
+    .filter((p) => pesquisasCfg.escopoCabe(p.escopo, recorte.escopos))
+    .map((p) => ({
+      id: p.campoId,
+      rotulo: p.rotulo,
+      tipo: p.tipo,
+      obrigatorio: p.obrigatorio,
+      opcoes: p.opcoes,
+      max: p.max,
+    }));
+
+  // ---- Renovação: identifica o cadastro em vez de perguntar de novo ------
+  let existente = null;
+  if (recorte.renovacao) {
+    const escoposDeAnexo = recorte.escoposDeAnexo || recorte.escopos;
+    const achado = await acharParaRenovar(recorte.alvo, entrada[recorte.identificacao.campo], {
+      documentosDoModulo: docs.filter((d) => pesquisasCfg.escopoCabe(d.escopo, escoposDeAnexo)),
+    });
+
+    if (!achado.ok) {
+      const mensagem = achado.erro === 'naoAchou' ? recorte.identificacao.naoAchou : achado.erro;
+      return { ok: false, erros: { [recorte.identificacao.campo]: mensagem } };
+    }
+    existente = achado.existente;
+  }
 
   const { ok, dados, erros } = validarCadastro(entrada, {
     operacoesPermitidas: operacoes.map((o) => o.nome),
@@ -267,8 +444,12 @@ async function validarECriar(entrada, solicitante) {
   const conhecidos = new Set(CAMPOS_DO_TERCEIRO.map((c) => c.id));
   const extras = campos.filter((c) => !conhecidos.has(c.id));
 
-  const criado = await criar(dados, solicitante, { extras });
-  return { ok: true, ...criado };
+  const criado = await criar(dados, solicitante, {
+    extras,
+    pesquisa: { tipo: recorte.tipo, alvo: recorte.alvo, renovacao: recorte.renovacao },
+    existente,
+  });
+  return { ok: true, ...criado, tipoPesquisa: recorte.tipo, alvo: recorte.alvo };
 }
 
 // ---------------------------------------------------------------------------
@@ -323,6 +504,7 @@ async function cnhVencendo(dias = 30) {
 module.exports = {
   criar,
   validarECriar,
+  acharParaRenovar,
   buscarPorSolicitacao,
   listarDocumentos,
   cnhVencendo,

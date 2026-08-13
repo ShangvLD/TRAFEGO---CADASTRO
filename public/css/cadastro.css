@@ -512,3 +512,177 @@
 }
 
 .up-pendentes.ok { color: var(--success); }
+
+/* ==========================================================================
+   TIPO DE PESQUISA
+
+   A primeira decisão da tela. Os quatro tipos de CADASTRO ficam juntos; a
+   RENOVAÇÃO fica separada por um "ou", com borda e cor próprias — são coisas
+   diferentes (uma cria cadastro, a outra usa um que já existe), e a tela
+   precisa mostrar isso antes de alguém recadastrar quem já está cadastrado.
+   ========================================================================== */
+.tipos-pesquisa {
+    display: flex;
+    align-items: stretch;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    margin-top: var(--space-4);
+}
+
+.tipo-pesquisa {
+    flex: 1 1 170px;
+    min-width: 150px;
+    max-width: 260px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: var(--space-4);
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color var(--transition), background var(--transition), box-shadow var(--transition);
+}
+
+.tipo-pesquisa:hover {
+    border-color: var(--primary);
+    background: var(--surface-muted);
+}
+
+.tipo-pesquisa.escolhido {
+    border-color: var(--primary);
+    background: var(--primary-soft);
+    box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+.tipo-pesquisa .material-symbols-rounded {
+    font-size: 26px;
+    color: var(--primary);
+}
+
+.tipo-pesquisa__nome {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.tipo-pesquisa__resumo {
+    font-size: 0.78rem;
+    line-height: 1.35;
+    color: var(--text-secondary);
+}
+
+/* O "ou" que separa criar cadastro de renovar. */
+.tipos-pesquisa__corte {
+    display: flex;
+    align-items: center;
+    padding: 0 var(--space-2);
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary);
+}
+
+.tipo-pesquisa--renovacao {
+    border-style: dashed;
+    border-color: var(--warning);
+}
+
+.tipo-pesquisa--renovacao .material-symbols-rounded { color: var(--warning); }
+
+.tipo-pesquisa--renovacao.escolhido {
+    border-style: solid;
+    border-color: var(--warning);
+    background: var(--warning-soft);
+    box-shadow: 0 0 0 3px var(--warning-soft);
+}
+
+/* ---- Segunda pergunta: o que renovar ---- */
+.renovacao-alvo {
+    margin-top: var(--space-5);
+    padding: var(--space-4);
+    border-radius: var(--radius);
+    border-left: 3px solid var(--warning);
+    background: var(--warning-soft);
+}
+
+.renovacao-alvo__titulo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.renovacao-alvo__titulo .material-symbols-rounded {
+    font-size: 20px;
+    color: var(--warning);
+}
+
+.tipos-pesquisa--alvo .tipo-pesquisa {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    flex: 0 1 auto;
+    padding: 10px var(--space-4);
+}
+
+.tipos-pesquisa--alvo .tipo-pesquisa .material-symbols-rounded { font-size: 20px; }
+
+/* ---- Cadastro encontrado ---- */
+.renovacao-achado {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    margin-top: var(--space-4);
+    padding: var(--space-4);
+    border-radius: var(--radius);
+    background: var(--success-soft);
+    border-left: 3px solid var(--success);
+    font-size: 0.88rem;
+}
+
+.renovacao-achado .material-symbols-rounded {
+    color: var(--success);
+    flex-shrink: 0;
+}
+
+.renovacao-achado--nao {
+    background: var(--warning-soft);
+    border-left-color: var(--warning);
+}
+
+.renovacao-achado--nao .material-symbols-rounded { color: var(--warning); }
+
+.renovacao-resumo {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-5);
+    margin: var(--space-2) 0 0;
+}
+
+.renovacao-resumo dt {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-secondary);
+    font-weight: 700;
+}
+
+.renovacao-resumo dd {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+/* Por que aquele anexo está sendo pedido de novo. */
+.doc-motivo {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}

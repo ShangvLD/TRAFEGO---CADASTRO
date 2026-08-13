@@ -836,3 +836,35 @@
     font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
     font-size: 0.8rem;
 }
+
+/* Escopo: a que pesquisa a pergunta/anexo pertence. */
+.tag-escopo {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 8px 1px 5px;
+    border-radius: var(--radius-pill);
+    background: var(--primary-soft);
+    color: var(--primary-darker);
+    font-size: 0.68rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.tag-escopo .material-symbols-rounded { font-size: 13px; }
+
+.item-cfg .sel-escopo {
+    padding: 3px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font: inherit;
+    font-size: 0.75rem;
+    background: var(--surface-muted);
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.item-cfg .sel-escopo:focus {
+    outline: none;
+    border-color: var(--primary);
+}

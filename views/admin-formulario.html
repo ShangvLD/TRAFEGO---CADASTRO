@@ -200,10 +200,22 @@
                     </label>
                 </div>
 
-                <!-- 5 · seção -->
+                <!-- 5 · escopo: em que tipo de pesquisa esta pergunta aparece -->
+                <div class="construtor__passo">
+                    <label class="construtor__rotulo" for="nova-pergunta-escopo">
+                        <span class="construtor__num">5</span> Aparece em qual pesquisa?
+                    </label>
+                    <div class="tipo-escolha">
+                        <span class="material-symbols-rounded tipo-icone" id="escopo-icone">all_inclusive</span>
+                        <select id="nova-pergunta-escopo"></select>
+                    </div>
+                    <p class="construtor__ajuda" id="escopo-ajuda"></p>
+                </div>
+
+                <!-- 6 · seção -->
                 <div class="construtor__passo">
                     <label class="construtor__rotulo" for="nova-pergunta-secao">
-                        <span class="construtor__num">5</span> Seção do formulário
+                        <span class="construtor__num">6</span> Seção do formulário
                     </label>
                     <div class="secao-escolha">
                         <select id="nova-pergunta-secao"></select>
@@ -310,7 +322,7 @@
         let MODULO = new URLSearchParams(location.search).get('modulo') || 'terceiro';
         let cfg = {
             operacoes: [], operacoesDoModulo: [], documentos: [], modulos: [],
-            perguntas: [], tiposDeCampo: [], secoesExistentes: [],
+            perguntas: [], tiposDeCampo: [], secoesExistentes: [], escopos: [], tiposDePesquisa: [],
         };
 
         // Excluir pergunta é só do admin (a rota DELETE exige). Esconder o botão
@@ -380,10 +392,13 @@
                 perguntas: j.perguntas || [],
                 tiposDeCampo: j.tiposDeCampo || [],
                 secoesExistentes: j.secoesExistentes || [],
+                escopos: j.escopos || [],
+                tiposDePesquisa: j.tiposDePesquisa || [],
             };
             desenharSeletor();
             desenharTipos();
             desenharSecoes();
+            desenharEscopos();
             desenhar();
             marcarStatus('Carregado', 'is-info');
         }
@@ -512,6 +527,11 @@
                             (d.obrigatorio ? ' checked' : '') +
                             (d.ativo ? '' : ' disabled') + '> obrigatório' +
                     '</label>' +
+                    '<select class="sel-escopo" data-doc-escopo="' + d.id + '" title="A quem este anexo pertence">' +
+                        (cfg.escopos || []).map((e) =>
+                            '<option value="' + esc(e.id) + '"' + (e.id === d.escopo ? ' selected' : '') + '>' +
+                            esc(e.rotulo) + '</option>').join('') +
+                    '</select>' +
                     botaoExcluir('documentos', d.id, d.rotulo, 'o anexo') +
                 '</div>'
             ).join('');
@@ -592,6 +612,9 @@
                         ? '<span class="tag-sistema" title="Alimenta o painel, a pasta dos anexos ou a fila — pode ser desativado, não excluído">' +
                           '<span class="material-symbols-rounded">lock</span> do sistema</span>'
                         : '') +
+                    '<span class="tag-escopo" title="Aparece em: ' + esc(rotuloDoEscopo(p.escopo)) + '">' +
+                        '<span class="material-symbols-rounded">' + esc(iconeDoEscopo(p.escopo)) + '</span> ' +
+                        esc(rotuloDoEscopo(p.escopo)) + '</span>' +
                     '<span class="perg-meta">' + esc(metaDaPergunta(p)) + '</span>' +
                 '</span>' +
                 '<label class="check-inline perg-obrig" title="Obrigatória">' +
@@ -679,6 +702,11 @@
             }
             if (el.dataset.docAtivo) {
                 const ok = await enviar('/api/admin/documentos/' + el.dataset.docAtivo, 'PATCH', { ativo: el.checked });
+                if (ok) await carregar();
+                return;
+            }
+            if (el.dataset.docEscopo) {
+                const ok = await enviar('/api/admin/documentos/' + el.dataset.docEscopo, 'PATCH', { escopo: el.value });
                 if (ok) await carregar();
                 return;
             }
@@ -833,6 +861,42 @@
             desenharOpcoes(lista);
         });
 
+        // ---- Escopo: em qual tipo de pesquisa a pergunta aparece ----
+        //
+        // É julgamento de negócio, não de código: "a conta bancária do
+        // proprietário é do veículo ou vale para tudo?" só quem opera responde.
+        // Por isso fica aqui, e não escondido numa constante.
+        const selEscopo = document.getElementById('nova-pergunta-escopo');
+
+        function desenharEscopos() {
+            const lista = cfg.escopos || [];
+            if (!lista.length || selEscopo.options.length) return;
+
+            selEscopo.innerHTML = lista
+                .map((e) => '<option value="' + esc(e.id) + '">' + esc(e.rotulo) + '</option>')
+                .join('');
+            aplicarEscopo();
+        }
+
+        function aplicarEscopo() {
+            const e = (cfg.escopos || []).find((x) => x.id === selEscopo.value);
+            if (!e) return;
+            document.getElementById('escopo-icone').textContent = e.icone || 'help';
+            document.getElementById('escopo-ajuda').textContent = e.ajuda;
+        }
+
+        selEscopo.addEventListener('change', aplicarEscopo);
+
+        function rotuloDoEscopo(id) {
+            const e = (cfg.escopos || []).find((x) => x.id === id);
+            return e ? e.rotulo : id;
+        }
+
+        function iconeDoEscopo(id) {
+            const e = (cfg.escopos || []).find((x) => x.id === id);
+            return e ? e.icone : 'help';
+        }
+
         // ---- Seletor de seção ----
         //
         // Lista suspensa com as seções que o formulário já tem, mais "nova".
@@ -873,6 +937,8 @@
             inpPergunta.value = p.rotulo;
             selTipo.value = p.tipo;
             inpObrig.checked = p.obrigatorio;
+            selEscopo.value = p.escopo || 'geral';
+            aplicarEscopo();
             desenharSecoes(p.secao);
             aplicarTipo({ limite: p.max, opcoes: p.opcoes });
 
@@ -904,6 +970,8 @@
             btnCancelarEdicao.hidden = true;
             btnSalvarPerg.innerHTML = '<span class="material-symbols-rounded">add</span> Adicionar pergunta';
             desenharOpcoes(['', '', '']);
+            selEscopo.value = 'geral';
+            aplicarEscopo();
             desenharSecoes();
             aplicarTipo();
         }
@@ -970,6 +1038,7 @@
                 tipo: selTipo.value,
                 secao,
                 obrigatorio: inpObrig.checked,
+                escopo: selEscopo.value,
             };
 
             if ((t.config || []).includes('opcoes')) {

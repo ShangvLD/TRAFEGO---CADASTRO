@@ -692,6 +692,14 @@
             document.body.style.overflow = '';
         }
 
+
+        /** Etiqueta da modalidade da pesquisa (vazio nos cadastros antigos). */
+        function etiquetaPesquisa(s) {
+            if (!s.pesquisa || !s.pesquisa.etiqueta) return '';
+            const classe = s.pesquisa.renovacao ? 'etiq-pesquisa etiq-pesquisa--renovacao' : 'etiq-pesquisa';
+            return '<br><span class="' + classe + '">' + esc(s.pesquisa.etiqueta) + '</span>';
+        }
+
         function linhaHtml(s) {
             const verBtn = `<button class="btn-acao ver" data-id="${s.id}" title="Ver e decidir">
                                 <span class="material-symbols-rounded">visibility</span>
@@ -704,12 +712,15 @@
                    </button>`
                 : '';
 
-            return `<tr data-id="${s.id}" class="linha-clic">
+                        // A modalidade muda o que quem atende deve esperar: uma renovação
+            // não tem cadastro novo para conferir, e uma pesquisa só de carreta
+            // não tem motorista. Dizer isso na lista evita abrir para descobrir.
+            return `<tr data-id="${s.id}" class="linha-clic ${s.pesquisa && s.pesquisa.renovacao ? 'linha-renovacao' : ''}">
                 <td class="col-sel"><input type="checkbox" class="sel-linha" data-id="${s.id}"></td>
                 <td>${s.prioridade
                         ? '<span class="prio-bolinha" title="' + esc(s.prioridade.rotulo) + '">' + s.prioridade.bolinha + '</span> '
                         : ''}${formatarData(s.criado_em)}</td>
-                <td>${esc(s.solicitante_nome)}<br><small style="color:var(--text-secondary)">${esc(s.solicitante_email)}</small></td>
+                <td>${esc(s.solicitante_nome)}<br><small style="color:var(--text-secondary)">${esc(s.solicitante_email)}</small>${etiquetaPesquisa(s)}</td>
                 <td>${clientesChips(s.assunto)}</td>
                 <td>${anexosResumo(s.anexos, contagemAnexos[s.id])}</td>
                 <td>${Atendimento.selo(atendimentoPorId[s.id])}</td>

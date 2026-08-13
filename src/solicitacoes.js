@@ -7,6 +7,7 @@
 
 const db = require('./db');
 const fluxo = require('./fluxo');
+const pesquisas = require('./pesquisas');
 const validacao = require('./validacao');
 
 // ---------------------------------------------------------------------------
@@ -258,6 +259,17 @@ function hidratar(row, ctx = {}) {
     placas,
     prioridade: prioridade
       ? { id: prioridade.id, rotulo: prioridade.rotulo, bolinha: prioridade.bolinha, cor: prioridade.cor, ordem: prioridade.ordem }
+      : null,
+    // Modalidade da pesquisa. Nulo nos cadastros anteriores à modalidade
+    // existir — a tela mostra a etiqueta só quando há uma, em vez de fingir
+    // que os antigos foram "completos".
+    pesquisa: row.tipo_pesquisa
+      ? {
+          tipo: row.tipo_pesquisa,
+          alvo: row.alvo_renovacao || null,
+          renovacao: row.tipo_pesquisa === 'renovacao',
+          etiqueta: pesquisas.etiqueta(row.tipo_pesquisa, row.alvo_renovacao),
+        }
       : null,
     responsavel: at && at.responsavel ? at.responsavel.nome : null,
     assumido_em: assumidoEm,

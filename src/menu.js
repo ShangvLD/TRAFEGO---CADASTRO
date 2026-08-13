@@ -25,12 +25,11 @@ function menuPara(usuario) {
   const admin = papeis.ehAdmin(papel);
   const itens = [];
 
-  // ---- "Solicitar": a página com o Microsoft Forms embutido ---------------
-  // Pertence ao fluxo de terceiro, então só aparece para quem preenche esse
-  // módulo. Agregado e candidato não têm nada a ver com ela.
-  if (papeis.podeFormulario(papel, 'terceiro')) {
-    itens.push({ href: '/solicitante', rotulo: 'Solicitar', icone: 'note_add' });
-  }
+  // O item "Solicitar" — a página com o Microsoft Forms embutido — saiu: o
+  // formulário nativo faz o mesmo trabalho com validação na hora, e manter as
+  // duas portas de entrada só gerava cadastro chegando por dois caminhos com
+  // regras diferentes. A ENTRADA por webhook continua funcionando: quem já
+  // responde pelo Forms fora do Portal segue caindo aqui.
 
   // ---- Um item por formulário liberado ------------------------------------
   for (const m of MODULOS) {
