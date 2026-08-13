@@ -22,7 +22,10 @@
    ========================================================================== */
 
 const db = require('./db');
-const { validarCadastro, formatarCpf, formatarTelefone, formatarPlaca, formatarPis, acharPrioridade } = require('./validacao');
+const {
+  validarCadastro, formatarCpf, formatarTelefone, formatarPlaca, formatarPis, acharPrioridade,
+  CAMPOS_DO_TERCEIRO,
+} = require('./validacao');
 
 const rotuloPrioridade = (id) => (acharPrioridade(id) || {}).rotulo;
 
@@ -37,8 +40,15 @@ const rotuloPrioridade = (id) => (acharPrioridade(id) || {}).rotulo;
  * A ordem espelha a dos registros vindos do Forms, para o modal de detalhes
  * exibir os campos na mesma sequência a que as pessoas já estão acostumadas.
  * Campos ausentes entram vazios (o painel oculta), mantendo a mesma "cara".
+ *
+ * PERGUNTAS NOVAS, criadas na tela de configuração, entram DEPOIS dos 18, com
+ * o rótulo que o admin deu. Os 18 mantêm os rótulos legados de propósito: são
+ * os mesmos dos 51 registros históricos importados do Forms, e trocá-los faria
+ * o mesmo campo aparecer com dois nomes conforme a idade do cadastro.
+ *
+ * @param extras  [{ id, rotulo }] das perguntas que não são as 18 conhecidas
  */
-function montarDetalhesLegado(d) {
+function montarDetalhesLegado(d, extras = []) {
   const partes = [
     ['Condutor', d.condutor_nome],
     ['CPF', d.condutor_cpf ? formatarCpf(d.condutor_cpf) : ''],
@@ -59,6 +69,15 @@ function montarDetalhesLegado(d) {
     ['Prioridade', d.prioridade ? (rotuloPrioridade(d.prioridade) || d.prioridade) : ''],
     ['OBS', d.obs],
   ];
+
+  // Vazio é omitido aqui (diferente dos 18 acima): uma pergunta nova que
+  // ninguém respondeu não precisa ocupar linha no modal de detalhes.
+  for (const extra of extras) {
+    const valor = d[extra.id];
+    if (valor === undefined || valor === null || valor === '') continue;
+    partes.push([extra.rotulo, valor]);
+  }
+
   return partes.map(([rotulo, valor]) => `${rotulo}: ${valor == null ? '' : valor}`).join(' | ');
 }
 
@@ -94,9 +113,9 @@ function montarAssuntoLegado(operacoes) {
  *
  * Tudo numa transação: se qualquer passo falhar, nada é gravado.
  */
-async function criar(dados, solicitante) {
+async function criar(dados, solicitante, { extras = [] } = {}) {
   const assunto = montarAssuntoLegado(dados.operacoes);
-  const detalhes = montarDetalhesLegado(dados);
+  const detalhes = montarDetalhesLegado(dados, extras);
 
   return db.transacao(async (q) => {
     // ---- Condutor: upsert por CPF ----------------------------------------
@@ -219,11 +238,36 @@ async function validarECriar(entrada, solicitante) {
   // require aqui dentro (e não no topo) para evitar ciclo:
   // config-formulario -> validacao, e cadastros -> config-formulario.
   const configFormulario = require('./config-formulario');
-  const operacoesPermitidas = (await configFormulario.operacoesAtivas()).map((o) => o.nome);
 
-  const { ok, dados, erros } = validarCadastro(entrada, { operacoesPermitidas });
+  const [operacoes, perguntas] = await Promise.all([
+    configFormulario.operacoesAtivas(),
+    // Só as ATIVAS: campo desativado não foi mostrado, e o que não foi
+    // mostrado não pode ser exigido nem gravado.
+    configFormulario.perguntas('terceiro', { apenasAtivas: true }),
+  ]);
+
+  const campos = perguntas.map((p) => ({
+    id: p.campoId,
+    rotulo: p.rotulo,
+    tipo: p.tipo,
+    obrigatorio: p.obrigatorio,
+    opcoes: p.opcoes,
+    max: p.max,
+  }));
+
+  const { ok, dados, erros } = validarCadastro(entrada, {
+    operacoesPermitidas: operacoes.map((o) => o.nome),
+    campos,
+  });
   if (!ok) return { ok: false, erros };
-  const criado = await criar(dados, solicitante);
+
+  // Perguntas que não são as 18 do desenho original: elas não têm coluna
+  // própria, então a resposta entra no texto de "detalhes", que é o que o
+  // painel já lê campo a campo.
+  const conhecidos = new Set(CAMPOS_DO_TERCEIRO.map((c) => c.id));
+  const extras = campos.filter((c) => !conhecidos.has(c.id));
+
+  const criado = await criar(dados, solicitante, { extras });
   return { ok: true, ...criado };
 }
 

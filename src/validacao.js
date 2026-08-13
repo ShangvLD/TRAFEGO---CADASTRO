@@ -584,42 +584,176 @@ function validarOperacoes(lista, { permitidas = OPERACOES } = {}) {
 // front destacar cada campo em vez de mostrar um alerta genérico.
 // --------------------------------------------------------------------------
 
+/* ---------------------------------------------------------------------------
+   Validação genérica, guiada pelo TIPO do campo
+
+   É o que confere as perguntas que o admin cria na tela de configuração: ele
+   escolhe o tipo, e o tipo diz como o valor é conferido.
+
+   Mora aqui, e não em src/campos.js, porque campos.js já depende deste módulo.
+   Um despachante só, nos dois lugares — duas cópias divergiriam no dia em que
+   alguém acrescentasse um tipo em uma e esquecesse a outra.
+   --------------------------------------------------------------------------- */
+function validarPorTipo(campo, valor) {
+  const obrigatorio = !!campo.obrigatorio;
+  const rotulo = campo.rotulo || 'O campo';
+  const comAspas = `O campo "${rotulo}"`;
+
+  switch (campo.tipo) {
+    case 'nome':
+      return validarNome(valor, { obrigatorio, rotulo: comAspas });
+    case 'cpf':
+      return validarCpf(valor, { obrigatorio });
+    case 'cpf_cnpj':
+      return validarCpfOuCnpj(valor, { obrigatorio });
+    case 'telefone':
+      return validarTelefone(valor, { obrigatorio, rotulo: comAspas });
+    case 'email':
+      return validarEmail(valor, { obrigatorio });
+    case 'placa':
+      return validarPlaca(valor, { obrigatorio, rotulo: `A ${rotulo.toLowerCase()}` });
+    case 'data':
+      return validarData(valor, { obrigatorio, rotulo: comAspas });
+
+    case 'selecao': {
+      const lista = (campo.opcoes || []).map((o) => String(o));
+      if (!lista.length) return ok(null); // lista sem opção não tem o que conferir
+      return validarDaLista(valor, lista, { obrigatorio, rotulo: comAspas });
+    }
+
+    case 'numero': {
+      if (vazio(valor)) return obrigatorio ? erro(`${comAspas} é obrigatório.`) : ok(null);
+      const digitos = apenasDigitos(valor);
+      if (!digitos) return erro(`${comAspas} aceita apenas números.`);
+      const teto = campo.max || 30;
+      if (digitos.length > teto) return erro(`${comAspas} tem no máximo ${teto} dígitos.`);
+      return ok(digitos);
+    }
+
+    case 'anexo':
+      // Arquivo não viaja no corpo do formulário: o envio acontece depois, na
+      // área de documentos, contra a solicitação já criada.
+      return ok(null);
+
+    case 'texto_longo':
+    case 'texto':
+    default:
+      return validarTexto(valor, { obrigatorio, rotulo: comAspas, max: campo.max || 500 });
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Os 18 campos do cadastro de terceiro, e como cada um é conferido
+
+   Por que uma tabela por CAMPO, e não só o tipo: estes campos têm regra de
+   negócio própria que o tipo não expressa. "Número da CNH" é do tipo texto,
+   mas exige 11 dígitos; o PIS tem dígito verificador; a validade da CNH tem
+   que ser futura; TAG e rastreador saem de listas fechadas.
+
+   O "obrigatorio" aqui é o PADRÃO — o que valia antes de a tela de
+   configuração existir. Quando a configuração é passada a validarCadastro(),
+   ela manda: é o admin quem decide o que trava o envio.
+   --------------------------------------------------------------------------- */
+const CAMPOS_DO_TERCEIRO = [
+  { id: 'condutor_nome', obrigatorio: true,
+    validar: (v, o) => validarNome(v, { ...o, rotulo: 'O nome do condutor' }) },
+  { id: 'condutor_cpf', obrigatorio: true,
+    validar: (v, o) => validarCpf(v, o) },
+  { id: 'condutor_email', obrigatorio: false,
+    validar: (v, o) => validarEmail(v, o) },
+  { id: 'condutor_telefone', obrigatorio: true,
+    validar: (v, o) => validarTelefone(v, { ...o, rotulo: 'O contato do condutor' }) },
+  { id: 'cnh_numero', obrigatorio: false,
+    validar: (v, o) => validarCnhNumero(v, o) },
+  { id: 'cnh_categoria', obrigatorio: false,
+    validar: (v, o) => validarCategoriaCnh(v, o) },
+  { id: 'cnh_validade', obrigatorio: false,
+    validar: (v, o, ctx) => validarData(v, { ...o, rotulo: 'A validade da CNH', futura: true, hoje: ctx.hoje }) },
+  { id: 'proprietario_nome', obrigatorio: false,
+    validar: (v, o) => validarTexto(v, { ...o, rotulo: 'O nome do proprietário', max: 120 }) },
+  { id: 'proprietario_documento', obrigatorio: false,
+    validar: (v, o) => validarCpfOuCnpj(v, o) },
+  { id: 'proprietario_telefone', obrigatorio: false,
+    validar: (v, o) => validarTelefone(v, { ...o, rotulo: 'O contato do proprietário' }) },
+  { id: 'proprietario_pis', obrigatorio: false,
+    validar: (v, o) => validarPis(v, o) },
+  { id: 'placa_cavalo', obrigatorio: false,
+    validar: (v, o) => validarPlaca(v, { ...o, rotulo: 'A placa do cavalo' }) },
+  { id: 'placa_carreta', obrigatorio: false,
+    validar: (v, o) => validarPlaca(v, { ...o, rotulo: 'A placa da carreta' }) },
+  { id: 'tag', obrigatorio: false,
+    validar: (v, o) => validarDaLista(v, TAGS_PEDAGIO, { ...o, rotulo: 'A TAG' }) },
+  { id: 'rastreador', obrigatorio: false,
+    validar: (v, o) => validarDaLista(v, RASTREADORES, { ...o, rotulo: 'O rastreador' }) },
+  { id: 'rastreador_id', obrigatorio: false,
+    validar: (v, o) => validarTexto(v, { ...o, rotulo: 'O ID do rastreador', max: 60 }) },
+  { id: 'prioridade', obrigatorio: true,
+    validar: (v, o) => validarPrioridade(v, o) },
+  { id: 'obs', obrigatorio: false,
+    validar: (v, o) => validarTexto(v, { ...o, rotulo: 'A observação', max: 2000 }) },
+];
+
+const POR_ID_DO_TERCEIRO = new Map(CAMPOS_DO_TERCEIRO.map((c) => [c.id, c]));
+
+/**
+ * Decide QUAIS campos valem nesta validação e com que obrigatoriedade.
+ *
+ * Sem configuração, é a lista do código — o comportamento de sempre.
+ *
+ * Com configuração (só os campos ATIVOS, vindos de cfg_campos), ela manda:
+ *   · campo desativado não é conferido, porque não foi nem mostrado. É o
+ *     mesmo comportamento dos módulos genéricos, onde a lista que desenha a
+ *     tela é a que valida — não dá para sobrar exigência de um campo invisível.
+ *   · campo conhecido mantém a sua regra de negócio (CNH, PIS, placa), só a
+ *     obrigatoriedade vem da configuração.
+ *   · pergunta nova, criada pela tela, cai no despachante por tipo.
+ */
+function camposEfetivos(configurados) {
+  if (!Array.isArray(configurados)) return CAMPOS_DO_TERCEIRO;
+
+  return configurados.map((c) => {
+    const conhecido = POR_ID_DO_TERCEIRO.get(c.id);
+    return {
+      id: c.id,
+      obrigatorio: !!c.obrigatorio,
+      validar: conhecido
+        ? conhecido.validar
+        : (valor, opcoes) => validarPorTipo({ ...c, obrigatorio: opcoes.obrigatorio }, valor),
+    };
+  });
+}
+
 /**
  * @param opcoes.hoje                 data de referência (deixa o teste determinístico)
  * @param opcoes.operacoesPermitidas  lista vinda da CONFIGURAÇÃO do banco
  *   (cfg_operacoes). Sem ela, cai na constante OPERACOES — que é só a semente.
  *   Isso importa: se o admin cadastrar um cliente novo pela tela, a validação
  *   precisa aceitá-lo sem alteração de código.
+ * @param opcoes.campos               campos ATIVOS vindos de cfg_campos, no
+ *   formato { id, rotulo, tipo, obrigatorio, opcoes, max }. Sem eles, vale a
+ *   lista do código.
  */
-function validarCadastro(entrada, { hoje = null, operacoesPermitidas = null } = {}) {
+function validarCadastro(entrada, { hoje = null, operacoesPermitidas = null, campos = null } = {}) {
   const e = entrada || {};
   const erros = {};
   const dados = {};
+  const contexto = { hoje };
 
-  const aplicar = (campo, resultado) => {
-    if (resultado.ok) dados[campo] = resultado.valor;
-    else erros[campo] = resultado.erro;
-  };
+  const lista = camposEfetivos(campos);
+  const temCampo = (id) => lista.some((c) => c.id === id);
 
-  // Condutor
-  aplicar('condutor_nome', validarNome(e.condutor_nome, { rotulo: 'O nome do condutor' }));
-  aplicar('condutor_cpf', validarCpf(e.condutor_cpf));
-  aplicar('condutor_email', validarEmail(e.condutor_email, { obrigatorio: false }));
-  aplicar('condutor_telefone', validarTelefone(e.condutor_telefone, { obrigatorio: true, rotulo: 'O contato do condutor' }));
-  aplicar('cnh_numero', validarCnhNumero(e.cnh_numero));
-  aplicar('cnh_categoria', validarCategoriaCnh(e.cnh_categoria));
-  aplicar('cnh_validade', validarData(e.cnh_validade, { rotulo: 'A validade da CNH', futura: true, hoje }));
-
-  // Proprietário
-  aplicar('proprietario_nome', validarTexto(e.proprietario_nome, { rotulo: 'O nome do proprietário', max: 120 }));
-  aplicar('proprietario_documento', validarCpfOuCnpj(e.proprietario_documento));
-  aplicar('proprietario_telefone', validarTelefone(e.proprietario_telefone, { rotulo: 'O contato do proprietário' }));
-  aplicar('proprietario_pis', validarPis(e.proprietario_pis));
+  for (const campo of lista) {
+    const r = campo.validar(e[campo.id], { obrigatorio: campo.obrigatorio }, contexto);
+    if (r.ok) dados[campo.id] = r.valor;
+    else erros[campo.id] = r.erro;
+  }
 
   // O PIS é de pessoa física. Preenchido junto com um CNPJ, alguém digitou no
   // campo errado — e um número no campo errado é pior que campo vazio, porque
   // parece dado bom.
   if (
+    temCampo('proprietario_pis') &&
+    temCampo('proprietario_documento') &&
     !erros.proprietario_pis &&
     !vazio(e.proprietario_pis) &&
     apenasDigitos(e.proprietario_documento).length === 14
@@ -627,35 +761,30 @@ function validarCadastro(entrada, { hoje = null, operacoesPermitidas = null } = 
     erros.proprietario_pis = 'PIS é do proprietário pessoa física. Com CNPJ, deixe em branco.';
   }
 
-  // Veículo
-  aplicar('placa_cavalo', validarPlaca(e.placa_cavalo, { rotulo: 'A placa do cavalo' }));
-  aplicar('placa_carreta', validarPlaca(e.placa_carreta, { rotulo: 'A placa da carreta' }));
-
-  // Rastreamento
-  aplicar('tag', validarDaLista(e.tag, TAGS_PEDAGIO, { rotulo: 'A TAG' }));
-  aplicar('rastreador', validarDaLista(e.rastreador, RASTREADORES, { rotulo: 'O rastreador' }));
-  aplicar('rastreador_id', validarTexto(e.rastreador_id, { rotulo: 'O ID do rastreador', max: 60 }));
-
-  // Prioridade
-  aplicar('prioridade', validarPrioridade(e.prioridade, { obrigatorio: true }));
-
-  // Observação
-  aplicar('obs', validarTexto(e.obs, { rotulo: 'A observação', max: 2000 }));
-
   // Operações
-  aplicar(
-    'operacoes',
-    validarOperacoes(e.operacoes, {
-      permitidas: Array.isArray(operacoesPermitidas) && operacoesPermitidas.length
-        ? operacoesPermitidas.map((o) => limparTexto(o).toUpperCase())
-        : OPERACOES,
-    })
-  );
+  const rOperacoes = validarOperacoes(e.operacoes, {
+    permitidas: Array.isArray(operacoesPermitidas) && operacoesPermitidas.length
+      ? operacoesPermitidas.map((o) => limparTexto(o).toUpperCase())
+      : OPERACOES,
+  });
+  if (rOperacoes.ok) dados.operacoes = rOperacoes.valor;
+  else erros.operacoes = rOperacoes.erro;
 
   // Regra de negócio: é preciso ao menos uma placa. Um cadastro sem nenhum
   // veículo não tem o que ser aprovado pela GR.
-  if (!erros.placa_cavalo && !erros.placa_carreta && !dados.placa_cavalo && !dados.placa_carreta) {
-    erros.placa_cavalo = 'Informe ao menos uma placa (cavalo ou carreta).';
+  //
+  // As duas regras de placa só valem se os campos estiverem no formulário —
+  // desativado o campo, exigir a placa seria exigir o impossível.
+  const temCavalo = temCampo('placa_cavalo');
+  const temCarreta = temCampo('placa_carreta');
+
+  if ((temCavalo || temCarreta) &&
+      !erros.placa_cavalo && !erros.placa_carreta &&
+      !dados.placa_cavalo && !dados.placa_carreta) {
+    erros[temCavalo ? 'placa_cavalo' : 'placa_carreta'] =
+      temCavalo && temCarreta
+        ? 'Informe ao menos uma placa (cavalo ou carreta).'
+        : 'Informe a placa.';
   }
 
   // Regra de negócio: as duas placas não podem ser a mesma.
@@ -717,4 +846,8 @@ module.exports = {
   acharTipoDocumento,
   // completo
   validarCadastro,
+  // despachante genérico por tipo (usado por src/campos.js e pelas perguntas
+  // que a tela de configuração cria)
+  validarPorTipo,
+  CAMPOS_DO_TERCEIRO,
 };

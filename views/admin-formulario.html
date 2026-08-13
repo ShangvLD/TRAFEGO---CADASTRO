@@ -86,6 +86,15 @@
                     </tbody>
                 </table>
             </div>
+
+            <div class="barra-salvar">
+                <button type="button" class="btn btn--primario" data-conferir="matriz">
+                    <span class="material-symbols-rounded">save</span> Salvar e conferir
+                </button>
+                <span class="barra-salvar__estado" data-estado="matriz">
+                    Cada marcação é gravada na hora. Clique para conferir se já está valendo no formulário.
+                </span>
+            </div>
         </section>
 
         <!-- ===================== PERGUNTAS ===================== -->
@@ -100,17 +109,15 @@
                 e o Mercosul, e assim por diante.
             </p>
 
-            <!-- O formulário do terceiro ainda é HTML fixo: enquanto for, editar
-                 aqui não muda a tela que o time preenche. Dizer isso é feio, mas
-                 menos feio do que a pessoa editar e achar que aplicou. -->
+            <!-- Aviso só do terceiro: é o único módulo com campos que o
+                 cadastro não sabe gravar sem (ver CAMPOS_INDISPENSAVEIS). -->
             <p class="nota-divergencia" id="nota-terceiro" hidden>
-                <span class="material-symbols-rounded">warning</span>
+                <span class="material-symbols-rounded">info</span>
                 <span>
-                    <strong>Este formulário ainda é desenhado à mão.</strong>
-                    A tela de cadastro do terceiro (<code>/cadastro</code>) tem os 18 campos
-                    escritos direto no HTML, e a validação dele é a de <code>validarCadastro</code>.
-                    Enquanto for assim, <strong>o que você mudar aqui não muda nada para quem
-                    preenche</strong> — a configuração está pronta, quem falta converter é a tela.
+                    <strong>Dois campos não podem sair deste formulário:</strong>
+                    <em>Condutor</em> e <em>CPF</em>. O cadastro é gravado por CPF — é ele que
+                    evita duplicar o motorista e dá nome à pasta dos anexos. Renomear, mover de
+                    seção e reordenar, pode; desativar, não.
                 </span>
             </p>
 
@@ -215,6 +222,15 @@
                     </button>
                 </div>
             </form>
+
+            <div class="barra-salvar">
+                <button type="button" class="btn btn--primario" data-conferir="perguntas">
+                    <span class="material-symbols-rounded">save</span> Salvar e conferir
+                </button>
+                <span class="barra-salvar__estado" data-estado="perguntas">
+                    Cada alteração é gravada na hora. Clique para conferir se já está valendo no formulário.
+                </span>
+            </div>
         </section>
 
         <div class="admin-grid">
@@ -233,6 +249,15 @@
                         <span class="material-symbols-rounded">add</span> Adicionar
                     </button>
                 </form>
+
+                <div class="barra-salvar">
+                    <button type="button" class="btn btn--primario" data-conferir="operacoes">
+                        <span class="material-symbols-rounded">save</span> Salvar e conferir
+                    </button>
+                    <span class="barra-salvar__estado" data-estado="operacoes">
+                        Gravado na hora. Clique para conferir no formulário.
+                    </span>
+                </div>
             </section>
 
             <!-- ===================== DOCUMENTOS ===================== -->
@@ -253,6 +278,15 @@
                         <span class="material-symbols-rounded">add</span> Adicionar
                     </button>
                 </form>
+
+                <div class="barra-salvar">
+                    <button type="button" class="btn btn--primario" data-conferir="documentos">
+                        <span class="material-symbols-rounded">save</span> Salvar e conferir
+                    </button>
+                    <span class="barra-salvar__estado" data-estado="documentos">
+                        Gravado na hora. Clique para conferir no formulário.
+                    </span>
+                </div>
             </section>
         </div>
 
@@ -986,6 +1020,138 @@
                 avisar('"' + nome + '" foi excluído.', 'ok');
                 await carregar();
             }
+        });
+
+        // ==================================================================
+        // "Salvar e conferir"
+        //
+        // Cada mexida já é gravada no clique — é assim de propósito, para uma
+        // aba fechada no meio do caminho não levar meia configuração embora.
+        // O que faltava era a confirmação de que a gravação CHEGOU no
+        // formulário, e é isso que este botão faz: lê o MESMO endereço que a
+        // tela de preenchimento consome e compara com o que está configurado
+        // aqui. Dizer "salvo" olhando só para o próprio estado da tela não
+        // provaria nada — provaria que a tela acha que salvou.
+        // ==================================================================
+        function horaAgora() {
+            const d = new Date();
+            return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+        }
+
+        /** O endereço de onde o formulário DE VERDADE lê a sua configuração. */
+        function enderecoDoFormulario() {
+            return MODULO === 'terceiro'
+                ? '/api/config-formulario'
+                : '/api/modulos/' + encodeURIComponent(MODULO) + '/formulario';
+        }
+
+        /** Compara uma área da configuração com o que o formulário está servindo. */
+        function compararArea(area, vivo) {
+            if (area === 'perguntas') {
+                const noFormulario = (vivo.secoes || []).flatMap((s) => s.campos || []);
+                const configuradas = (cfg.perguntas || []).filter((p) => p.ativo);
+
+                const faltando = configuradas.filter((p) => !noFormulario.some((c) => c.id === p.campoId));
+                const sobrando = noFormulario.filter((c) => !configuradas.some((p) => p.campoId === c.id));
+                const divergentes = configuradas.filter((p) => {
+                    const c = noFormulario.find((x) => x.id === p.campoId);
+                    return c && (c.rotulo !== p.rotulo || !!c.obrigatorio !== !!p.obrigatorio);
+                });
+
+                if (faltando.length || sobrando.length || divergentes.length) {
+                    return {
+                        ok: false,
+                        texto: 'O formulário ainda não está igual: ' +
+                               [faltando.length ? faltando.length + ' pergunta(s) sem aparecer' : null,
+                                sobrando.length ? sobrando.length + ' aparecendo a mais' : null,
+                                divergentes.length ? divergentes.length + ' com rótulo ou obrigatoriedade diferente' : null]
+                               .filter(Boolean).join(', '),
+                    };
+                }
+
+                const secoes = new Set(configuradas.map((p) => p.secao));
+                const obrigatorias = configuradas.filter((p) => p.obrigatorio).length;
+                return {
+                    ok: true,
+                    texto: 'Valendo no formulário: ' + configuradas.length + ' pergunta(s) em ' +
+                           secoes.size + ' seção(ões), ' + obrigatorias + ' obrigatória(s)',
+                };
+            }
+
+            if (area === 'operacoes') {
+                const noFormulario = (vivo.operacoes || []).map(String);
+                const ativas = (cfg.operacoesDoModulo || []).filter((o) => o.ativo).map((o) => o.nome);
+                const faltando = ativas.filter((n) => !noFormulario.includes(n));
+                const sobrando = noFormulario.filter((n) => !ativas.includes(n));
+
+                if (faltando.length || sobrando.length) {
+                    return { ok: false, texto: 'O formulário está oferecendo outra lista de clientes ' +
+                             '(' + noFormulario.length + ' contra ' + ativas.length + ' ativos aqui)' };
+                }
+                return { ok: true, texto: 'Valendo no formulário: ' + ativas.length + ' cliente(s)' };
+            }
+
+            // matriz e documentos olham a mesma coisa por ângulos diferentes: a
+            // matriz, a exigência por cliente; a lista, quais anexos aparecem.
+            const noFormulario = vivo.documentos || [];
+            const ativos = (cfg.documentos || []).filter((d) => d.ativo);
+            const faltando = ativos.filter((d) => !noFormulario.some((x) => x.codigo === d.codigo));
+            const sobrando = noFormulario.filter((x) => !ativos.some((d) => d.codigo === x.codigo));
+
+            if (faltando.length || sobrando.length) {
+                return { ok: false, texto: 'O formulário ainda não está igual: ' +
+                         [faltando.length ? faltando.length + ' anexo(s) sem aparecer' : null,
+                          sobrando.length ? sobrando.length + ' aparecendo a mais' : null]
+                         .filter(Boolean).join(', ') };
+            }
+
+            if (area === 'matriz') {
+                const porCliente = noFormulario.filter((d) => d.operacoes && d.operacoes.length).length;
+                const universais = noFormulario.length - porCliente;
+                return { ok: true, texto: 'Valendo no formulário: ' + universais + ' anexo(s) para todos os clientes e ' +
+                         porCliente + ' só para clientes específicos' };
+            }
+
+            const obrigatorios = noFormulario.filter((d) => d.obrigatorio).length;
+            return { ok: true, texto: 'Valendo no formulário: ' + noFormulario.length + ' anexo(s), ' +
+                     obrigatorios + ' obrigatório(s)' };
+        }
+
+        async function conferirNoFormulario(area, botao) {
+            const estado = document.querySelector('[data-estado="' + area + '"]');
+            const rotuloAntes = botao.innerHTML;
+
+            botao.disabled = true;
+            botao.innerHTML = '<span class="material-symbols-rounded">hourglass_top</span> Conferindo...';
+            estado.className = 'barra-salvar__estado';
+            estado.textContent = 'Lendo o formulário...';
+
+            try {
+                // Recarrega a configuração antes de comparar: sem isso a
+                // comparação usaria o estado que a tela tinha na abertura, e
+                // um erro de gravação passaria batido.
+                await carregar();
+
+                const r = await fetch(enderecoDoFormulario(), { cache: 'no-store' });
+                const vivo = await r.json().catch(() => ({}));
+                if (!r.ok || !vivo.ok) throw new Error('sem resposta');
+
+                const resultado = compararArea(area, vivo);
+                estado.className = 'barra-salvar__estado ' + (resultado.ok ? 'ok' : 'atencao');
+                estado.textContent = (resultado.ok ? '✓ ' : '⚠ ') + resultado.texto + ' · conferido às ' + horaAgora();
+            } catch (e) {
+                estado.className = 'barra-salvar__estado erro';
+                estado.textContent = 'Não foi possível ler o formulário para conferir. Tente de novo.';
+            } finally {
+                botao.disabled = false;
+                botao.innerHTML = rotuloAntes;
+            }
+        }
+
+        document.addEventListener('click', (ev) => {
+            const botao = ev.target.closest('[data-conferir]');
+            if (!botao) return;
+            conferirNoFormulario(botao.dataset.conferir, botao);
         });
 
         carregar();

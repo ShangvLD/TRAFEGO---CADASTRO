@@ -65,211 +65,12 @@
         <section class="card" id="painel-form">
             <form id="form-cadastro" novalidate autocomplete="off">
 
-                <!-- ---------------- CONDUTOR ---------------- -->
-                <div class="form-secao">
-                    <div class="form-secao__titulo">
-                        <span class="material-symbols-rounded">person</span> Condutor
-                    </div>
-                    <p class="form-secao__ajuda">Mesmos campos do formulário do Forms. O CPF é a chave do cadastro — se o condutor já existir, os dados dele são atualizados em vez de duplicados.</p>
+                <!-- Todas as seções de campos são desenhadas a partir de
+                     /api/config-formulario. O que aparece aqui é o que está
+                     configurado em /admin/formulario — inclusive as perguntas
+                     que o admin criou. -->
+                <div id="secoes"></div>
 
-                    <div class="campos">
-                        <div class="campo campo-largo" data-campo="condutor_nome">
-                            <label for="condutor_nome">Condutor <span class="obrigatorio">*</span></label>
-                            <input type="text" id="condutor_nome" name="condutor_nome" placeholder="Nome completo do condutor" maxlength="120">
-                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
-                        </div>
-
-                        <div class="campo" data-campo="condutor_cpf">
-                            <label for="condutor_cpf">CPF <span class="obrigatorio">*</span></label>
-                            <input type="text" id="condutor_cpf" name="condutor_cpf" placeholder="000.000.000-00" inputmode="numeric" maxlength="14">
-                            <span class="dica">Conferido pelo dígito verificador</span>
-                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
-                        </div>
-
-                        <div class="campo" data-campo="condutor_telefone">
-                            <label for="condutor_telefone">Contato Motorista: <span class="obrigatorio">*</span></label>
-                            <input type="text" id="condutor_telefone" name="condutor_telefone" placeholder="(47) 98869-7821" inputmode="tel" maxlength="20">
-                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
-                        </div>
-
-                        <div class="campo campo-largo" data-campo="condutor_email">
-                            <label for="condutor_email">EMAIL</label>
-                            <input type="email" id="condutor_email" name="condutor_email" placeholder="email@exemplo.com" maxlength="254">
-                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ---------------- CNH ---------------- -->
-                <div class="form-secao">
-                    <div class="form-secao__titulo">
-                        <span class="material-symbols-rounded">badge</span> CNH
-                        <span class="badge is-info" style="margin-left:auto;font-size:0.7rem">Novo — não existe no Forms</span>
-                    </div>
-                    <p class="form-secao__ajuda">Campos <strong>opcionais</strong> que não existiam no Forms. Preenchendo a validade, o sistema passa a avisar antes do vencimento — hoje isso não é possível porque a data não é coletada.</p>
-
-                    <div class="campos campos--3">
-                        <div class="campo" data-campo="cnh_numero">
-                            <label for="cnh_numero">Número da CNH</label>
-                            <input type="text" id="cnh_numero" name="cnh_numero" placeholder="11 dígitos" inputmode="numeric" maxlength="14">
-                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
-                        </div>
-
-                        <div class="campo" data-campo="cnh_categoria">
-                            <label for="cnh_categoria">Categoria</label>
-                            <select id="cnh_categoria" name="cnh_categoria">
-                                <option value="">Selecione...</option>
-                            </select>
-                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
-                        </div>
-
-                        <div class="campo" data-campo="cnh_validade">
-                            <label for="cnh_validade">Validade</label>
-                            <input type="date" id="cnh_validade" name="cnh_validade">
-                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ---------------- PROPRIETÁRIO ---------------- -->
-                <div class="form-secao">
-                    <div class="form-secao__titulo">
-                        <span class="material-symbols-rounded">handshake</span> Proprietário
-                    </div>
-                    <p class="form-secao__ajuda">Dono do veículo. O campo de documento é <strong>novo</strong> (não existe no Forms) e é opcional — serve para não duplicar o mesmo proprietário a cada cadastro.</p>
-
-                    <div class="campos campos--3">
-                        <div class="campo" data-campo="proprietario_nome">
-                            <label for="proprietario_nome">Proprietário</label>
-                            <input type="text" id="proprietario_nome" name="proprietario_nome" placeholder="Nome ou razão social" maxlength="120">
-                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
-                        </div>
-
-                        <div class="campo" data-campo="proprietario_documento">
-                            <label for="proprietario_documento">CPF / CNPJ do proprietário</label>
-                            <input type="text" id="proprietario_documento" name="proprietario_documento" placeholder="Opcional" inputmode="numeric" maxlength="18">
-                            <span class="dica">Novo — não existe no Forms</span>
-                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
-                        </div>
-
-                        <div class="campo" data-campo="proprietario_telefone">
-                            <label for="proprietario_telefone">Contato Prop</label>
-                            <input type="text" id="proprietario_telefone" name="proprietario_telefone" placeholder="(11) 96304-0076" inputmode="tel" maxlength="20">
-                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
-                        </div>
-
-                        <!-- PIS: só aparece quando o documento é CPF.
-                             Empresa não tem PIS, e um campo que não se aplica
-                             na tela é convite para preencher errado. -->
-                        <div class="campo" data-campo="proprietario_pis" id="campo-pis" hidden>
-                            <label for="proprietario_pis">Código PIS</label>
-                            <input type="text" id="proprietario_pis" name="proprietario_pis" placeholder="000.00000.00-0" inputmode="numeric" maxlength="14">
-                            <span class="dica">Opcional — proprietário pessoa física</span>
-                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ---------------- VEÍCULO ---------------- -->
-                <div class="form-secao">
-                    <div class="form-secao__titulo">
-                        <span class="material-symbols-rounded">local_shipping</span> Veículo
-                    </div>
-                    <p class="form-secao__ajuda">Informe ao menos uma placa. Aceita o formato antigo (ABC1234) e o Mercosul (ABC1D23).</p>
-
-                    <div class="campos">
-                        <div class="campo" data-campo="placa_cavalo">
-                            <label for="placa_cavalo">Placa Cavalo</label>
-                            <input type="text" id="placa_cavalo" name="placa_cavalo" placeholder="ABC1D23" maxlength="8" style="text-transform:uppercase">
-                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
-                        </div>
-
-                        <div class="campo" data-campo="placa_carreta">
-                            <label for="placa_carreta">Placa Carreta</label>
-                            <input type="text" id="placa_carreta" name="placa_carreta" placeholder="XYZ4321" maxlength="8" style="text-transform:uppercase">
-                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ---------------- RASTREAMENTO ---------------- -->
-                <div class="form-secao">
-                    <div class="form-secao__titulo">
-                        <span class="material-symbols-rounded">my_location</span> Rastreamento
-                    </div>
-                    <p class="form-secao__ajuda">Opcional. Deixe em branco se não houver — não preencha com ponto ou traço.</p>
-
-                    <!-- As opções destas listas vêm de src/validacao.js, servido
-                         ao navegador em /js/validacao.js. Uma fonte só: incluir
-                         um fornecedor novo é editar aquela lista, e a tela e a
-                         validação do servidor acompanham juntas. -->
-                    <div class="campos campos--3">
-                        <div class="campo" data-campo="tag">
-                            <label for="tag">TAG de pedágio</label>
-                            <select id="tag" name="tag">
-                                <option value="">— sem TAG —</option>
-                            </select>
-                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
-                        </div>
-
-                        <div class="campo" data-campo="rastreador">
-                            <label for="rastreador">Rastreador</label>
-                            <select id="rastreador" name="rastreador">
-                                <option value="">— sem rastreador —</option>
-                            </select>
-                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
-                        </div>
-
-                        <div class="campo" data-campo="rastreador_id">
-                            <label for="rastreador_id">Rastreador ID</label>
-                            <input type="text" id="rastreador_id" name="rastreador_id" placeholder="Número do equipamento" maxlength="60">
-                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ---------------- OPERAÇÕES ---------------- -->
-                <div class="form-secao">
-                    <div class="form-secao__titulo">
-                        <span class="material-symbols-rounded">checklist</span> Operações
-                    </div>
-                    <p class="form-secao__ajuda">Marque as operações para as quais este cadastro está sendo solicitado. Cada uma é aprovada ou reprovada separadamente pelo responsável.</p>
-
-                    <div class="campo" data-campo="operacoes">
-                        <div class="operacoes" id="operacoes"></div>
-                        <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
-                    </div>
-                </div>
-
-                <!-- ---------------- PRIORIDADE ---------------- -->
-                <div class="form-secao">
-                    <div class="form-secao__titulo">
-                        <span class="material-symbols-rounded">priority_high</span> Grau de importância
-                    </div>
-                    <p class="form-secao__ajuda">Quem envia sabe se o motorista vai carregar em seguida; a fila de atendimento não tem como adivinhar. Por isso o campo é obrigatório.</p>
-
-                    <div class="campo" data-campo="prioridade">
-                        <label for="prioridade">Grau de importância do cadastro <span class="obrig">*</span></label>
-                        <select id="prioridade" name="prioridade">
-                            <option value="">Selecione...</option>
-                        </select>
-                        <span class="dica" id="prioridade-ajuda"></span>
-                        <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
-                    </div>
-                </div>
-
-                <!-- ---------------- OBSERVAÇÕES ---------------- -->
-                <div class="form-secao">
-                    <div class="form-secao__titulo">
-                        <span class="material-symbols-rounded">chat</span> Observações
-                    </div>
-
-                    <div class="campo" data-campo="obs">
-                        <label for="obs">OBS</label>
-                        <textarea id="obs" name="obs" placeholder="Opcional" maxlength="2000"></textarea>
-                        <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
-                    </div>
-                </div>
 
                 <!-- ---------------- DOCUMENTOS ---------------- -->
                 <div class="form-secao">
@@ -344,58 +145,184 @@
         const avisoErros = document.getElementById('aviso-erros');
         const avisoErrosTxt = document.getElementById('aviso-erros-txt');
 
-        // ------------------------------------------------------------------
-        // Monta as opções que vêm do módulo de validação, para o formulário
-        // nunca ficar fora de sincronia com o que o servidor aceita.
-        // ------------------------------------------------------------------
-        const selCategoria = document.getElementById('cnh_categoria');
-        for (const c of V.CATEGORIAS_CNH) {
-            const opt = document.createElement('option');
-            opt.value = c;
-            opt.textContent = c;
-            selCategoria.appendChild(opt);
-        }
-
+        const elSecoes = document.getElementById('secoes');
         const docsLista = document.getElementById('docs-lista');
-        const divOperacoes = document.getElementById('operacoes');
+        let divOperacoes = null; // criado ao desenhar as seções
+
+        function esc(t) {
+            const d = document.createElement('div');
+            d.textContent = t == null ? '' : String(t);
+            return d.innerHTML;
+        }
 
         // ------------------------------------------------------------------
         // Configuração vinda do BANCO (editável em /admin/formulario).
         //
-        // As operações e a matriz de documentos NÃO estão mais no código: o
-        // admin muda a exigência de um cliente e vale na próxima abertura do
-        // formulário, sem deploy. As constantes do validacao.js seguem como
-        // semente inicial e como reserva caso a API falhe.
+        // Agora são os CAMPOS também, não só operações e documentos: as seções,
+        // os rótulos, a ordem, a obrigatoriedade e as perguntas que o admin
+        // criou saem daqui. O que estava escrito à mão neste arquivo virava
+        // outra fonte de verdade — e o time via um formulário diferente do que
+        // a configuração dizia.
+        //
+        // As constantes do validacao.js seguem como reserva de operações e
+        // documentos caso a API falhe; sem os CAMPOS, porém, não há formulário
+        // a desenhar, e a tela diz isso em vez de aparecer vazia.
         // ------------------------------------------------------------------
         let CONFIG = {
+            secoes: [],
             operacoes: V.OPERACOES,
             documentos: V.TIPOS_DOCUMENTO.map((t) => ({
                 codigo: t.id, rotulo: t.rotulo, temValidade: t.temValidade, operacoes: t.operacoes,
             })),
         };
 
+        /** Lista plana dos campos configurados — é o que a validação consome. */
+        function camposConfigurados() {
+            return CONFIG.secoes.flatMap((s) => s.campos || []);
+        }
+
         async function carregarConfig() {
             try {
                 const r = await fetch('/api/config-formulario');
-                if (!r.ok) return; // mantém a reserva
+                if (!r.ok) return false;
                 const j = await r.json();
-                if (j.ok && Array.isArray(j.operacoes) && j.operacoes.length) {
-                    CONFIG = { operacoes: j.operacoes, documentos: j.documentos || [] };
-                }
+                if (!j.ok) return false;
+
+                if (Array.isArray(j.operacoes) && j.operacoes.length) CONFIG.operacoes = j.operacoes;
+                if (Array.isArray(j.documentos)) CONFIG.documentos = j.documentos;
+                CONFIG.secoes = Array.isArray(j.secoes) ? j.secoes : [];
+                return CONFIG.secoes.length > 0;
             } catch (e) {
-                /* sem conexão: segue com a reserva */
+                return false;
             }
         }
 
+        // ------------------------------------------------------------------
+        // Desenho dos campos a partir da configuração
+        // ------------------------------------------------------------------
+
+        /** Quanto cabe no campo, por tipo. O limite do texto vem da configuração. */
+        function tamanhoMaximo(c) {
+            return { cpf: 14, cpf_cnpj: 18, telefone: 20, placa: 8, email: 254 }[c.tipo] || c.max || 200;
+        }
+
+        function controleHtml(c) {
+            const id = esc(c.id);
+            const ph = c.placeholder ? ' placeholder="' + esc(c.placeholder) + '"' : '';
+
+            // O grau de importância é o único campo cujas opções NÃO vêm da
+            // configuração: o que é gravado é o id da prioridade (urgente,
+            // imediato...), e a fila depende desse id. As opções configuradas
+            // são os rótulos, então usá-las gravaria um valor que a validação
+            // recusa e a fila não sabe ordenar.
+            if (c.id === 'prioridade') {
+                const opts = (V.PRIORIDADES || [])
+                    .map((p) => '<option value="' + esc(p.id) + '">' + esc(p.bolinha + '  ' + p.rotulo) + '</option>')
+                    .join('');
+                return '<select id="' + id + '" name="' + id + '"><option value="">Selecione...</option>' + opts + '</select>' +
+                       '<span class="dica" id="prioridade-ajuda"></span>';
+            }
+
+            if (c.tipo === 'selecao') {
+                const opts = (c.opcoes || [])
+                    .map((o) => '<option value="' + esc(o) + '">' + esc(o) + '</option>')
+                    .join('');
+                return '<select id="' + id + '" name="' + id + '"><option value="">Selecione...</option>' + opts + '</select>';
+            }
+
+            if (c.tipo === 'texto_longo') {
+                return '<textarea id="' + id + '" name="' + id + '" maxlength="' + (c.max || 2000) + '"' + ph + '></textarea>';
+            }
+
+            if (c.tipo === 'data') {
+                return '<input type="date" id="' + id + '" name="' + id + '">';
+            }
+
+            if (c.tipo === 'anexo') {
+                // Arquivo não é campo de texto: o envio acontece na área de
+                // documentos, depois de salvar. Dizer isso é melhor do que
+                // desenhar uma caixa que não envia nada.
+                return '<p class="form-secao__ajuda" style="margin:0">Enviado na área de documentos, depois de salvar.</p>';
+            }
+
+            const modo = { cpf: 'numeric', cpf_cnpj: 'numeric', numero: 'numeric', telefone: 'tel' }[c.tipo];
+            const tipoHtml = c.tipo === 'email' ? 'email' : 'text';
+            const caixaAlta = c.tipo === 'placa' ? ' style="text-transform:uppercase"' : '';
+            return '<input type="' + tipoHtml + '" id="' + id + '" name="' + id + '" maxlength="' + tamanhoMaximo(c) + '"' +
+                   (modo ? ' inputmode="' + modo + '"' : '') + caixaAlta + ph + '>';
+        }
+
+        function campoHtml(c) {
+            const larga = c.largura === 'larga' ? ' campo-largo' : '';
+            const obrig = c.obrigatorio ? ' <span class="obrigatorio">*</span>' : '';
+            const dica = c.dica ? '<span class="dica">' + esc(c.dica) + '</span>' : '';
+
+            return '<div class="campo' + larga + '" data-campo="' + esc(c.id) + '">' +
+                '<label for="' + esc(c.id) + '">' + esc(c.rotulo) + obrig + '</label>' +
+                controleHtml(c) + dica +
+                '<span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>' +
+            '</div>';
+        }
+
+        const SECAO_OPERACOES =
+            '<div class="form-secao">' +
+                '<div class="form-secao__titulo">' +
+                    '<span class="material-symbols-rounded">checklist</span> Operações' +
+                '</div>' +
+                '<p class="form-secao__ajuda">Marque as operações para as quais este cadastro está sendo solicitado. ' +
+                'Cada uma é aprovada ou reprovada separadamente pelo responsável.</p>' +
+                '<div class="campo" data-campo="operacoes">' +
+                    '<div class="operacoes" id="operacoes"></div>' +
+                    '<span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>' +
+                '</div>' +
+            '</div>';
+
+        function desenharSecoes() {
+            if (!CONFIG.secoes.length) {
+                elSecoes.innerHTML =
+                    '<p class="form-secao__ajuda">Não foi possível carregar os campos do formulário. ' +
+                    'Recarregue a página; se continuar, avise o administrador.</p>';
+                return;
+            }
+
+            // As operações não são um campo configurável, mas têm lugar fixo no
+            // formulário: logo ANTES do grau de importância, onde sempre
+            // estiveram. Sem esse campo no formulário, vão para o fim.
+            const indiceDaPrioridade = CONFIG.secoes.findIndex(
+                (s) => (s.campos || []).some((c) => c.id === 'prioridade')
+            );
+
+            const partes = [];
+            CONFIG.secoes.forEach((s, i) => {
+                if (i === indiceDaPrioridade) partes.push(SECAO_OPERACOES);
+                partes.push(
+                    '<div class="form-secao">' +
+                        '<div class="form-secao__titulo">' +
+                            '<span class="material-symbols-rounded">' + esc(s.icone || 'edit_note') + '</span> ' +
+                            esc(s.secao) +
+                        '</div>' +
+                        '<div class="campos">' + (s.campos || []).map(campoHtml).join('') + '</div>' +
+                    '</div>'
+                );
+            });
+            if (indiceDaPrioridade < 0) partes.push(SECAO_OPERACOES);
+
+            elSecoes.innerHTML = partes.join('');
+            divOperacoes = document.getElementById('operacoes');
+            desenharOperacoes();
+            ligarCampos();
+        }
+
         function desenharOperacoes() {
+            if (!divOperacoes) return;
             divOperacoes.innerHTML = '';
             for (const op of CONFIG.operacoes) {
                 const label = document.createElement('label');
                 label.className = 'operacao-chip';
                 label.innerHTML =
-                    '<input type="checkbox" name="operacoes" value="' + op + '">' +
+                    '<input type="checkbox" name="operacoes" value="' + esc(op) + '">' +
                     '<span class="material-symbols-rounded">check_circle</span>' +
-                    '<span>' + op + '</span>';
+                    '<span>' + esc(op) + '</span>';
                 divOperacoes.appendChild(label);
             }
         }
@@ -435,10 +362,13 @@
         // ------------------------------------------------------------------
         // Coleta / exibição
         // ------------------------------------------------------------------
+        // Percorre os campos CONFIGURADOS, não os elementos do DOM: assim o que
+        // é enviado é exatamente o que a configuração diz que existe.
         function coletar() {
             const d = {};
-            for (const el of form.querySelectorAll('input[type=text], input[type=email], input[type=date], select, textarea')) {
-                d[el.name] = el.value;
+            for (const campo of camposConfigurados()) {
+                const el = document.getElementById(campo.id);
+                d[campo.id] = el ? el.value : '';
             }
             d.operacoes = [...form.querySelectorAll('input[name=operacoes]:checked')].map((c) => c.value);
             return d;
@@ -474,138 +404,140 @@
         // ------------------------------------------------------------------
         // Validação em tempo real — só depois que a pessoa sai do campo, para
         // não acusar erro enquanto ela ainda está digitando.
+        //
+        // É o MESMO V.validarCadastro do servidor, recebendo os MESMOS campos
+        // configurados. Um campo que o admin tornou obrigatório passa a travar
+        // aqui e lá, sem nenhuma lista de campos escrita nesta tela.
         // ------------------------------------------------------------------
         function validarUmCampo(nome) {
-            const { erros, dados } = V.validarCadastro(coletar(), { operacoesPermitidas: CONFIG.operacoes });
+            const { erros, dados } = V.validarCadastro(coletar(), {
+                operacoesPermitidas: CONFIG.operacoes,
+                campos: camposConfigurados(),
+            });
             if (erros[nome]) marcarErro(nome, erros[nome]);
             else limparErro(nome, dados[nome] != null);
         }
 
-        for (const el of form.querySelectorAll('input[type=text], input[type=email], input[type=date], select, textarea')) {
-            el.addEventListener('blur', () => validarUmCampo(el.name));
-            // Ao corrigir, tira o vermelho na hora (sem esperar sair do campo).
-            el.addEventListener('input', () => {
-                const c = caixa(el.name);
-                if (c && c.classList.contains('com-erro')) validarUmCampo(el.name);
-            });
-        }
-
-        // Ao mudar as operações, a lista de documentos exigidos muda com elas.
-        divOperacoes.addEventListener('change', () => {
-            validarUmCampo('operacoes');
-            desenharDocumentos();
-        });
-
-        // Máscaras leves: formatam enquanto digita, sem impedir a digitação.
-        function mascarar(id, formatador) {
-            const el = document.getElementById(id);
-            el.addEventListener('input', () => {
-                const posFim = el.selectionStart === el.value.length;
-                const formatado = formatador(el.value);
-                if (formatado !== el.value) {
-                    el.value = formatado;
-                    if (posFim) el.setSelectionRange(formatado.length, formatado.length);
-                }
-            });
-        }
-
-        mascarar('condutor_cpf', (v) => {
+        // ------------------------------------------------------------------
+        // Máscaras: formatam enquanto digita, sem impedir a digitação.
+        // Escolhidas pelo TIPO do campo — o admin trocar um campo para
+        // "telefone" já traz a máscara de telefone junto.
+        // ------------------------------------------------------------------
+        const mascaraCpf = (v) => {
             const d = V.apenasDigitos(v).slice(0, 11);
             if (d.length <= 3) return d;
             if (d.length <= 6) return d.slice(0, 3) + '.' + d.slice(3);
             if (d.length <= 9) return d.slice(0, 3) + '.' + d.slice(3, 6) + '.' + d.slice(6);
             return d.slice(0, 3) + '.' + d.slice(3, 6) + '.' + d.slice(6, 9) + '-' + d.slice(9);
-        });
-
-        const mascaraTelefone = (v) => {
-            const d = V.apenasDigitos(v).slice(0, 11);
-            if (d.length <= 2) return d;
-            if (d.length <= 6) return '(' + d.slice(0, 2) + ') ' + d.slice(2);
-            if (d.length <= 10) return '(' + d.slice(0, 2) + ') ' + d.slice(2, 6) + '-' + d.slice(6);
-            return '(' + d.slice(0, 2) + ') ' + d.slice(2, 7) + '-' + d.slice(7);
         };
-        mascarar('condutor_telefone', mascaraTelefone);
-        mascarar('proprietario_telefone', mascaraTelefone);
 
-        mascarar('proprietario_documento', (v) => {
-            const d = V.apenasDigitos(v).slice(0, 14);
-            if (d.length <= 11) {
+        const MASCARAS_POR_TIPO = {
+            cpf: mascaraCpf,
+            telefone: (v) => {
+                const d = V.apenasDigitos(v).slice(0, 11);
+                if (d.length <= 2) return d;
+                if (d.length <= 6) return '(' + d.slice(0, 2) + ') ' + d.slice(2);
+                if (d.length <= 10) return '(' + d.slice(0, 2) + ') ' + d.slice(2, 6) + '-' + d.slice(6);
+                return '(' + d.slice(0, 2) + ') ' + d.slice(2, 7) + '-' + d.slice(7);
+            },
+            cpf_cnpj: (v) => {
+                const d = V.apenasDigitos(v).slice(0, 14);
+                if (d.length <= 11) return mascaraCpf(d);
+                return d.slice(0, 2) + '.' + d.slice(2, 5) + '.' + d.slice(5, 8) + '/' + d.slice(8, 12) + '-' + d.slice(12);
+            },
+            placa: (v) => V.normalizarPlaca(v).slice(0, 7),
+            numero: (v) => V.apenasDigitos(v),
+        };
+
+        // O PIS é do tipo "texto" (não há tipo próprio), mas tem formato fixo.
+        // Fica por id, e some sozinho se o campo for excluído da configuração.
+        const MASCARAS_POR_CAMPO = {
+            proprietario_pis: (v) => {
+                const d = V.apenasDigitos(v).slice(0, 11);
                 if (d.length <= 3) return d;
-                if (d.length <= 6) return d.slice(0, 3) + '.' + d.slice(3);
-                if (d.length <= 9) return d.slice(0, 3) + '.' + d.slice(3, 6) + '.' + d.slice(6);
-                return d.slice(0, 3) + '.' + d.slice(3, 6) + '.' + d.slice(6, 9) + '-' + d.slice(9);
-            }
-            return d.slice(0, 2) + '.' + d.slice(2, 5) + '.' + d.slice(5, 8) + '/' + d.slice(8, 12) + '-' + d.slice(12);
-        });
+                if (d.length <= 8) return d.slice(0, 3) + '.' + d.slice(3);
+                if (d.length <= 10) return d.slice(0, 3) + '.' + d.slice(3, 8) + '.' + d.slice(8);
+                return d.slice(0, 3) + '.' + d.slice(3, 8) + '.' + d.slice(8, 10) + '-' + d.slice(10);
+            },
+        };
 
-        for (const id of ['placa_cavalo', 'placa_carreta']) {
-            mascarar(id, (v) => V.normalizarPlaca(v).slice(0, 7));
+        function aplicarMascara(el, campo) {
+            const fmt = MASCARAS_POR_CAMPO[campo.id] || MASCARAS_POR_TIPO[campo.tipo];
+            if (!fmt) return;
+            el.addEventListener('input', () => {
+                const noFim = el.selectionStart === el.value.length;
+                const formatado = fmt(el.value);
+                if (formatado !== el.value) {
+                    el.value = formatado;
+                    if (noFim) el.setSelectionRange(formatado.length, formatado.length);
+                }
+            });
         }
 
-        mascarar('proprietario_pis', (v) => {
-            const d = V.apenasDigitos(v).slice(0, 11);
-            if (d.length <= 3) return d;
-            if (d.length <= 8) return d.slice(0, 3) + '.' + d.slice(3);
-            if (d.length <= 10) return d.slice(0, 3) + '.' + d.slice(3, 8) + '.' + d.slice(8);
-            return d.slice(0, 3) + '.' + d.slice(3, 8) + '.' + d.slice(8, 10) + '-' + d.slice(10);
-        });
+        /**
+         * Liga os eventos dos campos recém-desenhados.
+         * Chamada a cada redesenho: os elementos são outros, e os ouvintes
+         * anteriores foram embora com o innerHTML.
+         */
+        function ligarCampos() {
+            for (const campo of camposConfigurados()) {
+                const el = document.getElementById(campo.id);
+                if (!el) continue;
 
-        // ------------------------------------------------------------------
-        // Listas fechadas de TAG e rastreador
-        //
-        // Montadas a partir de V.TAGS_PEDAGIO e V.RASTREADORES, que vêm de
-        // src/validacao.js. Escrever as opções no HTML criaria uma segunda
-        // lista para manter em dia — e é assim que a tela e o servidor passam
-        // a discordar.
-        // ------------------------------------------------------------------
-        function preencherLista(id, valores) {
-            const el = document.getElementById(id);
-            if (!el) return;
-            for (const valor of valores) {
-                const op = document.createElement('option');
-                op.value = valor;
-                op.textContent = valor;
-                el.appendChild(op);
+                el.addEventListener('blur', () => validarUmCampo(campo.id));
+                el.addEventListener('input', () => {
+                    const c = caixa(campo.id);
+                    if (c && c.classList.contains('com-erro')) validarUmCampo(campo.id);
+                });
+                aplicarMascara(el, campo);
             }
-        }
-        preencherLista('tag', V.TAGS_PEDAGIO || []);
-        preencherLista('rastreador', V.RASTREADORES || []);
 
-        // Grau de importância: as opções e a ordem vêm de V.PRIORIDADES, então
-        // a mais urgente aparece primeiro na lista, igual à fila.
-        (function ligarPrioridade() {
+            if (divOperacoes) {
+                divOperacoes.addEventListener('change', () => {
+                    validarUmCampo('operacoes');
+                    desenharDocumentos();
+                });
+            }
+
+            ligarPrioridade();
+            ligarPis();
+        }
+
+        /** A explicação do grau escolhido, abaixo da lista. */
+        function ligarPrioridade() {
             const el = document.getElementById('prioridade');
             const ajuda = document.getElementById('prioridade-ajuda');
-            if (!el || !V.PRIORIDADES) return;
-
-            for (const p of V.PRIORIDADES) {
-                const op = document.createElement('option');
-                op.value = p.id;
-                op.textContent = p.bolinha + '  ' + p.rotulo;
-                el.appendChild(op);
-            }
+            if (!el || !ajuda) return;
             el.addEventListener('change', () => {
                 const p = V.acharPrioridade(el.value);
                 ajuda.textContent = p ? p.ajuda : '';
             });
-        })();
+        }
 
-        // ------------------------------------------------------------------
-        // Código PIS: só existe para proprietário pessoa física
-        //
-        // Aparece quando o documento tem 11 dígitos (CPF) e some quando vira
-        // CNPJ. Ao sumir, o valor é limpo: um PIS escondido continuaria sendo
-        // enviado, e o servidor recusaria por um campo que a pessoa não vê.
-        // ------------------------------------------------------------------
-        (function ligarPis() {
+        /**
+         * Código PIS: só existe para proprietário pessoa física.
+         *
+         * Aparece quando o documento tem 11 dígitos (CPF) e some quando vira
+         * CNPJ. Ao sumir, o valor é limpo: um PIS escondido continuaria sendo
+         * enviado, e o servidor recusaria por um campo que a pessoa não vê.
+         *
+         * Só liga se os DOIS campos estiverem no formulário — tirar um deles da
+         * configuração desliga a regra em vez de quebrar a tela.
+         */
+        // Reavalia a visibilidade do PIS. Vira uma função de verdade dentro de
+        // ligarPis(); fica aqui para "Limpar" e "Fazer outro" poderem chamá-la
+        // sem pendurar um segundo ouvinte no campo de documento.
+        let atualizarPis = () => {};
+
+        function ligarPis() {
             const doc = document.getElementById('proprietario_documento');
-            const campo = document.getElementById('campo-pis');
             const pis = document.getElementById('proprietario_pis');
-            if (!doc || !campo || !pis) return;
+            const caixaPis = caixa('proprietario_pis');
+            if (!doc || !pis || !caixaPis) return;
 
             function atualizar() {
                 const ehCpf = V.apenasDigitos(doc.value).length === 11;
-                campo.hidden = !ehCpf;
+                caixaPis.hidden = !ehCpf;
                 if (!ehCpf && pis.value) {
                     pis.value = '';
                     limparErro('proprietario_pis');
@@ -613,8 +545,9 @@
             }
             doc.addEventListener('input', atualizar);
             doc.addEventListener('blur', atualizar);
+            atualizarPis = atualizar;
             atualizar();
-        })();
+        }
 
         // ------------------------------------------------------------------
         // Envio
@@ -662,7 +595,10 @@
             limparTodosOsErros();
 
             const entrada = coletar();
-            const { ok, erros } = V.validarCadastro(entrada, { operacoesPermitidas: CONFIG.operacoes });
+            const { ok, erros } = V.validarCadastro(entrada, {
+                operacoesPermitidas: CONFIG.operacoes,
+                campos: camposConfigurados(),
+            });
 
             if (!ok) {
                 for (const campo of Object.keys(erros)) marcarErro(campo, erros[campo]);
@@ -713,30 +649,34 @@
             }
         });
 
-        document.getElementById('btn-limpar').addEventListener('click', () => {
-            form.reset();
-            limparTodosOsErros();
-        });
-
-        document.getElementById('btn-novo').addEventListener('click', () => {
+        function limparFormulario() {
             form.reset();
             limparTodosOsErros();
             desenharDocumentos();
+            atualizarPis(); // o reset devolve o documento vazio: o PIS some junto
+        }
+
+        document.getElementById('btn-limpar').addEventListener('click', limparFormulario);
+
+        document.getElementById('btn-novo').addEventListener('click', () => {
+            limparFormulario();
             painelEnviado.classList.remove('visivel');
             form.style.display = '';
             painelForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
 
-        document.getElementById('btn-limpar').addEventListener('click', desenharDocumentos);
-
         // ------------------------------------------------------------------
-        // Início: busca a configuração e monta as partes dinâmicas.
+        // Início
+        //
+        // Agora o formulário INTEIRO depende da configuração, então não há o
+        // que desenhar antes de ela chegar — diferente de antes, quando só as
+        // operações e os documentos vinham do banco e o resto já estava no
+        // HTML. A tela mostra "carregando" e desenha uma vez só.
         // ------------------------------------------------------------------
         (async () => {
-            desenharOperacoes();   // desenha já com a reserva, para a tela não piscar vazia
-            desenharDocumentos();
+            elSecoes.innerHTML = '<p class="form-secao__ajuda">Carregando o formulário...</p>';
             await carregarConfig();
-            desenharOperacoes();   // redesenha com o que veio do banco
+            desenharSecoes();
             desenharDocumentos();
         })();
     </script>

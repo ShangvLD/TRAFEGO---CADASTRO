@@ -236,6 +236,29 @@ const CAMPOS_POR_MODULO = {
   candidato: CAMPOS_CANDIDATO,
 };
 
+/* ---------------------------------------------------------------------------
+   Campos que não podem ser DESATIVADOS
+
+   Diferente de "sistema: true", que só impede EXCLUIR. Estes o cadastro não
+   sabe gravar sem: condutores.cpf e condutores.nome são NOT NULL, e o CPF
+   ainda é a chave que evita duplicar o motorista e nomeia a pasta dos anexos
+   (NOME_CPF).
+
+   Sem esta trava, desativar um deles na tela de configuração não daria erro
+   nenhum para quem desativou — daria erro de banco para o PRÓXIMO solicitante
+   que tentasse enviar um cadastro, que não tem como saber o que aconteceu.
+   Recusar no clique de quem mexeu é o lugar certo de falhar.
+   --------------------------------------------------------------------------- */
+const CAMPOS_INDISPENSAVEIS = {
+  terceiro: ['condutor_nome', 'condutor_cpf'],
+};
+
+/** Este campo é indispensável para o módulo gravar o cadastro? */
+function indispensavel(slug, campoId) {
+  const lista = CAMPOS_INDISPENSAVEIS[String(slug || '').toLowerCase()] || [];
+  return lista.includes(campoId);
+}
+
 /** Todas as seções de um módulo. */
 function secoesDe(slug) {
   return CAMPOS_POR_MODULO[String(slug || '').toLowerCase()] || [];
@@ -250,49 +273,16 @@ function camposDe(slug) {
 // Validação guiada pela especificação
 // ---------------------------------------------------------------------------
 
-/** Valida um campo conforme o seu tipo. Devolve { ok, valor } ou { ok:false, erro }. */
+/**
+ * Valida um campo conforme o seu tipo. Devolve { ok, valor } ou { ok:false, erro }.
+ *
+ * O despachante em si vive em src/validacao.js — os mesmos tipos precisam
+ * valer para as perguntas do terceiro, e duas cópias divergiriam no dia em que
+ * alguém acrescentasse um tipo em uma e esquecesse a outra. Aqui fica só o
+ * nome pelo qual o resto do projeto já chama.
+ */
 function validarCampo(campo, valor) {
-  const obrigatorio = !!campo.obrigatorio;
-  const rotulo = campo.rotulo;
-
-  switch (campo.tipo) {
-    case 'nome':
-      return v.validarNome(valor, { obrigatorio, rotulo: `O campo "${rotulo}"` });
-
-    case 'cpf':
-      return v.validarCpf(valor, { obrigatorio });
-
-    case 'cpf_cnpj':
-      return v.validarCpfOuCnpj(valor, { obrigatorio });
-
-    case 'telefone':
-      return v.validarTelefone(valor, { obrigatorio, rotulo: `O campo "${rotulo}"` });
-
-    case 'email':
-      return v.validarEmail(valor, { obrigatorio });
-
-    case 'placa':
-      return v.validarPlaca(valor, { obrigatorio, rotulo: `A ${rotulo.toLowerCase()}` });
-
-    case 'selecao': {
-      if (v.vazio(valor)) {
-        return obrigatorio ? { ok: false, erro: `Selecione ${rotulo.toLowerCase()}.` } : { ok: true, valor: null };
-      }
-      const escolhido = v.limparTexto(valor).toUpperCase();
-      const permitidas = (campo.opcoes || []).map((o) => String(o).toUpperCase());
-      return permitidas.includes(escolhido)
-        ? { ok: true, valor: escolhido }
-        : { ok: false, erro: `Opção inválida. Use uma de: ${permitidas.join(', ')}.` };
-    }
-
-    case 'texto':
-    default:
-      return v.validarTexto(valor, {
-        obrigatorio,
-        rotulo: `O campo "${rotulo}"`,
-        max: campo.max || 500,
-      });
-  }
+  return v.validarPorTipo(campo, valor);
 }
 
 /**
@@ -393,6 +383,8 @@ function detalhesDe(slug, dados) {
 
 module.exports = {
   CAMPOS_POR_MODULO,
+  CAMPOS_INDISPENSAVEIS,
+  indispensavel,
   secoesDe,
   camposDe,
   validarCampo,

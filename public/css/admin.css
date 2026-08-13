@@ -775,6 +775,35 @@
 }
 
 /* --------------------------------------------------------------------------
+   Barra "Salvar e conferir"
+
+   Fecha cada painel de configuração. A gravação já aconteceu no clique — o que
+   esta barra oferece é a confirmação de que chegou no formulário, lida do mesmo
+   endereço que a tela de preenchimento consome.
+   -------------------------------------------------------------------------- */
+.barra-salvar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+    margin-top: var(--space-5);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border);
+}
+
+.barra-salvar__estado {
+    flex: 1;
+    min-width: 220px;
+    font-size: 0.84rem;
+    line-height: 1.45;
+    color: var(--text-secondary);
+}
+
+.barra-salvar__estado.ok        { color: var(--success); font-weight: 600; }
+.barra-salvar__estado.atencao   { color: var(--warning); font-weight: 600; }
+.barra-salvar__estado.erro      { color: var(--danger);  font-weight: 600; }
+
+/* --------------------------------------------------------------------------
    Aviso de divergência
 
    Só aparece no formulário do terceiro, enquanto a tela de preenchimento dele

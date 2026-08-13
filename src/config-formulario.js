@@ -153,11 +153,17 @@ async function semear() {
 // Leitura
 // ---------------------------------------------------------------------------
 
-/** Operações ativas, na ordem configurada. */
+/**
+ * Operações ativas, na ordem configurada.
+ *
+ * O "ativo" vai junto mesmo sendo sempre 1: a tela de admin usa estas linhas
+ * para as colunas da matriz e marca como "(off)" a que não tiver a coluna.
+ * Sem ela, TODAS as colunas apareciam esmaecidas e com "(off)" no nome.
+ */
 async function operacoesAtivas() {
   await garantirSemeado();
   return db
-    .prepare('SELECT id, nome, ordem FROM cfg_operacoes WHERE ativo = 1 ORDER BY ordem, nome')
+    .prepare('SELECT id, nome, ordem, ativo FROM cfg_operacoes WHERE ativo = 1 ORDER BY ordem, nome')
     .all();
 }
 
@@ -554,13 +560,24 @@ async function criarPergunta({ modulo, rotulo, tipo = 'texto', secao, obrigatori
  *
  * @returns { ok: true } ou { ok: false, erro }
  */
-async function atualizarPergunta(id, campos = {}) {
+async function atualizarPergunta(id, mudancas = {}) {
   await garantirSemeado();
 
   const atual = await db
-    .prepare('SELECT id, modulo, tipo, opcoes, max_tamanho FROM cfg_campos WHERE id = ?')
+    .prepare('SELECT id, modulo, campo_id, rotulo, tipo, opcoes, max_tamanho FROM cfg_campos WHERE id = ?')
     .get(id);
   if (!atual) return { ok: false, erro: 'Pergunta não encontrada.', naoEncontrada: true };
+
+  // Campo indispensável não é desativável: o cadastro não sabe gravar sem ele
+  // (ver CAMPOS_INDISPENSAVEIS em src/campos.js). Recusar aqui é recusar para
+  // quem mexeu — deixar passar transferiria o erro para o próximo solicitante.
+  if (mudancas.ativo === false && campos.indispensavel(atual.modulo, atual.campo_id)) {
+    return {
+      ok: false,
+      erro: `"${atual.rotulo}" não pode sair do formulário: o cadastro não é gravado sem ele. ` +
+            'Você pode renomeá-lo, movê-lo de seção ou mudar a ordem.',
+    };
+  }
 
   const colunas = [];
   const valores = [];
@@ -569,31 +586,31 @@ async function atualizarPergunta(id, campos = {}) {
     valores.push(valor);
   };
 
-  if (typeof campos.rotulo === 'string') {
-    const rot = limparTexto(campos.rotulo);
+  if (typeof mudancas.rotulo === 'string') {
+    const rot = limparTexto(mudancas.rotulo);
     if (!rot) return { ok: false, erro: 'Informe o texto da pergunta.' };
     // O campo_id NÃO muda junto: ele é a chave dos dados já gravados, e
     // renomear a chave desligaria as respostas antigas da pergunta.
     marcar('rotulo', rot);
   }
 
-  if (typeof campos.obrigatorio === 'boolean') marcar('obrigatorio', campos.obrigatorio ? 1 : 0);
-  if (typeof campos.ativo === 'boolean') marcar('ativo', campos.ativo ? 1 : 0);
+  if (typeof mudancas.obrigatorio === 'boolean') marcar('obrigatorio', mudancas.obrigatorio ? 1 : 0);
+  if (typeof mudancas.ativo === 'boolean') marcar('ativo', mudancas.ativo ? 1 : 0);
 
-  if (campos.secao !== undefined) {
-    const secao = await normalizarSecao(atual.modulo, campos.secao);
+  if (mudancas.secao !== undefined) {
+    const secao = await normalizarSecao(atual.modulo, mudancas.secao);
     if (!secao) return { ok: false, erro: 'Informe a seção da pergunta.' };
     marcar('secao', secao);
   }
 
-  if (campos.ordem !== undefined) {
-    const n = Number(campos.ordem);
+  if (mudancas.ordem !== undefined) {
+    const n = Number(mudancas.ordem);
     if (!Number.isInteger(n) || n < 0) return { ok: false, erro: 'Ordem inválida.' };
     marcar('ordem', n);
   }
 
   // ---- Tipo e a configuração que ele exige ----
-  const tipoFinal = typeof campos.tipo === 'string' && campos.tipo ? campos.tipo : atual.tipo;
+  const tipoFinal = typeof mudancas.tipo === 'string' && mudancas.tipo ? mudancas.tipo : atual.tipo;
   const espec = acharTipo(tipoFinal);
   if (!espec) return { ok: false, erro: 'Tipo de campo inválido.' };
 
@@ -603,9 +620,9 @@ async function atualizarPergunta(id, campos = {}) {
   // Trocar o tipo REVALIDA a configuração: virar "lista suspensa" sem opções
   // não pode passar, e o que a lista suspensa deixou para trás não pode ficar.
   if (tipoPede(tipoFinal, 'opcoes')) {
-    if (campos.opcoes !== undefined || trocouTipo) {
+    if (mudancas.opcoes !== undefined || trocouTipo) {
       const atuais = atual.opcoes ? JSON.parse(atual.opcoes) : null;
-      const r = limparOpcoes(campos.opcoes !== undefined ? campos.opcoes : atuais);
+      const r = limparOpcoes(mudancas.opcoes !== undefined ? mudancas.opcoes : atuais);
       if (!r.ok) return r;
       marcar('opcoes', r.valor);
     }
@@ -616,8 +633,8 @@ async function atualizarPergunta(id, campos = {}) {
   }
 
   if (tipoPede(tipoFinal, 'limite')) {
-    if (campos.maxTamanho !== undefined || trocouTipo) {
-      const bruto = campos.maxTamanho !== undefined ? campos.maxTamanho : atual.max_tamanho;
+    if (mudancas.maxTamanho !== undefined || trocouTipo) {
+      const bruto = mudancas.maxTamanho !== undefined ? mudancas.maxTamanho : atual.max_tamanho;
       const r = limparLimite(espec, bruto);
       if (!r.ok) return r;
       marcar('max_tamanho', r.valor);
