@@ -408,14 +408,19 @@
          * deixaria cadastros reprovados sem prova.
          */
         function blocoRdo(s) {
-            // Restrito a admin. Quem não é vê apenas a situação do cadastro na
-            // linha e no badge — o suficiente para saber que está parado ou
-            // encerrado, sem expor o resultado da pesquisa.
+            // Quem acompanha o painel (admin e responsável) responde a pesquisa.
+            // O SOLICITANTE não vê nada disso — para ele o servidor já apaga o
+            // resultado, e sobra só a situação do cadastro na linha e no badge.
             if (!podeVerRdo) return '';
 
             const rdo = s.rdo || {};
             const docs = docsDoModal[s.id] || [];
+            // O ARQUIVO do comprovante é só do admin, então para o responsável
+            // ele não vem na lista. O que vem é o SINAL de que existe
+            // (rdo.temComprovante), suficiente para confirmar a reprovação sem
+            // dar acesso ao documento.
             const comprovante = docs.find((d) => String(d.tipo).toUpperCase() === 'RESULTADO RDO');
+            const anexado = !!comprovante || rdo.temComprovante === true;
 
             if (rdo.aprovado === null || rdo.aprovado === undefined) {
                 return `<div class="rdo-bloco rdo-bloco--pergunta">
@@ -435,12 +440,14 @@
                             Anexe o resultado do RDO para confirmar a reprovação. Sem o documento
                             o cadastro não pode ser reprovado.
                         </p>
-                        ${comprovante
+                        ${anexado
                             ? `<p class="rdo-ok"><span class="material-symbols-rounded">check_circle</span>
-                                 ${esc(comprovante.nome_original || comprovante.nome_arquivo)} anexado.</p>`
+                                 ${comprovante
+                                     ? esc(comprovante.nome_original || comprovante.nome_arquivo) + ' anexado.'
+                                     : 'Comprovante anexado.'}</p>`
                             : `<input type="file" id="rdo-arquivo" accept=".pdf,.jpg,.jpeg,.png">`}
                         <textarea id="rdo-obs" rows="2" placeholder="Observação (opcional)"></textarea>
-                        <button type="button" class="btn-rdo confirmar" id="rdo-confirmar"${comprovante ? '' : ' disabled'}>
+                        <button type="button" class="btn-rdo confirmar" id="rdo-confirmar"${anexado ? '' : ' disabled'}>
                             Confirmar reprovação
                         </button>
                         <div class="rdo-erro" id="rdo-erro" hidden></div>
@@ -460,7 +467,10 @@
                         ? `<a class="rdo-doc" href="${esc(comprovante.url || '#')}" target="_blank" rel="noopener">
                              <span class="material-symbols-rounded">description</span>
                              Ver o resultado do RDO</a>`
-                        : '<p class="rdo-exigencia">Comprovante não localizado.</p>'}
+                        : anexado
+                            ? `<p class="rdo-ok"><span class="material-symbols-rounded">check_circle</span>
+                                 Comprovante anexado — o arquivo é visível ao administrador.</p>`
+                            : '<p class="rdo-exigencia">Comprovante não localizado.</p>'}
                 </div>`;
             }
 
@@ -504,6 +514,11 @@
                         <button type="button" class="btn-cli reprovar${st === 'reprovado' ? ' ativo' : ''}" data-cliente="${esc(c)}" data-status="reprovado">
                             <span class="material-symbols-rounded">close</span> Reprovar
                         </button>
+                        ${st === 'pendente' ? '' : `
+                        <button type="button" class="btn-cli limpar" data-cliente="${esc(c)}" data-status="pendente"
+                                title="Desfaz a decisão e devolve este cliente para pendente">
+                            <span class="material-symbols-rounded">undo</span> Limpar
+                        </button>`}
                     </div>
                     ${info}${obs}
                 </div>`;

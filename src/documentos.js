@@ -291,6 +291,24 @@ async function contarPorSolicitacao(modulo) {
   return mapa;
 }
 
+/**
+ * Quais solicitações têm um documento de um TIPO — só os ids, não os arquivos.
+ *
+ * Existe para o painel poder dizer "o comprovante do RDO está anexado" a quem
+ * NÃO pode abrir o arquivo. O responsável precisa do fato (para confirmar a
+ * reprovação); o arquivo em si continua sendo só do admin.
+ */
+async function idsComTipo(modulo, tipo) {
+  const linhas = await db
+    .prepare(
+      `SELECT DISTINCT solicitacao_id
+         FROM documentos WHERE modulo = ? AND upper(tipo) = upper(?)`
+    )
+    .all(modulo, tipo);
+
+  return new Set(linhas.map((l) => Number(l.solicitacao_id)));
+}
+
 module.exports = {
   prepararEnvio,
   buscarPorId,
@@ -304,4 +322,5 @@ module.exports = {
   excluir,
   excluirDaSolicitacao,
   contarPorSolicitacao,
+  idsComTipo,
 };

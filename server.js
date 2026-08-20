@@ -288,7 +288,7 @@ app.get(
     );
 
     // O RDO é restrito a admin, e o relatório não é exceção.
-    const podeVerRdo = papeis.ehAdmin(u.papel);
+    const podeVerRdo = papeis.podeRdo(u.papel);
     const lista = porModulo.flat().map((s) => (podeVerRdo ? s : semRdo(s)));
 
     res.json({
@@ -327,15 +327,21 @@ app.get(
     const acompanha = papeis.podePainel(u.papel, m.slug);
     if (!dono && !acompanha) return res.status(403).json({ ok: false, erro: 'Sem permissão.' });
 
-    // O comprovante do RDO é restrito a admin, aqui como em qualquer lugar.
+    // Duas regras diferentes, de propósito:
+    //   a RESPOSTA do RDO (aprovou? quem? quando?) é de quem acompanha o painel;
+    //   o ARQUIVO anexado é só do admin.
+    // O responsável precisa decidir com base no resultado, não guardar o
+    // documento — e é o documento que carrega o dado sensível da pesquisa.
+    const podeRdo = papeis.podeRdo(u.papel, m.slug);
     let docs = await documentos.listar(m.slug, id);
+    const temComprovanteRdo = docs.some((d) => String(d.tipo).toUpperCase() === fluxo.DOC_RDO);
     if (!papeis.ehAdmin(u.papel)) {
       docs = docs.filter((d) => String(d.tipo).toUpperCase() !== fluxo.DOC_RDO);
     }
 
     res.json({
       ok: true,
-      solicitacao: papeis.ehAdmin(u.papel) ? s : semRdo(s),
+      solicitacao: podeRdo ? { ...s, rdo: { ...s.rdo, temComprovante: temComprovanteRdo } } : semRdo(s),
       documentos: await documentos.comUrls(docs, {
         rotaDeDownload: (d) => `/api/modulos/${m.slug}/solicitacoes/${id}/documentos/${d.id}/baixar`,
       }),
@@ -525,16 +531,21 @@ app.get(
   exigirLogin,
   exigirPainel('terceiro'),
   wrap(async (req, res) => {
-    const [resumo, lista, anexos] = await Promise.all([
+    const [resumo, lista, anexos, comComprovante] = await Promise.all([
       solicitacoes.contarPorStatus(),
       solicitacoes.listar(),
       documentos.contarPorSolicitacao('terceiro'),
+      // Só os ids: o responsável precisa saber que o comprovante existe para
+      // poder confirmar a reprovação, sem receber o arquivo.
+      documentos.idsComTipo('terceiro', fluxo.DOC_RDO),
     ]);
-    // O resultado do RDO é restrito a admin. Filtrar AQUI, e não só na tela:
-    // esconder no HTML deixaria o dado viajando na resposta, visível a quem
-    // abrisse o inspetor do navegador.
-    const podeVerRdo = papeis.ehAdmin(req.session.usuario.papel);
-    const visiveis = podeVerRdo ? lista : lista.map(semRdo);
+    // O resultado do RDO é de quem ACOMPANHA o painel. Filtrar AQUI, e não só
+    // na tela: esconder no HTML deixaria o dado viajando na resposta, visível
+    // a quem abrisse o inspetor do navegador.
+    const podeVerRdo = papeis.podeRdo(req.session.usuario.papel, 'terceiro');
+    const visiveis = podeVerRdo
+      ? lista.map((s) => ({ ...s, rdo: { ...s.rdo, temComprovante: comComprovante.has(Number(s.id)) } }))
+      : lista.map(semRdo);
 
     res.json({
       ok: true,
@@ -870,9 +881,9 @@ for (const m of MODULOS) {
 
       let lista = await documentos.listar(m.slug, id);
 
-      // O comprovante da reprovação no RDO é parte do RDO, e o RDO é restrito
-      // a admin. Sem esta linha, o arquivo apareceria na lista de anexos e o
-      // resultado vazaria pelo nome do documento.
+      // O ARQUIVO do RDO é só do admin — inclusive para o responsável, que vê
+      // a resposta da pesquisa mas não o documento. Sem esta linha o resultado
+      // vazaria pelo nome do anexo na lista.
       if (!papeis.ehAdmin(req.session.usuario.papel)) {
         lista = lista.filter((d) => String(d.tipo).toUpperCase() !== fluxo.DOC_RDO);
       }
@@ -1356,7 +1367,15 @@ app.get(
       return d !== 0 ? d : b.id - a.id;
     });
 
-    res.json({ ok: true, solicitacoes: lista });
+    // O RESULTADO do RDO não é do solicitante — é conferência interna sobre
+    // ele mesmo. Esta rota devolvia a resposta inteira (aprovou, quem, quando,
+    // a observação): a tela não mostrava, mas o dado viajava e aparecia no
+    // inspetor do navegador. A SITUAÇÃO continua, para ele saber que o cadastro
+    // está parado ou encerrado.
+    const podeVerRdo = papeis.podeRdo(u.papel);
+    const visiveis = podeVerRdo ? lista : lista.map(semRdo);
+
+    res.json({ ok: true, podeVerRdo, solicitacoes: visiveis });
   })
 );
 
@@ -1572,7 +1591,10 @@ app.post(
     if (!cliente || !String(cliente).trim()) {
       return res.status(400).json({ ok: false, erro: 'Cliente não informado.' });
     }
-    if (!['aprovado', 'reprovado'].includes(status)) {
+    // 'pendente' é o LIMPAR: desfaz a decisão e devolve o cliente à fila.
+    // Decisão tomada por engano acontece, e sem isso a correção só sairia
+    // mexendo no banco na mão.
+    if (!['aprovado', 'reprovado', 'pendente'].includes(status)) {
       return res.status(400).json({ ok: false, erro: 'Status inválido.' });
     }
 
@@ -1633,10 +1655,12 @@ app.post(
 app.post(
   '/api/solicitacoes/:id/rdo',
   exigirLogin,
-  // Só admin responde a pesquisa RDO. exigirAdmin vem DEPOIS de exigirLogin
-  // para quem não está logado receber 401, e não 403 — a diferença importa
-  // para o front decidir entre mandar para o login ou avisar sem permissão.
-  exigirAdmin,
+  // Quem ACOMPANHA o painel responde a pesquisa RDO — antes era só admin, e
+  // isso deixava o responsável travado: ele via a pendência e não tinha como
+  // resolvê-la. O middleware vem DEPOIS de exigirLogin para quem não está
+  // logado receber 401, e não 403 — a diferença importa para o front decidir
+  // entre mandar para o login ou avisar sem permissão.
+  exigirPainel('terceiro'),
   wrap(async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });

@@ -628,7 +628,14 @@ async function registrarDecisaoCliente(id, { cliente, status, observacao, revisa
 
   const decisoes = { ...(s.decisoes || {}) };
   const agora = await agoraDoBanco();
-  decisoes[alvo] = { status, obs: observacao || '', por: revisadoPor || '', em: agora };
+
+  // "pendente" DESFAZ a decisão em vez de gravar um terceiro estado: pendente
+  // é a ausência de decisão, e é assim que o resto do sistema já o entende
+  // (statusGeral conta quem não tem status, e a tela mostra o badge cinza).
+  // Guardar { status: 'pendente' } criaria dois jeitos de dizer a mesma coisa.
+  if (status === 'pendente') delete decisoes[alvo];
+  else decisoes[alvo] = { status, obs: observacao || '', por: revisadoPor || '', em: agora };
+
   return salvarDecisoes(id, s.clientes, decisoes, revisadoPor, agora);
 }
 

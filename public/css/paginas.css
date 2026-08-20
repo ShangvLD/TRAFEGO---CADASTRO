@@ -847,3 +847,20 @@ a.anexo-card:hover {
 .linha-renovacao td:first-child {
     box-shadow: inset 3px 0 0 var(--warning);
 }
+
+/* "Limpar": desfaz a decisão e devolve o cliente para pendente. Fica discreto
+   e menor que Aprovar/Reprovar — é correção de engano, não o caminho normal. */
+.btn-cli.limpar {
+    flex: 0 0 auto;
+    padding-left: 10px;
+    padding-right: 12px;
+    color: var(--text-secondary);
+    border-style: dashed;
+}
+
+.btn-cli.limpar:hover {
+    border-style: solid;
+    border-color: var(--warning);
+    color: var(--warning);
+    background: var(--warning-soft);
+}

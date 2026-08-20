@@ -132,6 +132,26 @@ function ehAdmin(papel) {
   return !!(d && d.admin);
 }
 
+/**
+ * Quem pode VER e RESPONDER a pesquisa RDO.
+ *
+ * Era restrito a admin, e isso travava o painel: a pesquisa RDO é a PRIMEIRA
+ * etapa do fluxo, e a decisão por cliente só abre depois dela. Com a restrição,
+ * o responsável — que é quem analisa — via "Falta: responder RDO aprovado?" sem
+ * ter como responder, e as gerenciadoras nunca liberavam.
+ *
+ * Quem acompanha o painel do módulo responde. O SOLICITANTE continua fora: para
+ * ele a pesquisa some (ver semRdo em server.js), porque é conferência interna
+ * sobre ele mesmo.
+ *
+ * @param slug  módulo; sem ele, basta acompanhar ALGUM painel (usado na tela
+ *              de "minhas solicitações", que junta os módulos numa lista só).
+ */
+function podeRdo(papel, slug) {
+  if (ehAdmin(papel)) return true;
+  return slug ? podePainel(papel, slug) : paineisDoPapel(papel).length > 0;
+}
+
 /** Rótulo legível do papel (para telas e listagens). */
 function rotuloDoPapel(papel) {
   const d = definicao(papel);
@@ -148,5 +168,6 @@ module.exports = {
   podeFormulario,
   podePainel,
   ehAdmin,
+  podeRdo,
   rotuloDoPapel,
 };
