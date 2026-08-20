@@ -242,36 +242,13 @@
             return '<span class="badge ' + cls + '" title="' + esc(sit.ajuda) + '">' + check + esc(sit.rotulo) + '</span>';
         }
 
-        // Cores dos clientes/operações. Marcas conhecidas têm cor fixa; as demais
-        // recebem uma cor estável (mesma cor sempre para o mesmo nome) via hash.
-        const CLIENTE_COR = {
-            'MERCADO LIVRE': '#c98a00',
-            'SHOPEE':        '#ee4d2d',
-            'AMAZON':        '#146eb4',
-            'SAMSUNG':       '#034ea2',
-            'BAYER':         '#1f8a4c',
-            'LOREAL':        '#111827',
-            "L'OREAL":       '#111827',
-            'KENVUE':        '#c026d3',
-            'KENVUE ANGEL':  '#db2777', // mesma família do KENVUE, tom distinto
-        };
-        const CLIENTE_PALETA = ['#005a9e','#c98a00','#ee4d2d','#7b2ff7','#1f8a4c','#0e7490','#9d174d','#4338ca','#0f766e','#a16207','#be123c','#3f6212','#b91c1c','#6d28d9'];
-
-        function corCliente(nome) {
-            if (CLIENTE_COR[nome]) return CLIENTE_COR[nome];
-            let h = 0;
-            for (let i = 0; i < nome.length; i++) h = (h * 31 + nome.charCodeAt(i)) >>> 0;
-            return CLIENTE_PALETA[h % CLIENTE_PALETA.length];
-        }
-
-        // Transforma "MERCADO LIVRE | SHOPEE | | |" em chips coloridos, sem os vazios.
-        function clientesChips(assunto) {
-            const nomes = String(assunto || '').split('|').map((s) => s.trim()).filter(Boolean);
-            if (!nomes.length) return '<span style="color:var(--text-secondary)">—</span>';
-            return '<div class="cliente-chips">' + nomes.map((n) =>
-                `<span class="cliente-chip" style="--chip:${corCliente(n.toUpperCase())}">${esc(n)}</span>`
-            ).join('') + '</div>';
-        }
+        // As cores dos clientes e os chips vivem em public/js/app.js: as outras
+        // telas (relatórios, minhas solicitações, painel genérico) precisavam do
+        // MESMO tratamento, e era a cópia por tela que deixava uma certa e as
+        // demais mostrando o assunto cru — com os "| | | |" das colunas vazias
+        // que vieram do Microsoft Forms.
+        const corCliente = window.corCliente;
+        const clientesChips = window.clientesChips;
 
         // Ícone do documento conforme a extensão do arquivo.
         function iconeArquivo(nome, url) {

@@ -179,7 +179,7 @@
                     ${anexos ? `<br><small class="anexos-tag"><span class="material-symbols-rounded">attach_file</span>${anexos}</small>` : ''}
                 </td>
                 <td>${esc(s.solicitante_nome)}<br><small style="color:var(--text-secondary)">${esc(s.solicitante_email)}</small></td>
-                <td>${esc(s.assunto)}${s.detalhes ? `<br><small style="color:var(--text-secondary)">${esc(String(s.detalhes).slice(0, 90))}${String(s.detalhes).length > 90 ? '…' : ''}</small>` : ''}</td>
+                <td>${clientesChips(s.assunto)}${s.detalhes ? `<br><small style="color:var(--text-secondary)">${esc(String(s.detalhes).slice(0, 90))}${String(s.detalhes).length > 90 ? '…' : ''}</small>` : ''}</td>
                 <td>${Atendimento.selo(atendimentoPorId[s.id])}</td>
                 <td>${BADGE[s.status] || esc(s.status)}${s.observacao ? `<br><small style="color:var(--text-secondary)">${esc(s.observacao)}</small>` : ''}</td>
                 <td>${acoes}${atender}${excluir}</td>

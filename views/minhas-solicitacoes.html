@@ -316,7 +316,7 @@
                 <td><span class="badge is-info">${esc(s.moduloRotulo || '—')}</span></td>
                 <td>${esc(s.condutor || s.solicitante_nome || '—')}</td>
                 <td>${placas}</td>
-                <td>${esc(s.assunto || '—')}</td>
+                <td>${clientesChips(s.assunto)}</td>
                 <td>${s.responsavel ? esc(s.responsavel) : '<span class="acomp-nada">ninguém ainda</span>'}</td>
                 <td>${prazo}</td>
                 <td>${badge(s)}</td>
@@ -519,7 +519,7 @@
                 linhaDet("Criada em", esc(dataHora(s.criado_em))) +
                 linhaDet("Responsável", s.responsavel ? esc(s.responsavel) : '<span class="acomp-nada">ninguém ainda</span>') +
                 linhaDet("Assumida em", s.assumido_em ? esc(dataHora(s.assumido_em)) : "") +
-                linhaDet("Clientes", esc(s.assunto || "")) +
+                linhaDet("Clientes", clientesChips(s.assunto)) +
                 linhaDet("Prioridade", s.prioridade ? esc(s.prioridade.rotulo) : "") +
                 linhaDet("Previsão", s.previsao
                     ? esc(s.previsao.texto) + (s.previsao.externa ? " <small>+ " + esc(s.previsao.externa.texto) + "</small>" : "")

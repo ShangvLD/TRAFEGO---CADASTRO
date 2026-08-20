@@ -286,7 +286,7 @@
                 <td>${esc(dataHora(s.criado_em))}</td>
                 <td><span class="badge is-info">${esc(s.moduloRotulo || '—')}</span></td>
                 <td>${esc(s.condutor || s.solicitante_nome || '—')}</td>
-                <td>${esc(s.assunto || '—')}</td>
+                <td>${clientesChips(s.assunto)}</td>
                 <td>${s.prioridade ? `<span class="acomp-prio" title="${esc(s.prioridade.rotulo)}">${s.prioridade.bolinha}</span>` : '<span class="acomp-nada">—</span>'}</td>
                 <td>${s.responsavel ? esc(s.responsavel) : '<span class="acomp-nada">—</span>'}</td>
                 <td>${t.paraAssumir ? esc(t.paraAssumir) : '<span class="acomp-nada">—</span>'}</td>
@@ -326,7 +326,8 @@
             { titulo: 'Motorista', largura: 32, valor: (s) => s.condutor || '' },
             { titulo: 'Proprietário', largura: 32, valor: (s) => s.proprietario || '' },
             { titulo: 'Placas', largura: 20, valor: (s) => (s.placas || []).join(' / ') },
-            { titulo: 'Clientes', largura: 34, valor: (s) => s.assunto || '' },
+            // No CSV vai texto limpo, sem os canos vazios do Forms.
+            { titulo: 'Clientes', largura: 34, valor: (s) => clientesTexto(s.assunto) },
             { titulo: 'Prioridade', largura: 22, valor: (s) => (s.prioridade ? s.prioridade.rotulo : '') },
             { titulo: 'Status', largura: 20, valor: (s) => situacaoDe(s).rotulo },
             { titulo: 'Responsável', largura: 26, valor: (s) => s.responsavel || '' },

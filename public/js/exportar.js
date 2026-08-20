@@ -85,7 +85,9 @@
       for (const c of legados) {
         linhas.push(`SOLICITAÇÃO #${c.solicitacaoId}   ${c.criadoEm || ''}`);
         linhas.push(`Solicitante: ${c.solicitante || '—'}`);
-        if (c.assunto) linhas.push(`Assunto: ${c.assunto}`);
+        // Texto limpo: o assunto cru traz os "| | |" das colunas vazias do Forms.
+        const clientes = window.clientesTexto ? window.clientesTexto(c.assunto) : c.assunto;
+        if (clientes) linhas.push(`Assunto: ${clientes}`);
         linhas.push(`Arquivos: ${c.arquivos.length}`);
         linhas.push('');
         c.arquivos.forEach((a, i) => {

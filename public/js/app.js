@@ -210,3 +210,89 @@
   window.dataHoraBR = dataHoraBR;
   window.dataHoraPorExtenso = dataHoraPorExtenso;
 })();
+
+/* ============================================================================
+   Clientes/operações: dos "| | | |" para chips
+
+   O campo "assunto" guarda os clientes separados por "|". Nos 51 registros
+   importados do Microsoft Forms havia UMA COLUNA POR CLIENTE, e a maioria vinha
+   vazia — então o texto cru sai assim:
+
+     "MERCADO LIVRE | SHOPEE | AMAZON | | | | | |"
+
+   O painel já limpava isso e desenhava chips coloridos; as outras telas
+   (relatórios, minhas solicitações, painel genérico) mostravam o texto cru,
+   canos vazios incluídos. Isto vive aqui, e não em cada view, porque era
+   exatamente a cópia por tela que deixou uma certa e três erradas.
+   ========================================================================== */
+(function () {
+  'use strict';
+
+  // Marcas conhecidas têm cor fixa; as demais recebem uma cor ESTÁVEL (a mesma
+  // sempre para o mesmo nome) por hash — assim o cliente novo não troca de cor
+  // a cada carregamento.
+  const CLIENTE_COR = {
+    'MERCADO LIVRE': '#c98a00',
+    'SHOPEE':        '#ee4d2d',
+    'AMAZON':        '#146eb4',
+    'SAMSUNG':       '#034ea2',
+    'BAYER':         '#1f8a4c',
+    'LOREAL':        '#111827',
+    "L'OREAL":       '#111827',
+    'KENVUE':        '#c026d3',
+    'KENVUE ANGEL':  '#db2777', // mesma família do KENVUE, tom distinto
+  };
+
+  const CLIENTE_PALETA = [
+    '#005a9e', '#c98a00', '#ee4d2d', '#7b2ff7', '#1f8a4c', '#0e7490', '#9d174d',
+    '#4338ca', '#0f766e', '#a16207', '#be123c', '#3f6212', '#b91c1c', '#6d28d9',
+  ];
+
+  function escapar(txt) {
+    const d = document.createElement('div');
+    d.textContent = txt == null ? '' : String(txt);
+    return d.innerHTML;
+  }
+
+  function corCliente(nome) {
+    const chave = String(nome || '').toUpperCase();
+    if (CLIENTE_COR[chave]) return CLIENTE_COR[chave];
+    let h = 0;
+    for (let i = 0; i < chave.length; i++) h = (h * 31 + chave.charCodeAt(i)) >>> 0;
+    return CLIENTE_PALETA[h % CLIENTE_PALETA.length];
+  }
+
+  /** "MERCADO LIVRE | SHOPEE | | |" -> ['MERCADO LIVRE', 'SHOPEE'] */
+  function clientesDe(assunto) {
+    const vistos = new Set();
+    const lista = [];
+    for (const parte of String(assunto || '').split('|')) {
+      const nome = parte.trim();
+      if (!nome) continue;
+      const chave = nome.toUpperCase();
+      if (vistos.has(chave)) continue; // o Forms repetia o cliente em colunas diferentes
+      vistos.add(chave);
+      lista.push(nome);
+    }
+    return lista;
+  }
+
+  /** Chips coloridos, para tabela e modal. */
+  function clientesChips(assunto) {
+    const nomes = clientesDe(assunto);
+    if (!nomes.length) return '<span style="color:var(--text-secondary)">—</span>';
+    return '<div class="cliente-chips">' + nomes.map((n) =>
+      '<span class="cliente-chip" style="--chip:' + corCliente(n) + '">' + escapar(n) + '</span>'
+    ).join('') + '</div>';
+  }
+
+  /** Texto limpo, para CSV e para o arquivo de exportação. */
+  function clientesTexto(assunto, separador) {
+    return clientesDe(assunto).join(separador || ' | ');
+  }
+
+  window.corCliente = corCliente;
+  window.clientesDe = clientesDe;
+  window.clientesChips = clientesChips;
+  window.clientesTexto = clientesTexto;
+})();
