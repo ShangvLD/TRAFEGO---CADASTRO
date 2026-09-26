@@ -92,8 +92,8 @@ const MODULOS = [
         // Exigido apenas quando houver carreta: a placa dela é opcional.
         condicionadoA: 'placa_carreta',
       },
-      { codigo: 'CURSO_DIRECAO_SEGURA', rotulo: 'Curso de Direção Segura', temValidade: true, obrigatorio: true },
-      { codigo: 'CURSO_ACIDENTE_RODOVIA', rotulo: 'Curso de Acidente em Rodovia', temValidade: true, obrigatorio: true },
+      { codigo: 'CERT_DIRECAO_SEGURA', rotulo: 'Curso de Direção Segura', temValidade: true, obrigatorio: true },
+      { codigo: 'CERT_ACIDENTE_RODOVIA', rotulo: 'Curso de Acidente em Rodovia', temValidade: true, obrigatorio: true },
       { codigo: 'COMPROVANTE_RESIDENCIA', rotulo: 'Comprovante de residência do motorista', temValidade: false, obrigatorio: true },
     ],
   },
@@ -112,10 +112,26 @@ const MODULOS = [
     somenteAdmin: false,
     apiPropria: false,
 
-    // Candidato não se vincula a cliente: é alguém se oferecendo para
-    // trabalhar, não um cadastro para operar em uma conta específica.
-    operacoesPermitidas: [],
-    operacoesObrigatorias: false,
+    // Os mesmos clientes do terceiro, MENOS a JOMED: o candidato está se
+    // oferecendo para trabalhar NA Jomed, então listá-la como conta a atender
+    // não descreve nada — as outras dizem para qual operação ele concorre.
+    //
+    // Por exclusão, e não por lista fechada: assim um cliente novo cadastrado
+    // na configuração passa a valer aqui sozinho, como já acontece no
+    // terceiro. Só a JOMED precisa ser lembrada. (Ver operacoesDoModulo em
+    // src/config-formulario.js.)
+    operacoesPermitidas: null,
+    operacoesExcluidas: ['JOMED'],
+    operacoesObrigatorias: true,
+
+    // Passa pela pesquisa RDO, como terceiro e agregado. Vale para quem chega
+    // de fora também: a consulta é sobre a PESSOA, e o motivo de fazê-la antes
+    // de seguir com a seleção é o mesmo dos outros módulos.
+    //
+    // Sem clientes para decidir um a um, o fluxo é o simples (fluxo.js,
+    // situacaoSimplesDe): RDO primeiro, decisão única depois — igual ao
+    // agregado. O teste prático convive com isso e não muda de lugar.
+    temRdo: true,
 
     // Teste prático de direção, aplicado durante a seleção. É do CANDIDATO e
     // só dele: terceiro e agregado chegam com o motorista já contratado por

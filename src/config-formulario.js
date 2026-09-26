@@ -181,16 +181,39 @@ async function todasAsOperacoes() {
 }
 
 /**
- * Operações que um MÓDULO oferece: as ativas, filtradas por
- * operacoesPermitidas do módulo (null = todas).
+ * Operações que um MÓDULO oferece: as ativas, recortadas pelo que o módulo
+ * declara em src/modulos.js.
+ *
+ * Duas formas de recorte, e a escolha entre elas diz o que acontece quando um
+ * cliente NOVO é cadastrado na configuração:
+ *
+ *   operacoesPermitidas  lista fechada. Só entra quem está nela, então cliente
+ *       novo NÃO passa a valer sozinho. É o caso do agregado, que atende três
+ *       contas específicas.
+ *   operacoesExcluidas   lista de exceções sobre "todas". Cliente novo passa a
+ *       valer automaticamente, e só o que está aqui fica de fora. É o caso do
+ *       candidato: ele atende as mesmas contas do terceiro, menos JOMED.
+ *
+ * Sem nenhuma das duas, o módulo oferece todas as ativas (terceiro).
  */
 async function operacoesDoModulo(slug) {
   const modulo = acharModulo(slug);
   const ativas = await operacoesAtivas();
-  if (!modulo || modulo.operacoesPermitidas === null) return ativas;
+  if (!modulo) return ativas;
 
-  const permitidas = modulo.operacoesPermitidas.map((o) => o.toUpperCase());
-  return ativas.filter((o) => permitidas.includes(o.nome.toUpperCase()));
+  let lista = ativas;
+
+  if (modulo.operacoesPermitidas !== null && Array.isArray(modulo.operacoesPermitidas)) {
+    const permitidas = modulo.operacoesPermitidas.map((o) => o.toUpperCase());
+    lista = lista.filter((o) => permitidas.includes(o.nome.toUpperCase()));
+  }
+
+  if (Array.isArray(modulo.operacoesExcluidas) && modulo.operacoesExcluidas.length) {
+    const fora = modulo.operacoesExcluidas.map((o) => o.toUpperCase());
+    lista = lista.filter((o) => !fora.includes(o.nome.toUpperCase()));
+  }
+
+  return lista;
 }
 
 /** Documentos de um módulo, com as operações vinculadas. */
