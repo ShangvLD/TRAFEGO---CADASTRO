@@ -89,6 +89,21 @@ function exigirConfigurarFormulario(req, res, next) {
 }
 
 /**
+ * Quem pode usar a Blacklist Geomed: admin, ou quem acompanha algum painel.
+ *
+ * Mesmo critério dos Relatórios, que dividem o menu da conta com ela, e pelo
+ * mesmo motivo: é trabalho de quem ANALISA cadastro. O responsável pela
+ * contratação recebe o aviso da diretoria e registra na hora — passar por um
+ * admin transformaria um bloqueio urgente num pedido na fila.
+ */
+function exigirBlacklist(req, res, next) {
+  const u = req.session && req.session.usuario;
+  if (!u) return res.status(401).json({ ok: false, erro: 'Não autenticado.' });
+  if (papeis.ehAdmin(u.papel) || papeis.paineisDoPapel(u.papel).length) return next();
+  return res.status(403).json({ ok: false, erro: 'Sem permissão para ver a Blacklist Geomed.' });
+}
+
+/**
  * Freio da consulta por CPF/placa (ver /api/cadastros/existente).
  *
  * Conta por USUÁRIO, no banco, e não por sessão: sair e entrar de novo não
@@ -436,6 +451,63 @@ app.get('/relatorios', exigirLogin, (req, res) => {
   }
   res.sendFile(path.join(VIEWS, 'relatorios.html'));
 });
+
+// --------------------------------------------------------------------------
+// BLACKLIST GEOMED
+//
+// A lista de proprietários que a diretoria recusou. Quem analisa cadastro
+// registra o bloqueio aqui, e o envio de cadastro passa a bater nela.
+// --------------------------------------------------------------------------
+app.get('/blacklist', exigirLogin, (req, res) => {
+  const u = req.session.usuario;
+  if (!papeis.ehAdmin(u.papel) && !papeis.paineisDoPapel(u.papel).length) {
+    return res.redirect(paginaInicialPorPapel(u.papel));
+  }
+  res.sendFile(path.join(VIEWS, 'blacklist.html'));
+});
+
+// A lista inteira (ativos e já liberados) e a lista de quem pode mandar
+// bloquear — a tela monta o <select> a partir daqui, e não de HTML fixo, para
+// acrescentar um nome ser uma linha em src/blacklist.js.
+app.get(
+  '/api/blacklist',
+  exigirLogin,
+  exigirBlacklist,
+  wrap(async (req, res) => {
+    const registros = await blacklist.listar();
+
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      ok: true,
+      bloqueadores: blacklist.BLOQUEADORES,
+      registros: registros.map((r) => ({ ...r, documento_formatado: blacklist.formatar(r.documento) })),
+    });
+  })
+);
+
+app.post(
+  '/api/blacklist',
+  exigirLogin,
+  exigirBlacklist,
+  wrap(async (req, res) => {
+    const r = await blacklist.bloquear(req.body || {}, req.session.usuario.email);
+    if (!r.ok) return res.status(400).json({ ok: false, erros: r.erros });
+    res.status(201).json({ ok: true, registro: r.registro });
+  })
+);
+
+// Desbloqueio. POST e não DELETE de propósito: nada é removido — a linha ganha
+// data, autor e motivo da liberação, e continua na tabela.
+app.post(
+  '/api/blacklist/:id/liberar',
+  exigirLogin,
+  exigirBlacklist,
+  wrap(async (req, res) => {
+    const r = await blacklist.liberar(Number(req.params.id), req.body || {});
+    if (!r.ok) return res.status(400).json({ ok: false, erros: r.erros });
+    res.json({ ok: true, registro: r.registro });
+  })
+);
 
 /**
  * Dados do relatório: TODAS as solicitações dos módulos que a pessoa acompanha.
@@ -1890,6 +1962,19 @@ for (const m of MODULOS) {
           return res.status(400).json({ ok: false, erros });
         }
 
+        // ---- Blacklist Geomed ----
+        // Aqui os campos são criados na tela de configuração e não têm nome
+        // fixo, então quem procura o documento do proprietário é a própria
+        // blacklist (ver verificarRespostas): campo que fale de proprietário e
+        // contenha CPF ou CNPJ válido.
+        const barrado = await blacklist.verificarRespostas(valores);
+        if (barrado.bloqueado) {
+          return res.status(400).json({
+            ok: false,
+            erros: { [barrado.campo]: blacklist.mensagemDeBloqueio(barrado.registro) },
+          });
+        }
+
         // O resumo aparece na lista do painel; os detalhes, no formato
         // "Rótulo: valor | ..." que as telas já sabem exibir campo a campo.
         const detalhes = [
@@ -2250,8 +2335,37 @@ app.post(
       origem_id: b.origem_id,
     });
 
+    // ---- Blacklist Geomed ----
+    // Aqui o cadastro NÃO é recusado, ao contrário do formulário do Portal, e
+    // a diferença é de momento: quem responde o Forms já respondeu. Devolver
+    // erro ao Power Automate faria a resposta desaparecer — nem chegaria ao
+    // Portal, nem voltaria para quem preencheu. Então ela entra, já reprovada
+    // e com o motivo escrito, e quem analisa vê o que aconteceu.
+    //
+    // O documento pode vir como campo próprio (fluxo novo) ou dentro do texto
+    // de "detalhes" (o formato que o Forms produz hoje).
+    const docProprietario =
+      blacklist.normalizar(b.proprietario_documento) || blacklist.documentoDoTexto(b.detalhes);
+
+    let bloqueado = false;
+    if (!duplicada && docProprietario) {
+      const barrado = await blacklist.verificar(docProprietario);
+      if (barrado.bloqueado) {
+        bloqueado = true;
+        const r = barrado.registro;
+        await solicitacoes.registrarDecisao(solicitacao.id, {
+          status: 'reprovado',
+          observacao:
+            `BLOQUEADO — Blacklist Geomed. ${blacklist.tipoDe(r.documento)} ` +
+            `${blacklist.formatar(r.documento)} bloqueado por ${r.bloqueado_por} em ${r.criado_em}. ` +
+            `Motivo: ${r.motivo}`,
+          revisadoPor: 'Blacklist Geomed',
+        });
+      }
+    }
+
     // 200 mesmo quando duplicada: o Power Automate considera sucesso e não reenvia.
-    res.json({ ok: true, duplicada, id: solicitacao.id });
+    res.json({ ok: true, duplicada, bloqueado, id: solicitacao.id });
   })
 );
 

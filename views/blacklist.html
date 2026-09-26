@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blacklist Geomed — Tráfego | Jomed</title>
+    <link rel="icon" type="image/png" href="/img/logo-jomed.png">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
+
+    <link rel="stylesheet" href="/css/base.css">
+    <link rel="stylesheet" href="/css/paginas.css">
+    <link rel="stylesheet" href="/css/cadastro.css">
+    <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body class="has-header">
+
+    <header class="app-header">
+        <div class="app-header__inner">
+            <div class="brand">
+                <div class="brand-logo">
+                    <img src="/img/logo-jomed.png" alt="Jomed Transportes e Logística">
+                </div>
+                <div class="brand-text">
+                    <h1>Tráfego</h1>
+                    <span>Blacklist Geomed</span>
+                </div>
+            </div>
+
+            <nav class="main-nav" id="main-nav" aria-label="Menu principal"></nav>
+
+            <div class="header-actions">
+                <button class="user-chip" id="user-chip" type="button" title="Conta">
+                    <div class="user-avatar" id="user-avatar">··</div>
+                    <span class="user-name" id="user-name">Carregando...</span>
+                    <span class="material-symbols-rounded" style="font-size:18px;color:rgba(255,255,255,0.75)">expand_more</span>
+                </button>
+                <div class="user-menu" id="user-menu">
+                    <div class="user-menu__info">
+                        <strong id="menu-nome">—</strong>
+                        <small id="menu-email">—</small>
+                        <small id="menu-papel" class="menu-papel">—</small>
+                    </div>
+                    <div id="menu-conta-itens"></div>
+                    <button type="button" class="danger" id="btn-sair">
+                        <span class="material-symbols-rounded">logout</span> Sair
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="page-container">
+
+        <section class="card card--hero">
+            <h2>Blacklist Geomed</h2>
+            <p>Proprietários que não podem ser cadastrados. O bloqueio é sempre pelo <strong>CPF ou CNPJ do proprietário</strong> — é o documento que reaparece na tentativa seguinte, com outro motorista e outra placa. Cadastro enviado com um documento desta lista é barrado na hora.</p>
+        </section>
+
+        <!-- ===================== NOVO BLOQUEIO ===================== -->
+        <section class="card">
+            <div class="card-header">
+                <h3><span class="material-symbols-rounded" style="color:var(--danger);vertical-align:-5px">block</span> Bloquear proprietário</h3>
+                <span class="badge is-info" id="status">—</span>
+            </div>
+
+            <form id="form-bloqueio" novalidate autocomplete="off">
+                <div class="campos">
+                    <div class="campo" data-campo="documento">
+                        <label for="documento">CPF ou CNPJ do proprietário <span class="obrigatorio">*</span></label>
+                        <input type="text" id="documento" inputmode="numeric" placeholder="000.000.000-00 ou 00.000.000/0000-00" maxlength="18">
+                        <span class="dica">Pode digitar com ou sem pontuação</span>
+                        <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
+                    </div>
+
+                    <div class="campo" data-campo="nome">
+                        <label for="nome">Nome ou razão social</label>
+                        <input type="text" id="nome" placeholder="Como a pessoa é conhecida" maxlength="120">
+                        <span class="dica">Opcional — ajuda a conferir a lista depois</span>
+                        <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
+                    </div>
+
+                    <div class="campo" data-campo="bloqueado_por">
+                        <label for="bloqueado_por">Bloqueado por <span class="obrigatorio">*</span></label>
+                        <select id="bloqueado_por">
+                            <option value="">Selecione...</option>
+                        </select>
+                        <span class="dica">Quem determinou o bloqueio</span>
+                        <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
+                    </div>
+
+                    <div class="campo campo-largo" data-campo="motivo">
+                        <label for="motivo">Motivo do bloqueio <span class="obrigatorio">*</span></label>
+                        <textarea id="motivo" rows="3" maxlength="2000" placeholder="O que levou à decisão"></textarea>
+                        <span class="dica">É o que responde "por que este cadastro foi barrado" seis meses depois</span>
+                        <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
+                    </div>
+                </div>
+
+                <div class="form-acoes">
+                    <span class="aviso-erros" id="aviso-erros">
+                        <span class="material-symbols-rounded">error</span>
+                        <span id="aviso-erros-txt">Confira os campos destacados</span>
+                    </span>
+                    <button type="submit" class="btn btn--primario" id="btn-bloquear">
+                        <span class="material-symbols-rounded">block</span> Bloquear
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <!-- ===================== LISTA ===================== -->
+        <section class="card" style="margin-top:var(--space-6)">
+            <div class="card-header">
+                <h3><span class="material-symbols-rounded" style="color:var(--primary);vertical-align:-5px">list</span> Documentos bloqueados</h3>
+                <div class="acoes-painel">
+                    <input type="search" id="busca" placeholder="Documento, nome ou motivo"
+                           style="padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font:inherit;font-size:0.85rem;background:var(--surface-muted);min-width:240px">
+                    <label style="display:inline-flex;align-items:center;gap:6px;font-size:0.82rem;color:var(--text-secondary);cursor:pointer">
+                        <input type="checkbox" id="ver-liberados"> Mostrar liberados
+                    </label>
+                    <button class="badge is-info" id="btn-atualizar" type="button" style="border:none;cursor:pointer">
+                        <span class="material-symbols-rounded" style="font-size:16px">refresh</span> Atualizar
+                    </button>
+                </div>
+            </div>
+
+            <div class="table-wrap">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Documento</th>
+                            <th>Proprietário</th>
+                            <th>Bloqueado por</th>
+                            <th>Motivo</th>
+                            <th>Quando</th>
+                            <th>Situação</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="corpo">
+                        <tr><td colspan="7"><div class="empty-state">
+                            <span class="material-symbols-rounded">hourglass_empty</span>
+                            <h4>Carregando...</h4>
+                        </div></td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <p class="aviso-inline" id="aviso"></p>
+        </section>
+    </main>
+
+    <!-- Liberação: um formulário próprio, e não um botão direto, porque
+         desbloquear é uma decisão tão registrável quanto bloquear. Sem quem
+         autorizou e por quê, o bloqueio simplesmente some e ninguém sabe
+         explicar por que o cadastro passou. -->
+    <div class="modal-overlay" id="modal-liberar" hidden>
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="liberar-titulo">
+            <div class="modal-header">
+                <h3 id="liberar-titulo"><span class="material-symbols-rounded" style="color:var(--success);vertical-align:-5px">lock_open</span> Liberar bloqueio</h3>
+                <button class="modal-close" id="liberar-fechar" type="button" aria-label="Fechar">
+                    <span class="material-symbols-rounded">close</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p id="liberar-resumo" style="margin:0 0 var(--space-4);color:var(--text-secondary)"></p>
+
+                <form id="form-liberar" novalidate autocomplete="off">
+                    <div class="campos">
+                        <div class="campo campo-largo" data-campo="liberado_por">
+                            <label for="liberado_por">Liberado por <span class="obrigatorio">*</span></label>
+                            <select id="liberado_por"><option value="">Selecione...</option></select>
+                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
+                        </div>
+                        <div class="campo campo-largo" data-campo="motivo">
+                            <label for="liberar-motivo">Motivo da liberação <span class="obrigatorio">*</span></label>
+                            <textarea id="liberar-motivo" rows="3" maxlength="2000" placeholder="Por que o bloqueio deixa de valer"></textarea>
+                            <span class="erro"><span class="material-symbols-rounded">error</span><span class="erro-txt"></span></span>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn--secundario" id="liberar-cancelar">Cancelar</button>
+                <button type="button" class="btn btn--primario" id="liberar-confirmar">
+                    <span class="material-symbols-rounded">lock_open</span> Liberar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+    <script>
+        const form = document.getElementById('form-bloqueio');
+        const formLiberar = document.getElementById('form-liberar');
+        const corpo = document.getElementById('corpo');
+        const elStatus = document.getElementById('status');
+        const elAviso = document.getElementById('aviso');
+        const avisoErros = document.getElementById('aviso-erros');
+        const overlay = document.getElementById('modal-liberar');
+
+        let REGISTROS = [];
+        let BLOQUEADORES = [];
+        let liberandoId = null;
+
+        function esc(t) {
+            const d = document.createElement('div');
+            d.textContent = t == null ? '' : String(t);
+            return d.innerHTML;
+        }
+
+        const dataHora = (v) => (window.dataHoraBR ? window.dataHoraBR(v) : (v || '—'));
+
+        function marcarStatus(txt, classe) {
+            elStatus.textContent = txt;
+            elStatus.className = 'badge ' + (classe || 'is-info');
+        }
+
+        function avisar(msg, tipo) {
+            elAviso.textContent = msg || '';
+            elAviso.className = 'aviso-inline ' + (tipo || '');
+            if (msg) setTimeout(() => { elAviso.textContent = ''; elAviso.className = 'aviso-inline'; }, 6000);
+        }
+
+        // ------------------------------------------------------------------
+        // Erros por campo — mesma mecânica das outras telas: o servidor
+        // devolve { erros: { campo: mensagem } } e cada mensagem vai para
+        // baixo do seu campo, em vez de um alerta genérico no topo.
+        // ------------------------------------------------------------------
+        function marcarErros(raiz, erros) {
+            let primeiro = null;
+            for (const [campo, msg] of Object.entries(erros || {})) {
+                const c = raiz.querySelector('[data-campo="' + campo + '"]');
+                if (!c) { avisar(msg, 'erro'); continue; }
+                c.classList.add('com-erro');
+                const t = c.querySelector('.erro-txt');
+                if (t) t.textContent = msg;
+                if (!primeiro) primeiro = c;
+            }
+            if (primeiro) primeiro.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        function limparErros(raiz) {
+            for (const c of raiz.querySelectorAll('.campo')) c.classList.remove('com-erro');
+            avisoErros.classList.remove('visivel');
+        }
+
+        /** Máscara de CPF/CNPJ conforme o tamanho, enquanto digita. */
+        function mascarar(v) {
+            const d = String(v || '').replace(/\D+/g, '').slice(0, 14);
+            if (d.length <= 11) {
+                return d
+                    .replace(/^(\d{3})(\d)/, '$1.$2')
+                    .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
+                    .replace(/\.(\d{3})(\d{1,2})$/, '.$1-$2');
+            }
+            return d
+                .replace(/^(\d{2})(\d)/, '$1.$2')
+                .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+                .replace(/\.(\d{3})(\d)/, '.$1/$2')
+                .replace(/(\d{4})(\d{1,2})$/, '$1-$2');
+        }
+
+        function preencherBloqueadores() {
+            const html = '<option value="">Selecione...</option>' +
+                BLOQUEADORES.map((b) => `<option value="${esc(b)}">${esc(b)}</option>`).join('');
+            document.getElementById('bloqueado_por').innerHTML = html;
+            document.getElementById('liberado_por').innerHTML = html;
+        }
+
+        // ------------------------------------------------------------------
+        // Lista
+        // ------------------------------------------------------------------
+        function visiveis() {
+            const verLiberados = document.getElementById('ver-liberados').checked;
+            const busca = document.getElementById('busca').value.trim().toLowerCase();
+            const buscaDigitos = busca.replace(/\D+/g, '');
+
+            return REGISTROS.filter((r) => {
+                if (!verLiberados && r.liberado_em) return false;
+                if (!busca) return true;
+                if (buscaDigitos && r.documento.includes(buscaDigitos)) return true;
+                const texto = [r.nome, r.bloqueado_por, r.motivo].join(' ').toLowerCase();
+                return texto.includes(busca);
+            });
+        }
+
+        function linhaHtml(r) {
+            const ativo = !r.liberado_em;
+            const situacao = ativo
+                ? '<span class="badge is-danger">Bloqueado</span>'
+                : '<span class="badge is-success">Liberado</span>';
+
+            const acao = ativo
+                ? `<button class="badge is-info btn-liberar" data-id="${r.id}" style="border:none;cursor:pointer">
+                       <span class="material-symbols-rounded" style="font-size:15px">lock_open</span> Liberar
+                   </button>`
+                : `<span style="font-size:0.78rem;color:var(--text-secondary)">por ${esc(r.liberado_por)}<br>${esc(dataHora(r.liberado_em))}</span>`;
+
+            return `<tr${ativo ? '' : ' style="opacity:.62"'}>
+                <td><strong style="font-variant-numeric:tabular-nums">${esc(r.documento_formatado)}</strong></td>
+                <td>${esc(r.nome || '—')}</td>
+                <td>${esc(r.bloqueado_por)}</td>
+                <td style="max-width:320px;white-space:normal">${esc(r.motivo)}${
+                    r.liberado_motivo
+                        ? `<br><em style="font-size:0.78rem;color:var(--text-secondary)">Liberação: ${esc(r.liberado_motivo)}</em>`
+                        : ''
+                }</td>
+                <td style="white-space:nowrap">${esc(dataHora(r.criado_em))}${
+                    r.criado_por ? `<br><span style="font-size:0.74rem;color:var(--text-secondary)">${esc(r.criado_por)}</span>` : ''
+                }</td>
+                <td>${situacao}</td>
+                <td>${acao}</td>
+            </tr>`;
+        }
+
+        function desenhar() {
+            const lista = visiveis();
+            const ativos = REGISTROS.filter((r) => !r.liberado_em).length;
+            marcarStatus(ativos === 1 ? '1 bloqueio ativo' : `${ativos} bloqueios ativos`,
+                ativos ? 'is-danger' : 'is-success');
+
+            if (!lista.length) {
+                corpo.innerHTML = `<tr><td colspan="7"><div class="empty-state">
+                    <span class="material-symbols-rounded">check_circle</span>
+                    <h4>Nada por aqui</h4>
+                    <p>Nenhum documento bate com o que você procurou.</p>
+                </div></td></tr>`;
+                return;
+            }
+            corpo.innerHTML = lista.map(linhaHtml).join('');
+        }
+
+        async function carregar() {
+            try {
+                const r = await fetch('/api/blacklist');
+                if (r.status === 403) {
+                    corpo.innerHTML = '<tr><td colspan="7"><div class="empty-state"><h4>Sem permissão</h4></div></td></tr>';
+                    return;
+                }
+                const j = await r.json();
+                if (!j.ok) throw new Error(j.erro || 'Falha ao carregar.');
+
+                REGISTROS = j.registros || [];
+                BLOQUEADORES = j.bloqueadores || [];
+                preencherBloqueadores();
+                desenhar();
+            } catch (err) {
+                corpo.innerHTML = `<tr><td colspan="7"><div class="empty-state">
+                    <span class="material-symbols-rounded">wifi_off</span>
+                    <h4>Erro ao carregar</h4>
+                    <p>${esc(err.message)}</p>
+                </div></td></tr>`;
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // Bloquear
+        // ------------------------------------------------------------------
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            limparErros(form);
+
+            const btn = document.getElementById('btn-bloquear');
+            btn.disabled = true;
+
+            try {
+                const r = await fetch('/api/blacklist', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        documento: document.getElementById('documento').value,
+                        nome: document.getElementById('nome').value,
+                        bloqueado_por: document.getElementById('bloqueado_por').value,
+                        motivo: document.getElementById('motivo').value,
+                    }),
+                });
+                const j = await r.json();
+
+                if (!j.ok) {
+                    marcarErros(form, j.erros || { documento: j.erro || 'Não foi possível bloquear.' });
+                    avisoErros.classList.add('visivel');
+                    return;
+                }
+
+                form.reset();
+                avisar('Proprietário bloqueado. Cadastros com este documento passam a ser barrados.', 'ok');
+                await carregar();
+            } catch (err) {
+                avisar(err.message, 'erro');
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        document.getElementById('documento').addEventListener('input', (e) => {
+            e.target.value = mascarar(e.target.value);
+        });
+
+        // ------------------------------------------------------------------
+        // Liberar
+        // ------------------------------------------------------------------
+        function abrirLiberar(id) {
+            const r = REGISTROS.find((x) => Number(x.id) === Number(id));
+            if (!r) return;
+
+            liberandoId = r.id;
+            limparErros(formLiberar);
+            formLiberar.reset();
+            document.getElementById('liberar-resumo').innerHTML =
+                `<strong>${esc(r.documento_formatado)}</strong>${r.nome ? ' — ' + esc(r.nome) : ''}<br>` +
+                `Bloqueado por ${esc(r.bloqueado_por)} em ${esc(dataHora(r.criado_em))}.`;
+            overlay.hidden = false;
+        }
+
+        function fecharLiberar() {
+            overlay.hidden = true;
+            liberandoId = null;
+        }
+
+        corpo.addEventListener('click', (e) => {
+            const btn = e.target.closest('.btn-liberar');
+            if (btn) abrirLiberar(btn.dataset.id);
+        });
+
+        document.getElementById('liberar-confirmar').addEventListener('click', async () => {
+            if (!liberandoId) return;
+            limparErros(formLiberar);
+
+            const btn = document.getElementById('liberar-confirmar');
+            btn.disabled = true;
+
+            try {
+                const r = await fetch(`/api/blacklist/${encodeURIComponent(liberandoId)}/liberar`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        liberado_por: document.getElementById('liberado_por').value,
+                        motivo: document.getElementById('liberar-motivo').value,
+                    }),
+                });
+                const j = await r.json();
+
+                if (!j.ok) {
+                    marcarErros(formLiberar, j.erros || { liberado_por: j.erro || 'Não foi possível liberar.' });
+                    return;
+                }
+
+                fecharLiberar();
+                avisar('Bloqueio liberado. O registro continua no histórico.', 'ok');
+                await carregar();
+            } catch (err) {
+                avisar(err.message, 'erro');
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        document.getElementById('liberar-fechar').addEventListener('click', fecharLiberar);
+        document.getElementById('liberar-cancelar').addEventListener('click', fecharLiberar);
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) fecharLiberar(); });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !overlay.hidden) fecharLiberar(); });
+
+        document.getElementById('busca').addEventListener('input', desenhar);
+        document.getElementById('ver-liberados').addEventListener('change', desenhar);
+        document.getElementById('btn-atualizar').addEventListener('click', carregar);
+
+        carregar();
+    </script>
+</body>
+</html>

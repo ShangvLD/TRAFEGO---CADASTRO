@@ -87,6 +87,11 @@ function menuDaConta(usuario) {
   // as próprias solicitações, e um indicador sobre elas não diria nada.
   if (usuario && papeis.paineisDoPapel(usuario.papel).length) {
     itens.push({ href: '/relatorios', rotulo: 'Relatórios', icone: 'monitoring' });
+
+    // Blacklist Geomed: mesma regra dos relatórios, e pelo mesmo motivo — é
+    // ferramenta de quem ANALISA cadastro. Quem só preenche formulário não
+    // tem o que fazer aqui, e a lista carrega o nome de quem foi recusado.
+    itens.push({ href: '/blacklist', rotulo: 'Blacklist Geomed', icone: 'block' });
   }
   return itens;
 }

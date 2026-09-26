@@ -27,6 +27,7 @@ const {
   apenasDigitos, normalizarPlaca, CAMPOS_DO_TERCEIRO,
 } = require('./validacao');
 const pesquisasCfg = require('./pesquisas');
+const blacklist = require('./blacklist');
 
 const rotuloPrioridade = (id) => (acharPrioridade(id) || {}).rotulo;
 
@@ -495,6 +496,21 @@ async function validarECriar(entrada, solicitante) {
     campos,
   });
   if (!ok) return { ok: false, erros };
+
+  // ---- Blacklist Geomed --------------------------------------------------
+  // Depois da validação e ANTES de gravar: o documento precisa estar
+  // normalizado (dados.proprietario_documento já saiu do validador só com
+  // dígitos) para a comparação não depender de pontuação, e nada pode ter sido
+  // escrito no banco — um cadastro bloqueado que deixa condutor e proprietário
+  // criados atrás de si é exatamente o rastro que confunde a próxima consulta.
+  const barrado = await blacklist.verificar(dados.proprietario_documento);
+  if (barrado.bloqueado) {
+    return {
+      ok: false,
+      erros: { proprietario_documento: blacklist.mensagemDeBloqueio(barrado.registro) },
+      bloqueio: barrado.registro,
+    };
+  }
 
   // Perguntas que não são as 18 do desenho original: elas não têm coluna
   // própria, então a resposta entra no texto de "detalhes", que é o que o
