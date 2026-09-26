@@ -35,6 +35,48 @@ const rotuloPrioridade = (id) => (acharPrioridade(id) || {}).rotulo;
 // ---------------------------------------------------------------------------
 
 /**
+ * Lê de volta um campo do texto de "detalhes" montado por
+ * montarDetalhesLegado ("Rótulo: valor | Rótulo: valor | ...").
+ *
+ * Existe porque a maioria esmagadora das solicitações veio do Microsoft Forms
+ * pelo webhook, e essas NÃO têm linha em solicitacao_cadastro: hoje são 401
+ * solicitações para 2 vínculos. Para elas, o nome e o CPF do condutor só
+ * existem dentro desta string — e é dela que a pasta do storage precisa, senão
+ * o arquivo vai parar numa pasta identificada pelo e-mail de quem digitou.
+ *
+ * Tolerante de propósito: o texto também é editado à mão e vem do Forms, então
+ * aceita o separador "|" ou quebra de linha, e ignora diferença de acento e
+ * caixa no rótulo.
+ */
+function campoDosDetalhes(detalhes, rotulo) {
+  const texto = String(detalhes == null ? '' : detalhes);
+  if (!texto) return '';
+
+  const semAcento = (t) => t.normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const alvo = semAcento(String(rotulo)).toLowerCase();
+
+  // Quebra nos mesmos separadores que a montagem usa, e compara o rótulo já
+  // normalizado — "Proprietário" e "PROPRIETARIO" são o mesmo campo.
+  for (const parte of texto.split(/\s*\|\s*|\r?\n/)) {
+    const pos = parte.indexOf(':');
+    if (pos < 0) continue;
+    if (semAcento(parte.slice(0, pos)).trim().toLowerCase() !== alvo) continue;
+    return parte.slice(pos + 1).trim();
+  }
+  return '';
+}
+
+/** Nome e CPF do condutor lidos do texto de "detalhes". Ver campoDosDetalhes. */
+function condutorDosDetalhes(detalhes) {
+  return {
+    nome: campoDosDetalhes(detalhes, 'Condutor'),
+    // O CPF aparece formatado ("080.400.256-80") ou não ("32283129842"),
+    // conforme a origem; a pasta usa só os dígitos.
+    cpf: campoDosDetalhes(detalhes, 'CPF').replace(/\D+/g, ''),
+  };
+}
+
+/**
  * Monta o texto de "detalhes" no formato que o painel já interpreta:
  * "Rótulo: valor | Rótulo: valor | ...".
  *
@@ -523,6 +565,8 @@ module.exports = {
   validarECriar,
   acharParaRenovar,
   buscarPorSolicitacao,
+  campoDosDetalhes,
+  condutorDosDetalhes,
   listarDocumentos,
   cnhVencendo,
   // expostos para teste

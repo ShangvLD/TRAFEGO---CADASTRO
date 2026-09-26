@@ -80,14 +80,34 @@ function extensaoDe(nomeArquivo) {
 }
 
 /**
- * Pasta do cadastro: "CADASTROS/JOAO_DA_SILVA_12345678900".
+ * Pasta do cadastro: "CADASTROS/00377_JOAO_DA_SILVA_12345678900".
+ *
  * Nome e CPF juntos porque nome sozinho repete (dois "João Silva") e CPF
  * sozinho não diz nada a quem abre a pasta.
+ *
+ * O ID DA SOLICITAÇÃO NA FRENTE é o que garante que a pasta é de UM cadastro.
+ * Sem ele a identificação dependia de nome e CPF estarem preenchidos — e para
+ * quase todo cadastro vindo do Forms eles não estão, porque não há linha em
+ * solicitacao_cadastro. O resultado era pasta nomeada pelo e-mail de quem
+ * abriu o chamado, terminada em "_SEM_CPF", COMPARTILHADA por todas as
+ * solicitações daquela pessoa: dois cadastros diferentes disputando o caminho
+ * "…/RESULTADO_RDO.pdf", e o segundo envio apagando o primeiro (o upload usa
+ * upsert). Aconteceu com três pastas em produção — só não houve perda porque
+ * as extensões diferiam.
+ *
+ * Zeros à esquerda para a listagem do bucket sair em ordem numérica.
+ *
+ * @param solicitacaoId  obrigatório na prática; sem ele a pasta volta ao
+ *                       formato antigo, que não distingue cadastros
  */
-function pastaDoCadastro(nome, cpf) {
+function pastaDoCadastro(nome, cpf, solicitacaoId) {
   const n = higienizar(nome) || 'SEM_NOME';
   const d = String(cpf || '').replace(/\D+/g, '') || 'SEM_CPF';
-  return `CADASTROS/${n}_${d}`;
+
+  const id = Number(solicitacaoId);
+  const prefixo = Number.isInteger(id) && id > 0 ? `${String(id).padStart(5, '0')}_` : '';
+
+  return `CADASTROS/${prefixo}${n}_${d}`;
 }
 
 /**
@@ -543,5 +563,6 @@ module.exports = {
   pastaDoCadastro,
   caminhoDoArquivo,
   validarCaminhoLogico,
+  URL_PROJETO: URL_BASE,
   validarArquivo,
 };

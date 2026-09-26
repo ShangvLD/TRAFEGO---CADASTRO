@@ -88,7 +88,7 @@
                      precisa de uma solicitação já criada para se prender. -->
                 <div id="area-upload" class="area-upload" hidden>
                     <h4>Agora envie os documentos</h4>
-                    <p class="up-ajuda" id="up-ajuda">PDF, JPG ou PNG.</p>
+                    <p class="up-ajuda" id="up-ajuda">PDF, JPG, JPEG ou PNG.</p>
                     <div id="lista-upload"></div>
                     <p class="up-pendentes" id="up-pendentes"></p>
                 </div>
@@ -206,7 +206,7 @@
                         <div>
                             <strong>O envio dos arquivos aparece depois de salvar.</strong><br>
                             Estes são os documentos que serão pedidos. Preencha o cadastro,
-                            clique em enviar, e a área de anexos abre em seguida — PDF, JPG ou PNG.
+                            clique em enviar, e a área de anexos abre em seguida — PDF, JPG, JPEG ou PNG.
                         </div>
                     </div>
                     <div class="docs-lista" id="docs-lista"></div>
@@ -434,7 +434,7 @@
 
             area.hidden = false;
             document.getElementById('up-ajuda').textContent =
-                aplicaveis.length + ' documento(s) para esta solicitação. PDF, JPG ou PNG.';
+                aplicaveis.length + ' documento(s) para esta solicitação. PDF, JPG, JPEG ou PNG.';
 
             const upload = montarUpload(document.getElementById('lista-upload'), {
                 modulo: SLUG,

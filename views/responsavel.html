@@ -206,6 +206,16 @@
             return window.dataBR ? window.dataBR(iso) : (iso || '—');
         }
 
+        // "2,4 MB" — o tamanho ao lado do anexo, para a pessoa reconhecer o
+        // arquivo que acabou de escolher. Vírgula decimal, como o resto da tela.
+        function formatarTamanho(bytes) {
+            const n = Number(bytes);
+            if (!n) return '';
+            if (n < 1024) return n + ' B';
+            if (n < 1024 * 1024) return Math.round(n / 1024) + ' KB';
+            return (n / 1024 / 1024).toFixed(1).replace('.', ',') + ' MB';
+        }
+
         // Escapa texto para evitar quebra de HTML.
         function esc(txt) {
             const div = document.createElement('div');
@@ -392,12 +402,13 @@
 
             const rdo = s.rdo || {};
             const docs = docsDoModal[s.id] || [];
-            // O ARQUIVO do comprovante é só do admin, então para o responsável
-            // ele não vem na lista. O que vem é o SINAL de que existe
-            // (rdo.temComprovante), suficiente para confirmar a reprovação sem
-            // dar acesso ao documento.
-            const comprovante = docs.find((d) => String(d.tipo).toUpperCase() === 'RESULTADO RDO');
-            const anexado = !!comprovante || rdo.temComprovante === true;
+            // TODOS os comprovantes, não só o primeiro: o mesmo tipo enviado de
+            // novo vira RESULTADO_RDO_2 em vez de sobrescrever, então a partir
+            // do segundo envio existe mais de um arquivo para mostrar.
+            const comprovantes = docs.filter((d) => String(d.tipo).toUpperCase() === 'RESULTADO RDO');
+            // rdo.temComprovante é o SINAL de que existe anexo, usado por quem
+            // não recebe a lista de arquivos (o solicitante).
+            const anexado = comprovantes.length > 0 || rdo.temComprovante === true;
 
             if (rdo.aprovado === null || rdo.aprovado === undefined) {
                 return `<div class="rdo-bloco rdo-bloco--pergunta">
@@ -412,21 +423,30 @@
                         </button>
                     </div>
                     <div id="rdo-reprova" hidden>
-                        <p class="rdo-exigencia">
-                            <span class="material-symbols-rounded">attach_file</span>
-                            Anexe o resultado do RDO para confirmar a reprovação. Sem o documento
-                            o cadastro não pode ser reprovado.
-                        </p>
+                        <label class="rdo-campo" for="rdo-obs">Motivo da reprovação <span class="rdo-req">*</span></label>
+                        <textarea id="rdo-obs" rows="2" placeholder="Por que este cadastro foi reprovado?"></textarea>
+
+                        <label class="rdo-campo">Documento do RDO <span class="rdo-req">*</span></label>
                         ${anexado
                             ? `<p class="rdo-ok"><span class="material-symbols-rounded">check_circle</span>
-                                 ${comprovante
-                                     ? esc(comprovante.nome_original || comprovante.nome_arquivo) + ' anexado.'
+                                 ${comprovantes.length
+                                     ? esc(comprovantes[0].nome_original || comprovantes[0].nome_arquivo) + ' anexado.'
                                      : 'Comprovante anexado.'}</p>`
-                            : `<input type="file" id="rdo-arquivo" accept=".pdf,.jpg,.jpeg,.png">`}
-                        <textarea id="rdo-obs" rows="2" placeholder="Observação (opcional)"></textarea>
-                        <button type="button" class="btn-rdo confirmar" id="rdo-confirmar"${anexado ? '' : ' disabled'}>
-                            Confirmar reprovação
+                            : `<label class="btn-rdo escolher" id="rdo-escolher">
+                                   <span class="material-symbols-rounded">attach_file</span> Selecionar PDF
+                                   <input type="file" id="rdo-arquivo" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" hidden>
+                               </label>
+                               <div class="rdo-escolhido" id="rdo-escolhido" hidden></div>`}
+
+                        <p class="rdo-exigencia">
+                            <span class="material-symbols-rounded">info</span>
+                            Sem o motivo e o documento anexado o cadastro não pode ser reprovado.
+                        </p>
+
+                        <button type="button" class="btn-rdo confirmar" id="rdo-confirmar">
+                            Reprovar RDO
                         </button>
+                        <div class="rdo-estado" id="rdo-estado" hidden></div>
                         <div class="rdo-erro" id="rdo-erro" hidden></div>
                     </div>
                 </div>`;
@@ -439,14 +459,22 @@
                 return `<div class="rdo-bloco rdo-bloco--reprovado">
                     <div class="rdo-titulo"><span class="material-symbols-rounded">block</span> Reprovado no RDO</div>
                     <p class="rdo-ajuda">Não segue para as gerenciadoras. Reprovado por ${quem}.</p>
+                    ${rdo.obs ? '<div class="rdo-rotulo-obs">Motivo</div>' : ''}
                     ${obs}
-                    ${comprovante
-                        ? `<a class="rdo-doc" href="${esc(comprovante.url || '#')}" target="_blank" rel="noopener">
-                             <span class="material-symbols-rounded">description</span>
-                             Ver o resultado do RDO</a>`
+                    ${comprovantes.length
+                        ? `<div class="rdo-anexos">
+                             <div class="rdo-rotulo-obs">Documentos anexados</div>
+                             ${comprovantes.map((c) => `
+                               <div class="rdo-doc">
+                                 <span class="material-symbols-rounded">description</span>
+                                 <span class="rdo-doc-nome">${esc(c.nome_original || c.nome_arquivo)}</span>
+                                 <span class="rdo-doc-tam">${formatarTamanho(c.tamanho)}</span>
+                                 <button type="button" class="rdo-ver" data-doc="${c.id}">Visualizar</button>
+                               </div>`).join('')}
+                           </div>`
                         : anexado
                             ? `<p class="rdo-ok"><span class="material-symbols-rounded">check_circle</span>
-                                 Comprovante anexado — o arquivo é visível ao administrador.</p>`
+                                 Comprovante anexado.</p>`
                             : '<p class="rdo-exigencia">Comprovante não localizado.</p>'}
                 </div>`;
             }
@@ -692,6 +720,50 @@
             return '<br><span class="' + classe + '">' + esc(s.pesquisa.etiqueta) + '</span>';
         }
 
+        /**
+         * Célula do solicitante: quem pediu, e o que foi pedido.
+         *
+         * Mostrava nome e e-mail em duas linhas. Só que vários usuários foram
+         * cadastrados com o e-mail no lugar do nome, e a célula repetia o
+         * mesmo texto duas vezes — ocupando a linha inteira sem dizer nada.
+         *
+         * Agora o e-mail vem em cima (é o que identifica quem pediu) e embaixo
+         * o RESUMO do cadastro: motorista, placas e proprietário. Esses dados
+         * não apareciam em nenhuma coluna — para saber de quem era a
+         * solicitação, era preciso abrir o cadastro.
+         *
+         * O nome só aparece quando é um nome de verdade; quando é cópia do
+         * e-mail, some, porque repetir não informa.
+         */
+        function solicitanteCel(s) {
+            const email = String(s.solicitante_email || '').trim();
+            const nome = String(s.solicitante_nome || '').trim();
+
+            // "Fulano" vale; "fulano@jomedlog.com.br" e "fulano" (a parte
+            // antes do @) são o mesmo dado que o e-mail já mostra.
+            const local = email.split('@')[0].toLowerCase();
+            const nomeUtil = nome && nome.toLowerCase() !== email.toLowerCase() && nome.toLowerCase() !== local;
+
+            const itens = [
+                ['Motorista', s.condutor],
+                ['Placa', s.placa_cavalo],
+                ['Carreta', s.placa_carreta],
+                ['Proprietário', s.proprietario],
+            ].filter(([, v]) => v);
+
+            const resumo = itens.length
+                ? '<div class="sol-resumo">' + itens.map(([rot, val]) =>
+                      `<span class="sol-item"><span class="sol-rot">${rot}</span>${esc(val)}</span>`
+                  ).join('') + '</div>'
+                : '';
+
+            return `<div class="sol-cel">
+                <span class="sol-email">${esc(email)}</span>
+                ${nomeUtil ? `<span class="sol-nome">${esc(nome)}</span>` : ''}
+                ${resumo}
+            </div>`;
+        }
+
         function linhaHtml(s) {
             const verBtn = `<button class="btn-acao ver" data-id="${s.id}" title="Ver e decidir">
                                 <span class="material-symbols-rounded">visibility</span>
@@ -712,7 +784,7 @@
                 <td>${s.prioridade
                         ? '<span class="prio-bolinha" title="' + esc(s.prioridade.rotulo) + '">' + s.prioridade.bolinha + '</span> '
                         : ''}${formatarData(s.criado_em)}</td>
-                <td>${esc(s.solicitante_nome)}<br><small style="color:var(--text-secondary)">${esc(s.solicitante_email)}</small>${etiquetaPesquisa(s)}</td>
+                <td>${solicitanteCel(s)}${etiquetaPesquisa(s)}</td>
                 <td>${clientesChips(s.assunto)}</td>
                 <td>${anexosResumo(s.anexos, contagemAnexos[s.id])}</td>
                 <td>${Atendimento.selo(atendimentoPorId[s.id])}</td>
@@ -943,17 +1015,124 @@
             return r.json().catch(() => ({ ok: false, erro: 'Resposta inválida do servidor.' }));
         }
 
-        modalBody.addEventListener('change', (e) => {
-            // Escolheu o arquivo: libera o botão de confirmar a reprovação.
-            if (e.target.id === 'rdo-arquivo') {
-                const btn = document.getElementById('rdo-confirmar');
-                if (btn) btn.disabled = !e.target.files.length;
+        // Solicitações cujo comprovante já subiu ao storage nesta sessão, mas
+        // cuja reprovação ainda não foi gravada. Evita que "tentar de novo"
+        // depois de um erro no registro mande o mesmo arquivo uma segunda vez.
+        const comprovanteEnviado = new Set();
+
+        // Limites conferidos ANTES de enviar. O servidor valida de novo (é ele
+        // quem decide), mas descobrir "formato não aceito" só depois de subir
+        // 15 MB é tempo perdido de quem está esperando.
+        const RDO_TIPOS = ['application/pdf', 'image/jpeg', 'image/png'];
+        const RDO_EXTENSOES = ['pdf', 'jpg', 'jpeg', 'png'];
+        const RDO_TAMANHO_MAX = 15 * 1024 * 1024;
+
+        function recusaDoArquivo(arquivo) {
+            const ext = (arquivo.name.match(/\.([A-Za-z0-9]+)$/) || [])[1];
+            if (!ext || !RDO_EXTENSOES.includes(ext.toLowerCase())) {
+                return 'Formato não aceito. Envie PDF, JPG ou PNG.';
             }
+            // O tipo vem do navegador e às vezes vem vazio; só recusa quando
+            // ele existe E não bate.
+            if (arquivo.type && !RDO_TIPOS.includes(arquivo.type)) {
+                return `Formato não aceito (${arquivo.type}).`;
+            }
+            if (arquivo.size > RDO_TAMANHO_MAX) return 'Arquivo maior que 15 MB.';
+            if (arquivo.size <= 0) return 'O arquivo está vazio.';
+            return null;
+        }
+
+        /** Mostra o que foi escolhido: sem isto o clique no seletor não deixa rastro. */
+        function mostrarEscolhido(arquivo) {
+            const alvo = document.getElementById('rdo-escolhido');
+            const escolher = document.getElementById('rdo-escolher');
+            if (!alvo) return;
+
+            if (!arquivo) {
+                alvo.hidden = true;
+                alvo.innerHTML = '';
+                if (escolher) escolher.hidden = false;
+                return;
+            }
+            alvo.hidden = false;
+            if (escolher) escolher.hidden = true;
+            alvo.innerHTML = `
+                <span class="material-symbols-rounded">description</span>
+                <span class="rdo-doc-nome">${esc(arquivo.name)}</span>
+                <span class="rdo-doc-tam">${formatarTamanho(arquivo.size)}</span>
+                <button type="button" class="rdo-remover" id="rdo-remover">Remover arquivo</button>`;
+        }
+
+        function estadoRdo(texto, classe) {
+            const el = document.getElementById('rdo-estado');
+            if (!el) return;
+            if (!texto) { el.hidden = true; return; }
+            el.hidden = false;
+            el.className = 'rdo-estado' + (classe ? ' ' + classe : '');
+            el.textContent = texto;
+        }
+
+        modalBody.addEventListener('change', (e) => {
+            if (e.target.id !== 'rdo-arquivo') return;
+
+            const erroEl = document.getElementById('rdo-erro');
+            const arquivo = e.target.files[0];
+            erroEl.hidden = true;
+            estadoRdo('');
+
+            if (!arquivo) return mostrarEscolhido(null);
+
+            const recusa = recusaDoArquivo(arquivo);
+            if (recusa) {
+                e.target.value = '';
+                mostrarEscolhido(null);
+                erroEl.textContent = recusa;
+                erroEl.hidden = false;
+                return;
+            }
+            mostrarEscolhido(arquivo);
         });
 
         // Botões de decisão POR CLIENTE e da pesquisa RDO.
         modalBody.addEventListener('click', async (e) => {
             if (idAtual == null) return;
+
+            // ---- Tirar o arquivo escolhido ----
+            if (e.target.closest('#rdo-remover')) {
+                const arq = document.getElementById('rdo-arquivo');
+                if (arq) arq.value = '';
+                mostrarEscolhido(null);
+                estadoRdo('');
+                return;
+            }
+
+            // ---- Abrir um comprovante já anexado ----
+            //
+            // A URL é pedida AGORA, e não guardada no HTML: a assinatura da
+            // listagem vale 30 minutos, e o modal costuma ficar aberto mais que
+            // isso. Um link velho abriria numa aba com erro do storage.
+            const btnVer = e.target.closest('.rdo-ver');
+            if (btnVer) {
+                const antes = btnVer.textContent;
+                btnVer.textContent = 'Abrindo...';
+                btnVer.disabled = true;
+                // A aba é aberta ANTES do await: aberta depois, o navegador a
+                // trata como popup (não veio de um clique) e bloqueia.
+                const aba = window.open('', '_blank');
+                try {
+                    const r = await fetch(`/api/modulos/terceiro/solicitacoes/${idAtual}/documentos/${btnVer.dataset.doc}/url`);
+                    const j = await r.json();
+                    if (!j.ok || !j.url) throw new Error(j.erro || 'Não foi possível abrir o documento.');
+                    aba.location = j.url;
+                } catch (err) {
+                    if (aba) aba.close();
+                    alert(err.message);
+                } finally {
+                    btnVer.textContent = antes;
+                    btnVer.disabled = false;
+                }
+                return;
+            }
 
             // ---- RDO: Sim ----
             const btnRdo = e.target.closest('.btn-rdo');
@@ -977,27 +1156,68 @@
                 if (btnRdo.id === 'rdo-confirmar') {
                     const erroEl = document.getElementById('rdo-erro');
                     const arq = document.getElementById('rdo-arquivo');
-                    const obs = (document.getElementById('rdo-obs') || {}).value || '';
-                    btnRdo.disabled = true;
+                    const campoObs = document.getElementById('rdo-obs');
+                    const obs = (campoObs && campoObs.value || '').trim();
+                    // Sem input na tela = o comprovante já estava anexado antes.
+                    const jaAnexado = !arq;
+
                     erroEl.hidden = true;
+                    estadoRdo('');
+
+                    // As duas exigências conferidas aqui, antes de qualquer
+                    // requisição: a mesma regra roda no servidor, mas apontar o
+                    // campo que falta é trabalho da tela.
+                    if (!obs) {
+                        erroEl.textContent = 'Informe o motivo da reprovação.';
+                        erroEl.hidden = false;
+                        if (campoObs) campoObs.focus();
+                        return;
+                    }
+                    if (!jaAnexado && !arq.files.length) {
+                        erroEl.textContent = 'Selecione o documento do RDO para reprovar.';
+                        erroEl.hidden = false;
+                        return;
+                    }
+
+                    btnRdo.disabled = true;
+                    // Marca a etapa em curso para o catch saber qual das duas
+                    // falhou — e para não reenviar um anexo que já subiu.
+                    let etapa = 'anexo';
                     try {
                         // O anexo vai PRIMEIRO: se o envio falhar, nada foi
                         // gravado e o cadastro continua onde estava.
-                        if (arq && arq.files.length) {
-                            btnRdo.textContent = 'Enviando o documento...';
+                        if (!jaAnexado && !comprovanteEnviado.has(idAtual)) {
+                            btnRdo.textContent = 'Enviando...';
+                            estadoRdo('Enviando documento...', 'is-enviando');
                             await enviarComprovanteRdo(idAtual, arq.files[0]);
+                            // Registrado ANTES de gravar a reprovação: se o
+                            // passo seguinte falhar, uma nova tentativa não
+                            // sobe o arquivo de novo (o que criaria um
+                            // RESULTADO_RDO_2 para o mesmo documento).
+                            comprovanteEnviado.add(idAtual);
+                            estadoRdo('Documento anexado com sucesso ✓', 'is-ok');
                             delete docsDoModal[idAtual]; // força reler com o novo anexo
                         }
+
+                        etapa = 'registro';
                         btnRdo.textContent = 'Registrando...';
                         const j = await gravarRdo(idAtual, false, obs);
                         if (!j.ok) throw new Error(j.erro || 'Não foi possível registrar.');
+
+                        comprovanteEnviado.delete(idAtual);
                         await carregar();
                         return reabrir(idAtual);
                     } catch (err) {
+                        estadoRdo(
+                            etapa === 'anexo'
+                                ? 'Não foi possível anexar o documento. Tente novamente.'
+                                : 'O documento foi anexado, mas a reprovação não foi registrada.',
+                            'is-erro'
+                        );
                         erroEl.textContent = err.message;
                         erroEl.hidden = false;
                         btnRdo.disabled = false;
-                        btnRdo.textContent = 'Confirmar reprovação';
+                        btnRdo.textContent = 'Reprovar RDO';
                     }
                     return;
                 }

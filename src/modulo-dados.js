@@ -19,6 +19,7 @@
    ========================================================================== */
 
 const db = require('./db');
+const fluxo = require('./fluxo');
 
 /** Nome de tabela válido: só letras minúsculas, números e "_". */
 function validarNomeDeTabela(tabela) {
@@ -55,10 +56,22 @@ function hidratar(linha) {
     anexos: lerJson(linha.anexos, []),
     dados: lerJson(linha.dados, {}),
     decisoes: lerJson(linha.decisoes, {}),
+    // rdo_aprovado é integer no banco (1/0/NULL); aqui vira o booleano que o
+    // resto do código espera. Nos módulos sem RDO fica sempre null, e a tela
+    // simplesmente não desenha o bloco.
+    rdo: {
+      aprovado:
+        linha.rdo_aprovado === null || linha.rdo_aprovado === undefined
+          ? null
+          : Number(linha.rdo_aprovado) === 1,
+      por: linha.rdo_por || null,
+      em: linha.rdo_em || null,
+      obs: linha.rdo_obs || null,
+    },
   };
 }
 
-function criarCamada(tabelaBruta, slugDoModulo) {
+function criarCamada(tabelaBruta, slugDoModulo, { temRdo = false } = {}) {
   const tabela = validarNomeDeTabela(tabelaBruta);
 
   /** Lista tudo, mais recente primeiro. */
@@ -128,11 +141,70 @@ function criarCamada(tabelaBruta, slugDoModulo) {
     return buscarPorId(info.lastInsertRowid);
   }
 
+  /**
+   * Registra o resultado da pesquisa no RDO.
+   *
+   * Só faz sentido nos módulos que passam por essa etapa (temRdo). As
+   * exigências da reprovação (motivo e comprovante) são conferidas por
+   * fluxo.impedimentoParaRdo, AQUI e não só na rota: um "reprovado" gravado
+   * sem prova e sem motivo é exatamente o registro que falta quando alguém
+   * audita a decisão meses depois.
+   */
+  async function registrarRdo(id, { aprovado, observacao, por, temComprovante }) {
+    if (!temRdo) return { ok: false, erro: 'Este formulário não passa por pesquisa RDO.' };
+
+    const impedimento = fluxo.impedimentoParaRdo({ aprovado, temComprovante, observacao });
+    if (impedimento) return { ok: false, erro: impedimento };
+
+    const atual = await buscarPorId(id);
+    if (!atual) return { ok: false, erro: 'Solicitação não encontrada.' };
+
+    // Reprovar no RDO encerra o cadastro, então o status vai junto. Aprovar
+    // apenas LIBERA a decisão — e devolve o status a pendente, porque a
+    // decisão em si ainda não foi tomada.
+    const status = aprovado === false ? 'reprovado' : 'pendente';
+
+    await db
+      .prepare(
+        `UPDATE ${tabela}
+            SET rdo_aprovado = ?, rdo_por = ?, rdo_em = ?, rdo_obs = ?,
+                status = ?, revisado_por = ?,
+                revisado_em = datetime('now', 'localtime')
+          WHERE id = ?`
+      )
+      .run(aprovado ? 1 : 0, por || null, null, observacao || null, status, por || null, id);
+
+    // rdo_em recebe o MESMO carimbo que revisado_em, lido de volta do banco:
+    // gerar a data aqui usaria o relógio do servidor da aplicação, que no
+    // Vercel não é o mesmo do Postgres.
+    await db
+      .prepare(`UPDATE ${tabela} SET rdo_em = revisado_em WHERE id = ?`)
+      .run(id);
+
+    return { ok: true, solicitacao: await buscarPorId(id) };
+  }
+
   /** Registra a decisão do responsável. Devolve null se o id não existir. */
   async function registrarDecisao(id, { status, observacao, revisadoPor }) {
     if (!['aprovado', 'reprovado', 'pendente'].includes(status)) {
       throw new Error(`Status inválido: "${status}"`);
     }
+
+    // Nos módulos com RDO, a decisão vem DEPOIS da pesquisa. Barrar aqui, e
+    // não só escondendo o botão: a rota aceita POST de qualquer cliente, e é
+    // a ordem das etapas que dá sentido ao registro.
+    if (temRdo) {
+      const atual = await buscarPorId(id);
+      if (!atual) return null;
+      const rdo = atual.rdo || {};
+      if (rdo.aprovado === null || rdo.aprovado === undefined) {
+        return { erro: 'Responda a pesquisa do RDO antes de decidir este cadastro.' };
+      }
+      if (rdo.aprovado === false) {
+        return { erro: 'Cadastro reprovado no RDO. Não há decisão a tomar.' };
+      }
+    }
+
     const info = await db
       .prepare(
         `UPDATE ${tabela}
@@ -153,6 +225,9 @@ function criarCamada(tabelaBruta, slugDoModulo) {
     if (slugDoModulo) {
       await require('./documentos').excluirDaSolicitacao(slugDoModulo, id);
       await require('./atendimentos').excluirDaSolicitacao(slugDoModulo, id);
+      // O teste prático também não tem FK (a tabela serve os três módulos), e
+      // ele guarda nome e julgamento de uma pessoa — não pode ficar órfão.
+      await require('./teste-pratico').excluirDaSolicitacao(slugDoModulo, id);
     }
     const info = await db.prepare(`DELETE FROM ${tabela} WHERE id = ?`).run(id);
     return info.changes > 0;
@@ -194,6 +269,8 @@ function criarCamada(tabelaBruta, slugDoModulo) {
 
   return {
     tabela,
+    temRdo,
+    registrarRdo,
     listar,
     listarPorEmail,
     buscarPorId,

@@ -257,6 +257,11 @@ function hidratar(row, ctx = {}) {
     condutor: util(campos['CONDUTOR']) || util(campos['NOME']),
     proprietario: util(campos['PROPRIETÁRIO']) || util(campos['PROPRIETARIO']),
     placas,
+    // As duas placas SEPARADAS, além do array acima. O array serve ao filtro
+    // ("esta placa aparece no cadastro?"), mas não diz qual é cavalo e qual é
+    // carreta — e o painel precisa rotular cada uma para quem lê a linha.
+    placa_cavalo: util(campos['PLACA CAVALO']),
+    placa_carreta: util(campos['PLACA CARRETA']),
     prioridade: prioridade
       ? { id: prioridade.id, rotulo: prioridade.rotulo, bolinha: prioridade.bolinha, cor: prioridade.cor, ordem: prioridade.ordem }
       : null,
@@ -494,7 +499,7 @@ async function contarPorStatus() {
  * onde tudo passa.
  */
 async function registrarRdo(id, { aprovado, observacao, por, temComprovante }) {
-  const impedimento = fluxo.impedimentoParaRdo({ aprovado, temComprovante });
+  const impedimento = fluxo.impedimentoParaRdo({ aprovado, temComprovante, observacao });
   if (impedimento) return { ok: false, erro: impedimento };
 
   const agora = await agoraDoBanco();

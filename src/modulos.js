@@ -73,6 +73,12 @@ const MODULOS = [
     operacoesPermitidas: ['MERCADO LIVRE', 'SHOPEE', 'AMAZON'],
     operacoesObrigatorias: true,
 
+    // Passa pela pesquisa RDO antes da decisão, como o terceiro. A DIFERENÇA
+    // é o que vem depois: aqui quem analisa decide o cadastro inteiro de uma
+    // vez, enquanto no terceiro há uma decisão por gerenciadora. O agregado
+    // atende três clientes, mas não é aprovado em uns e reprovado em outros.
+    temRdo: true,
+
     // Documentos exigidos, semeados na primeira inicialização. Depois passam a
     // ser editáveis em /admin/formulario (a configuração no banco manda).
     documentosIniciais: [
@@ -110,6 +116,15 @@ const MODULOS = [
     // trabalhar, não um cadastro para operar em uma conta específica.
     operacoesPermitidas: [],
     operacoesObrigatorias: false,
+
+    // Teste prático de direção, aplicado durante a seleção. É do CANDIDATO e
+    // só dele: terceiro e agregado chegam com o motorista já contratado por
+    // outra empresa — avaliar a direção deles não é etapa do cadastro.
+    //
+    // A regra mora AQUI, e não num "if slug === candidato" espalhado pelas
+    // rotas e pelas telas: quem no futuro quiser aplicar teste no agregado
+    // liga esta chave, e a rota, o botão e a validação passam a existir juntos.
+    temTestePratico: true,
 
     documentosIniciais: [
       { codigo: 'CNH', rotulo: 'CNH', temValidade: true, obrigatorio: true },

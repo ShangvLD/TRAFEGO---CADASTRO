@@ -14,7 +14,9 @@
     <link rel="stylesheet" href="/css/base.css">
     <link rel="stylesheet" href="/css/paginas.css">
     <link rel="stylesheet" href="/css/atendimento.css">
+    <link rel="stylesheet" href="/css/acompanhamento.css">
     <link rel="stylesheet" href="/css/cadastro.css">
+    <link rel="stylesheet" href="/css/teste-pratico.css">
 </head>
 <body class="has-header">
 
@@ -60,6 +62,8 @@
             <p id="descricao">Carregando...</p>
         </section>
 
+        <!-- Indicadores. Quatro, e não os cinco do terceiro: aqui a decisão é
+             do cadastro inteiro, então "aprovado em parte" não existe. -->
         <div class="kpi-grid">
             <div class="kpi">
                 <div class="kpi-label"><span class="material-symbols-rounded">inbox</span> Total</div>
@@ -87,27 +91,71 @@
                         <span class="material-symbols-rounded">folder_zip</span>
                         <span id="btn-exportar-txt">Exportar documentos</span>
                     </button>
+                    <button class="badge is-info" id="btn-ordem" type="button" style="border:none;cursor:pointer"
+                            title="Alterna entre as mais recentes e a fila por ordem de chegada">
+                        <span class="material-symbols-rounded" style="font-size:16px">sort</span>
+                        <span id="btn-ordem-txt">Mais antigas primeiro</span>
+                    </button>
                     <button class="badge is-info" id="btn-atualizar" type="button" style="border:none;cursor:pointer">
                         <span class="material-symbols-rounded" style="font-size:16px">refresh</span> Atualizar
                     </button>
                 </div>
             </div>
 
+            <!-- Filtros no navegador: a lista é pequena e responder no mesmo
+                 quadro vale mais que uma ida ao servidor a cada tecla. -->
+            <div class="acomp-filtros">
+                <div class="acomp-filtro">
+                    <label for="f-busca">Buscar</label>
+                    <input type="search" id="f-busca" placeholder="Nome, e-mail ou cadastro">
+                </div>
+                <div class="acomp-filtro" id="filtro-cliente-caixa" hidden>
+                    <label for="f-cliente">Cliente</label>
+                    <select id="f-cliente"><option value="">Todos</option></select>
+                </div>
+                <div class="acomp-filtro">
+                    <label for="f-status">Status</label>
+                    <select id="f-status"><option value="">Todos</option></select>
+                </div>
+                <div class="acomp-filtro">
+                    <label for="f-atend">Atendimento</label>
+                    <select id="f-atend">
+                        <option value="">Todos</option>
+                        <option value="livre">Livre</option>
+                        <option value="em">Em atendimento</option>
+                    </select>
+                </div>
+                <div class="acomp-filtro">
+                    <label for="f-de">Recebido de</label>
+                    <input type="date" id="f-de">
+                </div>
+                <div class="acomp-filtro">
+                    <label for="f-ate">até</label>
+                    <input type="date" id="f-ate">
+                </div>
+                <div class="acomp-filtro acomp-filtro--acao">
+                    <button type="button" class="acomp-limpar" id="btn-limpar">Limpar filtros</button>
+                </div>
+            </div>
+
+            <div class="acomp-contagem" id="contagem"></div>
+
             <div class="table-wrap">
                 <table class="data-table">
                     <thead>
-                        <tr>
+                        <tr id="cabecalho">
                             <th class="col-sel"><input type="checkbox" id="sel-todos" title="Selecionar todos"></th>
                             <th>Data</th>
                             <th>Solicitante</th>
-                            <th>Resumo</th>
+                            <th class="col-clientes" hidden>Clientes</th>
+                            <th>Anexos</th>
                             <th>Atendimento</th>
                             <th>Status</th>
                             <th>Ações</th>
                         </tr>
                     </thead>
                     <tbody id="tabela-corpo">
-                        <tr><td colspan="7">
+                        <tr><td colspan="8">
                             <div class="empty-state">
                                 <span class="material-symbols-rounded">hourglass_empty</span>
                                 <h4>Carregando...</h4>
@@ -119,6 +167,20 @@
         </section>
     </main>
 
+    <!-- Modal de detalhes da solicitação -->
+    <div class="modal-overlay" id="modal-detalhe" hidden>
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
+            <div class="modal-header">
+                <h3 id="modal-titulo"><span class="material-symbols-rounded" style="color:var(--primary);vertical-align:-5px">assignment</span> Detalhes da solicitação</h3>
+                <button class="modal-close" id="modal-fechar" type="button" aria-label="Fechar">
+                    <span class="material-symbols-rounded">close</span>
+                </button>
+            </div>
+            <div class="modal-body" id="modal-body"></div>
+            <div class="modal-footer" id="modal-footer"></div>
+        </div>
+    </div>
+
     <div class="toast" id="toast-novidade" role="status" aria-live="polite">
         <span class="material-symbols-rounded">notifications_active</span>
         <span class="toast-txt"></span>
@@ -128,16 +190,57 @@
     <script src="/js/zip.js"></script>
     <script src="/js/exportar.js"></script>
     <script src="/js/atendimento.js"></script>
+    <script src="/js/teste-pratico.js"></script>
     <script>
+        /* ==================================================================
+           Painel genérico de um módulo (agregado, candidato, e os futuros)
+
+           A referência de estrutura e de experiência é o painel do terceiro
+           (views/responsavel.html): mesmo cabeçalho, mesmos indicadores,
+           mesma tabela, mesmo modal de detalhe, mesma exportação.
+
+           O QUE NÃO FOI COPIADO, e por quê:
+
+             decisão por cliente   aqui a decisão é do cadastro inteiro. O
+                                   agregado atende três clientes, mas quem
+                                   analisa decide uma vez — não há selo por
+                                   gerenciadora a exibir.
+             grau de importância   o campo não existe nestes formulários.
+                                   Uma coluna de prioridade mostraria um traço
+                                   em toda linha, que é pior que não ter.
+             tipo de pesquisa      idem: é modalidade do cadastro de terceiro.
+
+           Inventar esses elementos deixaria as telas parecidas e os dados
+           errados. O que se padroniza é a estrutura, não o conteúdo.
+           ================================================================== */
+
         // O módulo vem da URL: /painel/<slug>
         const SLUG = window.location.pathname.split('/').filter(Boolean)[1] || '';
         const API = '/api/modulos/' + SLUG + '/solicitacoes';
 
         const corpo = document.getElementById('tabela-corpo');
-        let lista = [];
-        let podeExcluir = false;
-        let atendimentoPorId = {}; // quem está cuidando de cada cadastro
+        const overlay = document.getElementById('modal-detalhe');
+        const modalBody = document.getElementById('modal-body');
+        const modalFooter = document.getElementById('modal-footer');
+        const elContagem = document.getElementById('contagem');
+
+        let lista = [];                // tudo o que veio do servidor
+        let podeExcluir = false;       // é admin
+        let contagemAnexos = {};       // id -> quantos documentos do portal
+        let atendimentoPorId = {};     // id -> quem está cuidando
         let meuId = null;
+        let idAtual = null;            // solicitação aberta no modal
+        let maisAntigasPrimeiro = false;
+        let temOperacoes = false;      // o módulo se vincula a clientes?
+        let temRdo = false;            // o módulo passa pela pesquisa RDO?
+        let temTestePratico = false;   // o módulo aplica teste prático de direção?
+        let testePorId = {};           // id -> estado do teste (só quem tem teste)
+        let podeVerRdo = false;        // o resultado da pesquisa é restrito
+
+        // Detalhe carregado sob demanda: id -> { solicitacao, documentos,
+        // historico }. undefined = ainda carregando, que é diferente de vazio.
+        const detalheDoModal = {};
+        const buscaEmCurso = {};
 
         function esc(txt) {
             const d = document.createElement('div');
@@ -157,33 +260,291 @@
             reprovado: '<span class="badge is-danger">Reprovado</span>',
         };
 
-        function linhaHtml(s) {
-            const acoes = s.status === 'pendente'
-                ? `<button class="badge is-success acao aprovar" data-id="${s.id}" style="border:none;cursor:pointer">Aprovar</button>
-                   <button class="badge is-danger acao reprovar" data-id="${s.id}" style="border:none;cursor:pointer;margin-left:4px">Reprovar</button>`
-                : `<span style="color:var(--text-secondary);font-size:0.82rem">por ${esc(s.revisado_por || '—')}</span>`;
+        const ROTULO_STATUS = { pendente: 'Pendente', aprovado: 'Aprovado', reprovado: 'Reprovado' };
 
-            const excluir = podeExcluir
-                ? `<button class="badge is-danger acao excluir" data-id="${s.id}" style="border:none;cursor:pointer;margin-left:4px" title="Excluir">
-                       <span class="material-symbols-rounded" style="font-size:15px">delete</span></button>`
+        /**
+         * Badge da SITUAÇÃO, quando o módulo tem etapas (o agregado passa pelo
+         * RDO antes da decisão). O rótulo vem do servidor — src/fluxo.js é a
+         * única tabela de nomes, para a tela não manter uma segunda
+         * envelhecendo em separado.
+         *
+         * Sem etapas (candidato), cai no status simples: é o que existe, e
+         * anunciar uma situação inventada seria pior que não ter nenhuma.
+         */
+        const CLASSE_COR = {
+            espera: 'is-warning',
+            andamento: 'is-info',
+            externo: 'is-parcial',
+            aprovado: 'is-success',
+            reprovado: 'is-danger',
+            'meio-termo': 'is-parcial',
+        };
+
+        function badgeSituacao(s) {
+            const sit = s.situacao;
+            if (!sit) return BADGE[s.status] || esc(s.status);
+            const check = sit.finalizado
+                ? '<span class="material-symbols-rounded" style="font-size:14px;vertical-align:-2px">task_alt</span> '
+                : '';
+            return `<span class="badge ${CLASSE_COR[sit.cor] || 'is-warning'}" title="${esc(sit.ajuda || '')}">${check}${esc(sit.rotulo)}</span>`;
+        }
+
+        /**
+         * Clientes do cadastro.
+         *
+         * Vêm de `dados.operacoes`, e NÃO do campo "assunto". No módulo
+         * terceiro o assunto guarda os clientes separados por "|"; aqui ele
+         * guarda o resumo do cadastro ("Fulano — ABC1D23"). Passar esse resumo
+         * por clientesChips() desenhava o nome do motorista como se fosse uma
+         * gerenciadora, com cor sorteada por hash.
+         */
+        function clientesDe(s) {
+            const ops = (s.dados && s.dados.operacoes) || [];
+            return Array.isArray(ops) ? ops.filter(Boolean) : [];
+        }
+
+        function chipsDeClientes(s) {
+            const nomes = clientesDe(s);
+            if (!nomes.length) return '<span style="color:var(--text-secondary)">—</span>';
+            return '<div class="cliente-chips">' + nomes.map((n) =>
+                '<span class="cliente-chip" style="--chip:' + window.corCliente(n) + '">' + esc(n) + '</span>'
+            ).join('') + '</div>';
+        }
+
+        // ------------------------------------------------------------------
+        // Anexos: as duas origens ficam separadas de propósito
+        //
+        // Só os do portal entram no ZIP. Os do Microsoft Forms estão no
+        // SharePoint e exigem login M365 — mostrar um número só faria a
+        // exportação parecer quebrada.
+        // ------------------------------------------------------------------
+        function anexosResumo(s) {
+            const doForms = Array.isArray(s.anexos) ? s.anexos.length : 0;
+            const doPortal = contagemAnexos[s.id] || 0;
+            const partes = [];
+
+            if (doPortal) {
+                partes.push('<span class="anexo-portal" title="Enviados pelo portal — entram no ZIP">' +
+                    '<span class="material-symbols-rounded">cloud_done</span>' + doPortal + ' no portal</span>');
+            }
+            if (doForms) {
+                partes.push('<span class="anexo-forms" title="Enviados pelo Microsoft Forms — ficam no SharePoint">' +
+                    '<span class="material-symbols-rounded">link</span>' + doForms + ' no Forms</span>');
+            }
+            return partes.length
+                ? '<div class="anexo-origens">' + partes.join('') + '</div>'
+                : '<span style="color:var(--text-secondary)">—</span>';
+        }
+
+        function ehImagem(nome, url) {
+            const alvo = String(nome || url || '').toLowerCase();
+            return /\.(png|jpe?g|gif|webp|bmp|heic)(\?|$)/.test(alvo);
+        }
+
+        function iconeArquivo(nome, url) {
+            const alvo = String(nome || url || '').toLowerCase();
+            if (/\.pdf(\?|$)/.test(alvo)) return 'picture_as_pdf';
+            if (/\.(docx?|odt|rtf)(\?|$)/.test(alvo)) return 'description';
+            if (/\.(xlsx?|csv|ods)(\?|$)/.test(alvo)) return 'table';
+            if (/\.(png|jpe?g|gif|webp|bmp|svg|heic)(\?|$)/.test(alvo)) return 'image';
+            if (/\.(zip|rar|7z)(\?|$)/.test(alvo)) return 'folder_zip';
+            return 'attach_file';
+        }
+
+        // ------------------------------------------------------------------
+        // Ordenação e filtros
+        // ------------------------------------------------------------------
+
+        /**
+         * O servidor devolve por data, da mais recente para a mais antiga — é
+         * como a tela é lida no dia a dia. O botão inverte para a FILA: quem
+         * esperou mais aparece primeiro, que é o que faz uma fila justa.
+         *
+         * Não há ordenação por grau de importância como no terceiro: estes
+         * formulários não têm o campo, e ordenar por algo que ninguém
+         * preencheu seria uma fila inventada.
+         */
+        function naOrdemEscolhida(itens) {
+            if (!maisAntigasPrimeiro) return itens;
+            return [...itens].sort((a, b) => {
+                const d = String(a.criado_em).localeCompare(String(b.criado_em));
+                return d !== 0 ? d : a.id - b.id;
+            });
+        }
+
+        const semAcento = (t) =>
+            String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
+
+        function filtrar() {
+            const busca = semAcento(document.getElementById('f-busca').value.trim());
+            const cliente = document.getElementById('f-cliente').value;
+            const status = document.getElementById('f-status').value;
+            const atend = document.getElementById('f-atend').value;
+            const de = document.getElementById('f-de').value;
+            const ate = document.getElementById('f-ate').value;
+
+            return lista.filter((s) => {
+                if (busca) {
+                    const alvo = semAcento(
+                        [s.solicitante_nome, s.solicitante_email, s.assunto, s.detalhes].join(' ')
+                    );
+                    if (!alvo.includes(busca)) return false;
+                }
+                if (cliente && !clientesDe(s).some((c) => c.toUpperCase() === cliente)) return false;
+                if (status && (s.status || 'pendente') !== status) return false;
+
+                if (atend) {
+                    const emAt = !!(atendimentoPorId[s.id] && atendimentoPorId[s.id].emAtendimento);
+                    if (atend === 'livre' && emAt) return false;
+                    if (atend === 'em' && !emAt) return false;
+                }
+
+                // A data comparada é a LOCAL, não o texto UTC do banco:
+                // filtrar pelo texto cru jogaria os registros do fim do dia
+                // para o dia seguinte — o mesmo erro que o fuso já causou na
+                // exibição.
+                if (de || ate) {
+                    const d = window.comoData ? window.comoData(s.criado_em) : null;
+                    if (!d) return false;
+                    const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
+                                '-' + String(d.getDate()).padStart(2, '0');
+                    if (de && iso < de) return false;
+                    if (ate && iso > ate) return false;
+                }
+                return true;
+            });
+        }
+
+        /** Opções dos seletores, a partir do que existe na lista. */
+        function montarSeletores() {
+            const sel = document.getElementById('f-status');
+            const antes = sel.value;
+            const vistos = new Set(lista.map((s) => s.status || 'pendente'));
+            sel.innerHTML = '<option value="">Todos</option>' +
+                [...vistos].map((v) => `<option value="${esc(v)}">${esc(ROTULO_STATUS[v] || v)}</option>`).join('');
+            sel.value = antes;
+
+            if (!temOperacoes) return;
+            const selC = document.getElementById('f-cliente');
+            const antesC = selC.value;
+            const clientes = new Set();
+            for (const s of lista) for (const c of clientesDe(s)) clientes.add(c.toUpperCase());
+            selC.innerHTML = '<option value="">Todos</option>' +
+                [...clientes].sort().map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+            selC.value = antesC;
+        }
+
+        // ------------------------------------------------------------------
+        // Tabela
+        // ------------------------------------------------------------------
+        function colunas() {
+            // seleção, data, solicitante, [clientes], anexos, atendimento,
+            // status, ações
+            return temOperacoes ? 8 : 7;
+        }
+
+        /* ------------------------------------------------------------------
+           Célula do solicitante: quem pediu, e o que foi pedido.
+
+           Mostrava nome e e-mail em duas linhas. Só que vários usuários foram
+           cadastrados com o e-mail no lugar do nome, e a célula repetia o
+           mesmo texto duas vezes, ocupando a linha sem dizer nada.
+
+           Agora o e-mail vem em cima e embaixo o RESUMO do cadastro. Os
+           rótulos saem deste mapa, e não de uma lista por módulo: assim o
+           agregado mostra placa e proprietário, o candidato mostra tipo e
+           localidade, e um módulo futuro só precisa acrescentar a chave dele.
+           ------------------------------------------------------------------ */
+        const ROTULO_RESUMO = [
+            ['condutor_nome', 'Motorista'],
+            ['placa_cavalo', 'Placa'],
+            ['placa_carreta', 'Carreta'],
+            ['proprietario_nome', 'Proprietário'],
+            ['tipo_motorista', 'Tipo'],
+            ['localidade', 'Localidade'],
+        ];
+
+        function solicitanteCel(s) {
+            const email = String(s.solicitante_email || '').trim();
+            const nome = String(s.solicitante_nome || '').trim();
+
+            // "Fulano" vale; "fulano@jomedlog.com.br" e "fulano" (a parte
+            // antes do @) são o mesmo dado que o e-mail já mostra.
+            const local = email.split('@')[0].toLowerCase();
+            const nomeUtil = nome && nome.toLowerCase() !== email.toLowerCase() && nome.toLowerCase() !== local;
+
+            const d = s.dados || {};
+            const itens = ROTULO_RESUMO
+                .map(([campo, rot]) => [rot, d[campo]])
+                .filter(([, v]) => v != null && String(v).trim() !== '');
+
+            // Sem nenhum campo conhecido (cadastro antigo, ou módulo novo cujo
+            // mapa ainda não foi preenchido) cai no assunto, que é o resumo
+            // que o servidor já montou — melhor que uma célula muda.
+            const resumo = itens.length
+                ? '<div class="sol-resumo">' + itens.map(([rot, val]) =>
+                      `<span class="sol-item"><span class="sol-rot">${rot}</span>${esc(val)}</span>`
+                  ).join('') + '</div>'
+                : (s.assunto ? `<div class="sol-resumo"><span class="sol-item">${esc(s.assunto)}</span></div>` : '');
+
+            return `<div class="sol-cel">
+                <span class="sol-email">${esc(email)}</span>
+                ${nomeUtil ? `<span class="sol-nome">${esc(nome)}</span>` : ''}
+                ${resumo}
+            </div>`;
+        }
+
+        function linhaHtml(s) {
+            const verBtn = `<button class="btn-acao ver" data-id="${s.id}" title="Ver e decidir">
+                                <span class="material-symbols-rounded">visibility</span>
+                            </button>`;
+            // O teste só entra na linha do módulo que aplica teste. A cor e o
+            // tooltip do botão carregam o estado (não realizado, em andamento,
+            // aprovado, reprovado), então a situação se lê sem abrir nada.
+            const testeBtn = temTestePratico ? TestePratico.icone(testePorId[s.id], s.id) : '';
+
+            const excluirBtn = podeExcluir
+                ? `<button class="btn-acao excluir" data-id="${s.id}" title="Excluir">
+                       <span class="material-symbols-rounded">delete</span>
+                   </button>`
                 : '';
 
-            // Entrar no cadastro sem decidir nada — para quem só vai apurar.
-            const atender = `<button class="badge is-info acao atender" data-id="${s.id}" style="border:none;cursor:pointer;margin-left:4px" title="Assumir ou acompanhar">
-                       <span class="material-symbols-rounded" style="font-size:15px">headset_mic</span></button>`;
-
-            const anexos = (contagemAnexos[s.id] || 0);
-            return `<tr>
+            return `<tr data-id="${s.id}" class="linha-clic">
                 <td class="col-sel"><input type="checkbox" class="sel-linha" data-id="${s.id}"></td>
-                <td>${formatarData(s.criado_em)}
-                    ${anexos ? `<br><small class="anexos-tag"><span class="material-symbols-rounded">attach_file</span>${anexos}</small>` : ''}
-                </td>
-                <td>${esc(s.solicitante_nome)}<br><small style="color:var(--text-secondary)">${esc(s.solicitante_email)}</small></td>
-                <td>${clientesChips(s.assunto)}${s.detalhes ? `<br><small style="color:var(--text-secondary)">${esc(String(s.detalhes).slice(0, 90))}${String(s.detalhes).length > 90 ? '…' : ''}</small>` : ''}</td>
+                <td>${formatarData(s.criado_em)}</td>
+                <td>${solicitanteCel(s)}</td>
+                ${temOperacoes ? `<td>${chipsDeClientes(s)}</td>` : ''}
+                <td>${anexosResumo(s)}</td>
                 <td>${Atendimento.selo(atendimentoPorId[s.id])}</td>
-                <td>${BADGE[s.status] || esc(s.status)}${s.observacao ? `<br><small style="color:var(--text-secondary)">${esc(s.observacao)}</small>` : ''}</td>
-                <td>${acoes}${atender}${excluir}</td>
+                <td>${badgeSituacao(s)}${s.observacao
+                        ? `<br><small style="color:var(--text-secondary)">${esc(s.observacao)}</small>`
+                        : ''}</td>
+                <td><div style="display:flex;gap:6px;align-items:center">${verBtn}${testeBtn}${excluirBtn}</div></td>
             </tr>`;
+        }
+
+        function desenhar() {
+            const filtrada = filtrar();
+
+            elContagem.textContent = filtrada.length === lista.length
+                ? `${lista.length} solicitação(ões)`
+                : `${filtrada.length} de ${lista.length} solicitação(ões)`;
+
+            if (!filtrada.length) {
+                // Distinguir "nada ainda" de "nada com esses filtros": são
+                // situações diferentes e pedem ações diferentes de quem lê.
+                const temDados = lista.length > 0;
+                corpo.innerHTML = `<tr><td colspan="${colunas()}"><div class="empty-state">
+                    <span class="material-symbols-rounded">${temDados ? 'filter_alt_off' : 'database'}</span>
+                    <h4>${temDados ? 'Nenhuma solicitação com esses filtros' : 'Nenhuma solicitação ainda'}</h4>
+                    <p>${temDados
+                        ? 'Ajuste ou limpe os filtros para ver as demais.'
+                        : 'As solicitações enviadas por este formulário aparecem aqui.'}</p>
+                </div></td></tr>`;
+            } else {
+                corpo.innerHTML = naOrdemEscolhida(filtrada).map(linhaHtml).join('');
+            }
+            atualizarBotaoExportar();
         }
 
         function atualizarKpis(r) {
@@ -202,21 +563,19 @@
 
                 atualizarKpis(j.resumo || {});
                 podeExcluir = !!j.podeExcluir;
+                temRdo = !!j.temRdo;
+                podeVerRdo = !!j.podeVerRdo;
                 contagemAnexos = j.anexos || {};
                 atendimentoPorId = j.atendimentos || {};
+                // Vazio nos módulos sem teste — o servidor nem consulta.
+                testePorId = j.testes || {};
                 meuId = j.usuarioId ?? null;
                 lista = j.solicitacoes || [];
 
-                corpo.innerHTML = lista.length
-                    ? lista.map(linhaHtml).join('')
-                    : `<tr><td colspan="7"><div class="empty-state">
-                           <span class="material-symbols-rounded">database</span>
-                           <h4>Nenhuma solicitação ainda</h4>
-                           <p>As solicitações enviadas por este formulário aparecem aqui.</p>
-                       </div></td></tr>`;
-                atualizarBotaoExportar();
+                montarSeletores();
+                desenhar();
             } catch (e) {
-                corpo.innerHTML = `<tr><td colspan="7"><div class="empty-state">
+                corpo.innerHTML = `<tr><td colspan="${colunas()}"><div class="empty-state">
                         <span class="material-symbols-rounded">wifi_off</span>
                         <h4>Erro ao carregar</h4>
                         <p>Não foi possível falar com o servidor.</p>
@@ -224,7 +583,387 @@
             }
         }
 
+        // ------------------------------------------------------------------
+        // Modal de detalhe
+        //
+        // Antes esta tela não tinha modal: decidir era responder a dois
+        // prompt() do navegador, sem ver os campos do cadastro nem os
+        // documentos enviados — que é justamente o que embasa a decisão.
+        // ------------------------------------------------------------------
+
+        /**
+         * Quebra "Condutor: X | CPF: Y" em linhas, na ordem em que vieram,
+         * ocultando campos vazios ou com placeholder ("." / "-").
+         */
+        function detalhesCampos(detalhes) {
+            const txt = String(detalhes || '').trim();
+            if (!txt) return '<p class="modal-vazio">Sem detalhes informados.</p>';
+
+            const linhas = [];
+            for (const parte of txt.split(/\s*\|\s*/)) {
+                const i = parte.indexOf(':');
+                let rot = '', val = parte.trim();
+                if (i >= 0) { rot = parte.slice(0, i).trim(); val = parte.slice(i + 1).trim(); }
+                if (!val || /^[.\-–—\s]*$/.test(val)) continue;
+
+                // "Operações" já aparece como chips no topo do modal; repetir
+                // como texto cru seria a mesma informação em dois formatos.
+                if (/^opera[cç][õo]es$/i.test(rot)) continue;
+
+                const valor = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)
+                    ? `<a href="mailto:${esc(val)}">${esc(val)}</a>`
+                    : esc(val);
+                linhas.push(
+                    `<div class="campo">${rot ? `<span class="campo-rot">${esc(rot)}</span>` : ''}` +
+                    `<span class="campo-val"><span class="campo-texto">${valor}</span></span></div>`
+                );
+            }
+            return linhas.length
+                ? `<div class="detalhe-campos">${linhas.join('')}</div>`
+                : '<p class="modal-vazio">Sem detalhes informados.</p>';
+        }
+
+        /** Card de um documento enviado pelo portal. */
+        function documentoCard(d) {
+            const nome = esc(d.tipo || d.nome_arquivo);
+            const tamanho = d.tamanho ? Math.max(1, Math.round(d.tamanho / 1024)) + ' KB' : '';
+
+            if (!d.url) {
+                return `<div class="anexo-card is-indisponivel">
+                    <span class="anexo-card__icon material-symbols-rounded">error</span>
+                    <span class="anexo-card__info"><strong>${nome}</strong>
+                        <small>${esc(d.indisponivel || 'Arquivo indisponível')}</small></span>
+                </div>`;
+            }
+
+            const icone = ehImagem(d.nome_arquivo, d.url) ? 'image' : 'description';
+            const visual = ehImagem(d.nome_arquivo, d.url)
+                ? `<span class="anexo-card__thumb">
+                       <img src="${esc(d.url)}" alt="" loading="lazy" onerror="this.remove()">
+                       <span class="material-symbols-rounded">${icone}</span>
+                   </span>`
+                : `<span class="anexo-card__icon material-symbols-rounded">${icone}</span>`;
+
+            return `<a class="anexo-card" href="${esc(d.url)}" target="_blank" rel="noopener">
+                ${visual}
+                <span class="anexo-card__info"><strong>${nome}</strong>
+                    <small>${esc(d.nome_original || d.nome_arquivo)}${tamanho ? ' · ' + tamanho : ''}</small></span>
+                <span class="anexo-card__open material-symbols-rounded">open_in_new</span>
+            </a>`;
+        }
+
+        /** Card de um anexo do Microsoft Forms (mora no SharePoint). */
+        function anexoFormsCard(a) {
+            const nome = esc(a.nome || 'Documento');
+            if (!a.url) {
+                return `<div class="anexo-card is-plain">
+                    <span class="anexo-card__icon material-symbols-rounded">${iconeArquivo(a.nome)}</span>
+                    <span class="anexo-card__info"><strong>${nome}</strong><small>Sem link disponível</small></span>
+                </div>`;
+            }
+            return `<a class="anexo-card" href="${esc(a.url)}" target="_blank" rel="noopener">
+                <span class="anexo-card__icon material-symbols-rounded">${iconeArquivo(a.nome, a.url)}</span>
+                <span class="anexo-card__info"><strong>${nome}</strong><small>Abrir no Microsoft 365</small></span>
+                <span class="anexo-card__open material-symbols-rounded">open_in_new</span>
+            </a>`;
+        }
+
+        /**
+         * Bloco da pesquisa RDO — a etapa que vem ANTES da decisão.
+         *
+         * Três estados: não pesquisado (pergunta), aprovado (liberado) e
+         * reprovado (fim de linha, com o comprovante à vista).
+         *
+         * Reprovar exige DUAS coisas, conferidas antes de gravar: o
+         * comprovante anexado e o MOTIVO escrito. Gravar primeiro e cobrar
+         * depois deixaria cadastros reprovados sem prova e sem explicação —
+         * que é justamente o que uma auditoria vai procurar.
+         */
+        function blocoRdo(s) {
+            if (!temRdo || !podeVerRdo) return '';
+
+            const rdo = s.rdo || {};
+            const pacote = detalheDoModal[s.id];
+            const docs = (pacote && pacote.documentos) || [];
+
+            // O ARQUIVO do comprovante é só do admin, então para o responsável
+            // ele não vem na lista. O que vem é o SINAL de que existe
+            // (rdo.temComprovante), suficiente para confirmar a reprovação.
+            const comprovante = docs.find((d) => String(d.tipo).toUpperCase() === 'RESULTADO RDO');
+            const anexado = !!comprovante || rdo.temComprovante === true;
+
+            if (rdo.aprovado === null || rdo.aprovado === undefined) {
+                return `<div class="rdo-bloco rdo-bloco--pergunta">
+                    <div class="rdo-titulo"><span class="material-symbols-rounded">travel_explore</span> RDO aprovado?</div>
+                    <p class="rdo-ajuda">Pesquisa interna, feita antes de decidir o cadastro.</p>
+                    <div class="rdo-acoes">
+                        <button type="button" class="btn-rdo sim" data-rdo="sim">
+                            <span class="material-symbols-rounded">check</span> Sim
+                        </button>
+                        <button type="button" class="btn-rdo nao" data-rdo="nao">
+                            <span class="material-symbols-rounded">close</span> Não
+                        </button>
+                    </div>
+                    <div id="rdo-reprova" hidden>
+                        <p class="rdo-exigencia">
+                            <span class="material-symbols-rounded">attach_file</span>
+                            Anexe o resultado do RDO e escreva o motivo para confirmar a
+                            reprovação. Sem os dois o cadastro não pode ser reprovado.
+                        </p>
+                        ${anexado
+                            ? `<p class="rdo-ok"><span class="material-symbols-rounded">check_circle</span>
+                                 ${comprovante
+                                     ? esc(comprovante.nome_original || comprovante.nome_arquivo) + ' anexado.'
+                                     : 'Comprovante anexado.'}</p>`
+                            : `<input type="file" id="rdo-arquivo" accept=".pdf,.jpg,.jpeg,.png">`}
+                        <textarea id="rdo-obs" rows="2" placeholder="Motivo da reprovação (obrigatório)"></textarea>
+                        <button type="button" class="btn-rdo confirmar" id="rdo-confirmar" disabled>
+                            Confirmar reprovação
+                        </button>
+                        <div class="rdo-erro" id="rdo-erro" hidden></div>
+                    </div>
+                </div>`;
+            }
+
+            const quem = `${esc(rdo.por || '—')}${rdo.em ? ' · ' + formatarData(rdo.em) : ''}`;
+            const obs = rdo.obs ? `<div class="rdo-obs">${esc(rdo.obs)}</div>` : '';
+
+            if (rdo.aprovado === false) {
+                return `<div class="rdo-bloco rdo-bloco--reprovado">
+                    <div class="rdo-titulo"><span class="material-symbols-rounded">block</span> Reprovado no RDO</div>
+                    <p class="rdo-ajuda">O cadastro não segue para a decisão. Reprovado por ${quem}.</p>
+                    ${obs}
+                    ${comprovante
+                        ? `<a class="rdo-doc" href="${esc(comprovante.url || '#')}" target="_blank" rel="noopener">
+                             <span class="material-symbols-rounded">description</span>
+                             Ver o resultado do RDO</a>`
+                        : anexado
+                            ? `<p class="rdo-ok"><span class="material-symbols-rounded">check_circle</span>
+                                 Comprovante anexado — o arquivo é visível ao administrador.</p>`
+                            : '<p class="rdo-exigencia">Comprovante não localizado.</p>'}
+                </div>`;
+            }
+
+            return `<div class="rdo-bloco rdo-bloco--aprovado">
+                <div class="rdo-titulo"><span class="material-symbols-rounded">verified</span> RDO aprovado</div>
+                <p class="rdo-ajuda">Liberado para a decisão. Aprovado por ${quem}.</p>
+                ${obs}
+            </div>`;
+        }
+
+        function linhaDetalhe(rot, val) {
+            return `<div class="detalhe-linha"><span class="detalhe-rot">${rot}</span><span class="detalhe-val">${val}</span></div>`;
+        }
+
+        function secao(icone, titulo) {
+            return `<h4 class="detalhe-secao">
+                <span class="material-symbols-rounded" style="vertical-align:-5px;color:var(--primary)">${icone}</span>
+                ${titulo}
+            </h4>`;
+        }
+
+        /**
+         * O teste prático dentro do detalhe do cadastro.
+         *
+         * Vazio — não "nenhum teste" — nos módulos que não aplicam teste: dizer
+         * "sem teste prático" num cadastro de terceiro anunciaria uma etapa que
+         * não existe para ele, que é o mesmo erro de mostrar coluna vazia.
+         *
+         * O estado vem da listagem (testePorId) e, quando o detalhe já chegou,
+         * do próprio detalhe — que é mais novo e traz a ficha inteira.
+         */
+        function blocoTeste(s) {
+            if (!temTestePratico) return '';
+            const pacote = detalheDoModal[s.id];
+            const teste = (pacote && pacote.teste !== undefined) ? pacote.teste : testePorId[s.id];
+            return secao('assignment_turned_in', 'Teste prático de direção') +
+                   TestePratico.resumo(teste, s.id);
+        }
+
+        function detalheHtml(s) {
+            const pacote = detalheDoModal[s.id];
+            const docs = pacote && pacote.documentos;
+            const anexos = Array.isArray(s.anexos) ? s.anexos : [];
+
+            // Três estados, e vale distinguir: carregando, nenhum documento, e
+            // a lista. Mostrar "nenhum documento" enquanto a consulta está em
+            // curso faz parecer que o anexo se perdeu.
+            let blocoDocs;
+            if (docs === undefined) {
+                blocoDocs = '<p class="modal-vazio">Carregando os documentos...</p>';
+            } else if (!docs.length) {
+                blocoDocs = '<p class="modal-vazio">Nenhum documento enviado pelo portal.</p>';
+            } else {
+                blocoDocs = `<div class="anexo-lista">${docs.map(documentoCard).join('')}</div>`;
+            }
+
+            const historico = (pacote && pacote.historico) || [];
+            const blocoHistorico = historico.length
+                ? secao('history', 'Quem passou por este cadastro') +
+                  '<div class="detalhe-grid">' + historico.map((h) =>
+                      linhaDetalhe(
+                          esc(h.papel === 'responsavel' ? 'Responsável' : 'Colaborador'),
+                          esc(h.usuario_nome) +
+                              (h.entrou_em ? ' · ' + esc(Atendimento.quando(h.entrou_em)) : '') +
+                              // Quem já saiu continua no histórico: é o que
+                              // responde "com quem eu falo sobre isso" depois
+                              // de a pessoa trocar.
+                              (h.saiu_em ? ' <small>(saiu)</small>' : '')
+                      )
+                  ).join('') + '</div>'
+                : '';
+
+            const decisao = s.status && s.status !== 'pendente'
+                ? linhaDetalhe('Decidido por', esc(s.revisado_por || '—') +
+                    (s.revisado_em ? ' · ' + formatarData(s.revisado_em) : ''))
+                : '';
+
+            return `
+                <div class="detalhe-topo">
+                    <div>
+                        <strong class="detalhe-nome">${esc(s.solicitante_nome)}</strong>
+                        <div class="detalhe-email">${esc(s.solicitante_email)}</div>
+                    </div>
+                    ${badgeSituacao(s)}
+                </div>
+                ${s.situacao && s.situacao.falta && s.situacao.falta.length
+                    ? '<div class="detalhe-falta">Falta: ' + s.situacao.falta.map(esc).join(' · ') + '</div>'
+                    : ''}
+                <div class="detalhe-grid">
+                    ${linhaDetalhe('Recebida em', formatarData(s.criado_em))}
+                    ${linhaDetalhe('Cadastro', esc(s.assunto))}
+                    ${temOperacoes ? linhaDetalhe('Clientes', chipsDeClientes(s)) : ''}
+                    ${decisao}
+                </div>
+                ${s.observacao ? `<div class="detalhe-grid">${linhaDetalhe('Observação', esc(s.observacao))}</div>` : ''}
+                ${blocoRdo(s)}
+                ${blocoTeste(s)}
+                ${secao('list_alt', 'Dados do cadastro')}
+                ${detalhesCampos(s.detalhes)}
+                ${secao('cloud_done', 'Documentos enviados pelo portal' + (docs ? ` (${docs.length})` : ''))}
+                ${blocoDocs}
+                ${anexos.length
+                    ? secao('folder_open', `Anexos do Microsoft Forms (${anexos.length})`) +
+                      `<div class="anexo-lista">${anexos.map(anexoFormsCard).join('')}</div>`
+                    : ''}
+                ${blocoHistorico}
+            `;
+        }
+
+        function footerHtml(s) {
+            const botoes = [];
+            if (podeExcluir) {
+                botoes.push(`<button class="btn-modal excluir" data-id="${s.id}" type="button">
+                    <span class="material-symbols-rounded">delete</span> Excluir
+                </button>`);
+            }
+            // Nos módulos com etapas, decidir antes do RDO não faz sentido —
+            // e o servidor recusa. Desabilitar o botão com a explicação no
+            // title evita o clique que só produz um erro.
+            const barrado = s.situacao && s.situacao.podeDecidir === false;
+            const motivo = barrado ? esc(s.situacao.ajuda || 'Esta etapa ainda não foi liberada.') : '';
+            const trava = barrado ? ` disabled title="${motivo}"` : '';
+
+            // Decisão já tomada continua reversível pelos mesmos botões: o
+            // registro guarda quem decidiu por último, e corrigir engano sem
+            // mexer no banco é o que faltava aqui.
+            botoes.push(`<button class="btn-modal reprovar" data-id="${s.id}" type="button"${trava}>
+                <span class="material-symbols-rounded">close</span> Reprovar
+            </button>`);
+            botoes.push(`<button class="btn-modal aprovar" data-id="${s.id}" type="button"${trava}>
+                <span class="material-symbols-rounded">check</span> Aprovar
+            </button>`);
+            return botoes.join('');
+        }
+
+        function redesenharDetalhe(s) {
+            modalBody.innerHTML = Atendimento.detalhe(atendimentoPorId[s.id]) + detalheHtml(s);
+            modalFooter.innerHTML = footerHtml(s);
+        }
+
+        /**
+         * Detalhe completo do cadastro, buscado ao abrir o modal.
+         *
+         * Não vem na listagem: as URLs dos documentos são assinadas e expiram,
+         * então gerá-las para a página inteira desperdiçaria quase todas — o
+         * analista abre um cadastro de cada vez.
+         */
+        async function carregarDetalhe(s, { silencioso = false } = {}) {
+            if (detalheDoModal[s.id]) {
+                if (!silencioso) redesenharDetalhe(s);
+                return;
+            }
+            if (buscaEmCurso[s.id]) {
+                await buscaEmCurso[s.id];
+                if (!silencioso && idAtual === s.id) redesenharDetalhe(s);
+                return;
+            }
+
+            buscaEmCurso[s.id] = (async () => {
+                try {
+                    const r = await fetch(`${API}/${s.id}/detalhe`);
+                    const j = await r.json();
+                    detalheDoModal[s.id] = j.ok
+                        ? { documentos: j.documentos || [], historico: j.historico || [], teste: j.teste || null }
+                        : { documentos: [], historico: [] };
+                } catch (e) {
+                    detalheDoModal[s.id] = { documentos: [], historico: [] };
+                }
+            })();
+
+            await buscaEmCurso[s.id];
+            delete buscaEmCurso[s.id];
+
+            // Só redesenha se o modal ainda é o mesmo: a resposta pode chegar
+            // depois de a pessoa fechar e abrir outro cadastro.
+            if (!silencioso && idAtual === s.id) redesenharDetalhe(s);
+        }
+
+        function abrirModal(id) {
+            const s = lista.find((x) => String(x.id) === String(id));
+            if (!s) return;
+            idAtual = s.id;
+            redesenharDetalhe(s);
+            overlay.hidden = false;
+            document.body.style.overflow = 'hidden';
+            carregarDetalhe(s);
+        }
+
+        function fecharModal() {
+            overlay.hidden = true;
+            idAtual = null;
+            document.body.style.overflow = '';
+        }
+
+        /**
+         * Abre o cadastro DEPOIS de a pessoa declarar como vai participar.
+         *
+         * A pergunta vem antes de propósito: evita duas pessoas cuidando do
+         * mesmo cadastro sem saber, e perguntar na saída não evita nada — o
+         * retrabalho já aconteceu.
+         */
+        async function abrirComAtendimento(id) {
+            // Adianta a busca do detalhe: assinar as URLs leva meio segundo, e
+            // o tempo gasto escolhendo como participar cobre isso.
+            const s = lista.find((x) => String(x.id) === String(id));
+            if (s) carregarDetalhe(s, { silencioso: true });
+
+            const escolha = await Atendimento.perguntarComoParticipar(SLUG, id, {
+                ehAdmin: podeExcluir, // podeExcluir já é "é admin" nesta tela
+                usuarioId: meuId,
+            });
+            if (escolha === null) return; // cancelou
+            await carregar(); // a linha passa a mostrar o atendimento
+            abrirModal(id);
+        }
+
+        // ------------------------------------------------------------------
+        // Decisão e exclusão
+        // ------------------------------------------------------------------
         async function decidir(id, status) {
+            const acao = status === 'aprovado' ? 'APROVAR' : 'REPROVAR';
+            if (!confirm(`Deseja ${acao} esta solicitação?`)) return;
+
             const observacao = status === 'reprovado'
                 ? (prompt('Motivo da reprovação (opcional):') ?? '')
                 : (prompt('Observação (opcional):') ?? '');
@@ -234,13 +973,13 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status, observacao }),
             });
+            if (r.status === 401) { window.location.href = '/login'; return; }
             if (!r.ok) {
                 const j = await r.json().catch(() => ({}));
                 alert(j.erro || 'Não foi possível registrar a decisão.');
                 return;
             }
-            await carregar();
-            versaoConhecida = impressaoLocal();
+            await recarregar(id);
         }
 
         async function excluir(id) {
@@ -251,59 +990,281 @@
                 alert(j.erro || 'Não foi possível excluir.');
                 return;
             }
+            delete detalheDoModal[id];
+            fecharModal();
             await carregar();
             versaoConhecida = impressaoLocal();
         }
 
-        /**
-         * Garante que a pessoa declarou como participa antes de mexer no
-         * cadastro.
-         *
-         * Nesta tela não existe "abrir": decidir é o momento em que alguém
-         * assume o cadastro, então é aí que a pergunta cabe. Quem já está
-         * participando passa direto.
-         *
-         * @returns true para seguir, false se cancelou
-         */
-        async function garantirAtendimento(id) {
-            const escolha = await Atendimento.perguntarComoParticipar(SLUG, id, {
-                ehAdmin: podeExcluir, // podeExcluir já é "é admin" nesta tela
-                usuarioId: meuId,
-            });
-            return escolha !== null;
+        /** Recarrega e, com o modal aberto, atualiza-o na hora. */
+        async function recarregar(idModal) {
+            await carregar();
+            versaoConhecida = impressaoLocal();
+            if (idModal == null || overlay.hidden) return;
+            const s = lista.find((x) => String(x.id) === String(idModal));
+            if (s) redesenharDetalhe(s);
+            else fecharModal();
         }
 
-        corpo.addEventListener('click', async (ev) => {
-            const btn = ev.target.closest('button.acao');
+        // ------------------------------------------------------------------
+        // Eventos
+        // ------------------------------------------------------------------
+        /**
+         * Abre a ficha do teste prático de uma solicitação.
+         *
+         * NÃO passa pelo modal de atendimento: aplicar o teste é ir a campo com
+         * o candidato, não assumir a análise do cadastro. Perguntar "como você
+         * vai participar?" aqui seria cobrar uma decisão sobre outra coisa.
+         *
+         * Ao salvar, a linha e o detalhe se atualizam na hora — sem recarregar
+         * a lista inteira, que é o que faria a tela piscar no meio do trabalho.
+         */
+        function abrirTeste(id) {
+            if (!temTestePratico) return;
+            const s = lista.find((x) => String(x.id) === String(id));
+            if (!s) return;
+
+            TestePratico.abrir(SLUG, s, {
+                aoSalvar(teste) {
+                    testePorId[s.id] = teste;
+                    if (detalheDoModal[s.id]) detalheDoModal[s.id].teste = teste;
+                    desenhar();
+                    if (!overlay.hidden && String(idAtual) === String(s.id)) redesenharDetalhe(s);
+                },
+            });
+        }
+
+        corpo.addEventListener('click', (e) => {
+            const btn = e.target.closest('.btn-acao');
+            if (btn) {
+                const id = btn.dataset.id;
+                if (btn.classList.contains('excluir')) { excluir(id); return; }
+                if (btn.classList.contains('teste')) { abrirTeste(btn.dataset.teste); return; }
+                abrirComAtendimento(id); // "ver"
+                return;
+            }
+            // Marcar a caixa de seleção não é intenção de abrir o cadastro.
+            if (e.target.closest('.col-sel')) return;
+            const tr = e.target.closest('tr[data-id]');
+            if (tr) abrirComAtendimento(tr.dataset.id);
+        });
+
+        // ------------------------------------------------------------------
+        // Pesquisa RDO
+        // ------------------------------------------------------------------
+
+        /** Envia o comprovante do RDO pelo mesmo caminho de qualquer anexo. */
+        async function enviarComprovanteRdo(id, arquivo) {
+            const base = `/api/modulos/${SLUG}/solicitacoes/${id}/documentos`;
+
+            const rp = await fetch(base + '/preparar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    tipo: 'RESULTADO RDO',
+                    nomeArquivo: arquivo.name,
+                    contentType: arquivo.type,
+                    tamanho: arquivo.size,
+                }),
+            });
+            const prep = await rp.json();
+            if (!prep.ok) throw new Error(prep.erro || 'Não foi possível preparar o envio.');
+
+            const env = await fetch(prep.url, {
+                method: prep.metodo || 'PUT',
+                headers: Object.assign({ 'Content-Type': arquivo.type || 'application/octet-stream' }, prep.cabecalhos || {}),
+                body: arquivo,
+            });
+            if (!env.ok) throw new Error('Falha no envio do arquivo (HTTP ' + env.status + ').');
+
+            const rr = await fetch(base + '/registrar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    tipo: 'RESULTADO RDO',
+                    caminho: prep.caminho,
+                    nomeOriginal: arquivo.name,
+                    contentType: arquivo.type,
+                    tamanho: arquivo.size,
+                    provedor: prep.provedor,
+                }),
+            });
+            const reg = await rr.json();
+            if (!reg.ok) throw new Error(reg.erro || 'Não foi possível registrar o documento.');
+        }
+
+        async function gravarRdo(id, aprovado, observacao) {
+            const r = await fetch(`${API}/${id}/rdo`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ aprovado, observacao }),
+            });
+            return r.json().catch(() => ({ ok: false, erro: 'Resposta inválida do servidor.' }));
+        }
+
+        /**
+         * Habilita "Confirmar reprovação" só com as duas exigências atendidas:
+         * comprovante e motivo. Deixar o botão vivo e recusar no servidor
+         * funcionaria, mas faria a pessoa descobrir a regra errando.
+         */
+        function conferirExigenciasRdo() {
+            const btn = document.getElementById('rdo-confirmar');
             if (!btn) return;
-            const id = btn.dataset.id;
+            const arq = document.getElementById('rdo-arquivo');
+            const obs = document.getElementById('rdo-obs');
+            // Sem o input de arquivo na tela, o comprovante já está anexado.
+            const temArquivo = !arq || arq.files.length > 0;
+            const temMotivo = !!(obs && obs.value.trim());
+            btn.disabled = !(temArquivo && temMotivo);
+        }
 
-            if (btn.classList.contains('excluir')) return excluir(id);
+        modalBody.addEventListener('change', conferirExigenciasRdo);
+        modalBody.addEventListener('input', conferirExigenciasRdo);
 
-            if (btn.classList.contains('atender')) {
-                if (await garantirAtendimento(id)) await carregar();
+        modalBody.addEventListener('click', async (e) => {
+            if (idAtual == null) return;
+
+            const btnTeste = e.target.closest('[data-abrir-teste]');
+            if (btnTeste) { abrirTeste(btnTeste.dataset.abrirTeste); return; }
+
+            const btnRdo = e.target.closest('.btn-rdo');
+            if (!btnRdo) return;
+
+            // ---- RDO: Sim ----
+            if (btnRdo.dataset.rdo === 'sim') {
+                btnRdo.disabled = true;
+                const j = await gravarRdo(idAtual, true, null);
+                if (!j.ok) { alert(j.erro || 'Não foi possível registrar.'); btnRdo.disabled = false; return; }
+                delete detalheDoModal[idAtual];
+                return reabrir(idAtual);
+            }
+
+            // ---- RDO: Não -> revela as exigências ----
+            if (btnRdo.dataset.rdo === 'nao') {
+                const area = document.getElementById('rdo-reprova');
+                if (area) area.hidden = false;
+                conferirExigenciasRdo();
                 return;
             }
 
-            if (!(await garantirAtendimento(id))) return;
+            // ---- Confirmar a reprovação ----
+            if (btnRdo.id === 'rdo-confirmar') {
+                const erroEl = document.getElementById('rdo-erro');
+                const arq = document.getElementById('rdo-arquivo');
+                const obs = (document.getElementById('rdo-obs') || {}).value || '';
+                btnRdo.disabled = true;
+                erroEl.hidden = true;
+                try {
+                    // O anexo vai PRIMEIRO: se o envio falhar, nada foi
+                    // gravado e o cadastro continua onde estava.
+                    if (arq && arq.files.length) {
+                        btnRdo.textContent = 'Enviando o documento...';
+                        await enviarComprovanteRdo(idAtual, arq.files[0]);
+                        delete detalheDoModal[idAtual]; // força reler com o novo anexo
+                    }
+                    btnRdo.textContent = 'Registrando...';
+                    const j = await gravarRdo(idAtual, false, obs);
+                    if (!j.ok) throw new Error(j.erro || 'Não foi possível registrar.');
+                    delete detalheDoModal[idAtual];
+                    return reabrir(idAtual);
+                } catch (err) {
+                    erroEl.textContent = err.message;
+                    erroEl.hidden = false;
+                    btnRdo.disabled = false;
+                    btnRdo.textContent = 'Confirmar reprovação';
+                }
+            }
+        });
+
+        /** Reabre o modal com os dados recarregados. */
+        async function reabrir(id) {
+            await carregar();
+            versaoConhecida = impressaoLocal();
+            const s = lista.find((x) => String(x.id) === String(id));
+            if (!s) return fecharModal();
+            await carregarDetalhe(s, { silencioso: true });
+            abrirModal(id);
+        }
+
+        modalFooter.addEventListener('click', (e) => {
+            const btn = e.target.closest('.btn-modal');
+            if (!btn) return;
+            const id = btn.dataset.id;
+            if (btn.classList.contains('excluir')) { excluir(id); return; }
             decidir(id, btn.classList.contains('aprovar') ? 'aprovado' : 'reprovado');
         });
 
-        // Rótulos do módulo.
-        (async () => {
+        document.getElementById('modal-fechar').addEventListener('click', fecharModal);
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) fecharModal(); });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !overlay.hidden) fecharModal(); });
+
+        // Ao fechar o modal, aplica o que tiver chegado enquanto ele estava aberto.
+        document.getElementById('modal-fechar').addEventListener('click', () => {
+            setTimeout(verificarNovidades, 300);
+        });
+
+        for (const id of ['f-busca', 'f-cliente', 'f-status', 'f-atend', 'f-de', 'f-ate']) {
+            const el = document.getElementById(id);
+            el.addEventListener('input', desenhar);
+            el.addEventListener('change', desenhar);
+        }
+
+        document.getElementById('btn-limpar').addEventListener('click', () => {
+            for (const id of ['f-busca', 'f-cliente', 'f-status', 'f-atend', 'f-de', 'f-ate']) {
+                document.getElementById(id).value = '';
+            }
+            desenhar();
+        });
+
+        document.getElementById('btn-ordem').addEventListener('click', () => {
+            maisAntigasPrimeiro = !maisAntigasPrimeiro;
+            document.getElementById('btn-ordem-txt').textContent =
+                maisAntigasPrimeiro ? 'Mais recentes primeiro' : 'Mais antigas primeiro';
+            document.getElementById('btn-ordem').classList.toggle('is-success', maisAntigasPrimeiro);
+            desenhar();
+        });
+
+        document.getElementById('btn-atualizar').addEventListener('click', async () => {
+            await carregar();
+            versaoConhecida = impressaoLocal();
+        });
+
+        // ------------------------------------------------------------------
+        // Rótulos e capacidades do módulo
+        // ------------------------------------------------------------------
+        async function carregarModulo() {
             try {
                 const r = await fetch('/api/modulos/' + SLUG);
                 const j = await r.json();
-                if (j.ok) {
-                    document.getElementById('titulo').textContent = 'Painel — ' + j.modulo.rotulo;
-                    document.getElementById('descricao').textContent =
-                        'Acompanhe e decida as solicitações deste módulo. ' + j.modulo.descricao;
-                    document.title = 'Painel ' + j.modulo.rotuloCurto + ' — Tráfego | Jomed';
-                }
-            } catch (e) { /* mantém os textos padrão */ }
-        })();
+                if (!j.ok) return;
 
-        // ---- Atualização automática (mesma técnica do painel de terceiro) ----
+                document.getElementById('titulo').textContent = 'Painel — ' + j.modulo.rotulo;
+                document.getElementById('descricao').textContent =
+                    'Revise as solicitações recebidas, consulte os dados e os documentos, e decida cada cadastro. ' +
+                    j.modulo.descricao;
+                document.title = 'Painel ' + j.modulo.rotuloCurto + ' — Tráfego | Jomed';
+
+                // Candidato não se vincula a cliente: a coluna e o filtro
+                // simplesmente não existem para ele.
+                temOperacoes = !!j.modulo.temOperacoes;
+                for (const el of document.querySelectorAll('.col-clientes')) el.hidden = !temOperacoes;
+                document.getElementById('filtro-cliente-caixa').hidden = !temOperacoes;
+
+                // Teste prático existe só para o candidato. Sem este sinal a
+                // coluna de ações ganharia um botão que abre uma rota que não
+                // existe — e o erro apareceria só no clique.
+                temTestePratico = !!j.modulo.temTestePratico;
+                desenhar();
+            } catch (e) { /* mantém os textos padrão */ }
+        }
+
+        // ------------------------------------------------------------------
+        // ATUALIZAÇÃO AUTOMÁTICA
+        //
+        // Polling e não WebSocket/SSE: o Vercel roda em funções serverless, que
+        // não mantêm conexão aberta. Para não pesar, a verificação NÃO baixa a
+        // lista — consulta só a impressão digital e busca tudo quando muda.
+        // ------------------------------------------------------------------
         const INTERVALO_VERIFICACAO = 20000;
         let versaoConhecida = null;
         let verificando = false;
@@ -319,6 +1280,8 @@
 
         async function verificarNovidades() {
             if (document.visibilityState !== 'visible' || verificando) return;
+            // Modal aberto: não troca a tabela embaixo de uma decisão em curso.
+            if (!overlay.hidden) return;
             verificando = true;
             try {
                 const r = await fetch(API + '/versao');
@@ -338,7 +1301,8 @@
                     t.querySelector('.toast-txt').textContent =
                         novas === 1 ? '1 nova solicitação' : `${novas} novas solicitações`;
                     t.classList.add('visivel');
-                    setTimeout(() => t.classList.remove('visivel'), 6000);
+                    clearTimeout(verificarNovidades._timer);
+                    verificarNovidades._timer = setTimeout(() => t.classList.remove('visivel'), 6000);
                 }
             } finally {
                 verificando = false;
@@ -350,16 +1314,9 @@
             if (document.visibilityState === 'visible') verificarNovidades();
         });
 
-        document.getElementById('btn-atualizar').addEventListener('click', async () => {
-            await carregar();
-            versaoConhecida = impressaoLocal();
-        });
-
         // ------------------------------------------------------------------
         // Seleção e exportação em ZIP
         // ------------------------------------------------------------------
-        let contagemAnexos = {};
-
         function selecionados() {
             return [...document.querySelectorAll('.sel-linha:checked')].map((c) => Number(c.dataset.id));
         }
@@ -383,13 +1340,17 @@
             if (ev.target.classList.contains('sel-linha')) atualizarBotaoExportar();
         });
 
+        // Marcar a caixa não deve abrir o modal da linha.
+        corpo.addEventListener('click', (ev) => {
+            if (ev.target.closest('.col-sel')) ev.stopPropagation();
+        }, true);
+
         document.getElementById('btn-exportar').addEventListener('click', async () => {
             const ids = selecionados();
             if (!ids.length) return;
 
             const btn = document.getElementById('btn-exportar');
             const txt = document.getElementById('btn-exportar-txt');
-            const original = txt.textContent;
             btn.disabled = true;
 
             try {
@@ -422,12 +1383,15 @@
             } catch (e) {
                 alert('Falha ao exportar: ' + e.message);
             } finally {
-                txt.textContent = original;
                 atualizarBotaoExportar();
             }
         });
 
         (async () => {
+            // Os metadados vêm PRIMEIRO: eles decidem se a coluna de clientes
+            // existe, e desenhar a tabela antes faria a coluna aparecer e
+            // sumir na frente de quem está olhando.
+            await carregarModulo();
             await carregar();
             versaoConhecida = impressaoLocal();
         })();

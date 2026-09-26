@@ -18,6 +18,7 @@ require('dotenv').config();
 
 const path = require('node:path');
 const fs = require('node:fs');
+const crypto = require('node:crypto');
 const express = require('express');
 const session = require('express-session');
 const SessaoStore = require('./src/session-store')(session);
@@ -34,7 +35,9 @@ const { menuPara, menuDaConta } = require('./src/menu');
 const campos = require('./src/campos');
 const documentos = require('./src/documentos');
 const atendimentos = require('./src/atendimentos');
+const limiteLogin = require('./src/limite-login');
 const fluxo = require('./src/fluxo');
+const testePratico = require('./src/teste-pratico');
 const {
   exigirLogin,
   exigirAdmin,
@@ -55,6 +58,20 @@ if (EM_PRODUCAO) app.set('trust proxy', 1);
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 /**
+ * Compara dois segredos sem deixar o TEMPO da comparação contar quantos
+ * caracteres bateram (usado pelo webhook do Forms).
+ *
+ * Os dois lados são reduzidos a um hash de tamanho fixo antes da comparação
+ * porque timingSafeEqual exige buffers do mesmo comprimento — e o comprimento
+ * do que chegou é justamente uma das coisas que não devem vazar.
+ */
+function segredoConfere(recebido, esperado) {
+  if (typeof recebido !== 'string' || !recebido) return false;
+  const digerir = (v) => crypto.createHash('sha256').update(String(v), 'utf8').digest();
+  return crypto.timingSafeEqual(digerir(recebido), digerir(esperado));
+}
+
+/**
  * Quem pode CONFIGURAR formulário: admin, ou quem acompanha algum painel.
  *
  * Quem trata o cadastro no dia a dia é quem descobre que falta uma pergunta —
@@ -71,6 +88,30 @@ function exigirConfigurarFormulario(req, res, next) {
   return res.status(403).json({ ok: false, erro: 'Sem permissão para configurar formulários.' });
 }
 
+/**
+ * Freio da consulta por CPF/placa (ver /api/cadastros/existente).
+ *
+ * Conta por USUÁRIO, no banco, e não por sessão: sair e entrar de novo não
+ * zera o contador. 200 consultas em 15 minutos é muito mais do que preencher
+ * um formulário exige e muito menos do que varrer uma lista de CPFs rende.
+ */
+const limitarConsultaDeCadastro = wrap(async (req, res, next) => {
+  const chaves = limiteLogin.chaveDe('consulta:cadastro', req.session.usuario.id, 200);
+
+  const freio = await limiteLogin.verificar(chaves);
+  if (freio.bloqueado) {
+    const minutos = Math.max(1, Math.ceil(freio.segundos / 60));
+    res.set('Retry-After', String(freio.segundos));
+    return res.status(429).json({
+      ok: false,
+      erro: `Muitas consultas em pouco tempo. Tente de novo em ${minutos} minuto(s).`,
+    });
+  }
+
+  await limiteLogin.contar(chaves);
+  return next();
+});
+
 // --------------------------------------------------------------------------
 // Middlewares base
 // --------------------------------------------------------------------------
@@ -79,6 +120,61 @@ function capturarRaw(req, res, buf) {
   req.rawBody = buf && buf.length ? buf.toString('utf8') : '';
 }
 
+
+// --------------------------------------------------------------------------
+// Cabeçalhos de segurança
+//
+// Vêm ANTES do estático para valerem também para CSS, imagem e JS do front.
+//
+// O que cada um resolve:
+//
+//   Content-Security-Policy  diz de onde a página pode carregar coisa. É o que
+//       transforma um XSS futuro em nada: sem ele, um script injetado pode
+//       mandar o conteúdo da tela (CPF, CNH) para qualquer servidor.
+//   X-Frame-Options / frame-ancestors  impede embutir o portal num iframe de
+//       outro site (clickjacking: o clique do usuário vai para o botão errado).
+//   X-Content-Type-Options  impede o navegador "adivinhar" que um anexo .txt é
+//       HTML e executá-lo.
+//   Referrer-Policy  o link assinado do anexo não deve vazar no Referer.
+//   Strict-Transport-Security  só em produção: fecha a porta do primeiro
+//       acesso em HTTP. Local roda sem HTTPS, e mandar isso ali travaria a
+//       máquina do desenvolvedor em https://localhost.
+//
+// SOBRE O 'unsafe-inline' EM script-src: cada view tem um <script> embutido no
+// próprio HTML (as telas se montam ali). Tirar isso exige mover esse script
+// para arquivo em public/js — vale fazer, e aí o 'unsafe-inline' sai daqui.
+// Mesmo com ele, a política já barra o principal: script vindo de FORA e envio
+// de dados para domínio estranho (connect-src).
+// --------------------------------------------------------------------------
+const URL_SUPABASE = require('./src/storage').URL_PROJETO || 'https://*.supabase.co';
+
+// O navegador manda o arquivo direto para o Supabase (URL assinada) e mostra a
+// miniatura da foto de lá — por isso o host entra em connect-src e img-src.
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  `img-src 'self' data: blob: ${URL_SUPABASE}`,
+  `connect-src 'self' ${URL_SUPABASE}`,
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ');
+
+app.use((req, res, next) => {
+  res.set('Content-Security-Policy', CSP);
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('X-Frame-Options', 'DENY');
+  res.set('Referrer-Policy', 'same-origin');
+  res.set('Cross-Origin-Opener-Policy', 'same-origin');
+  // Câmera fica de fora da lista de propósito: no celular o anexo é tirado na
+  // hora, e bloquear aqui atrapalharia o envio pelo formulário.
+  res.set('Permissions-Policy', 'geolocation=(), microphone=(), payment=()');
+  if (EM_PRODUCAO) res.set('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
+  next();
+});
 // Arquivos estáticos (CSS, imagens) ANTES da sessão: assim requisições de
 // assets não disparam uma consulta ao store de sessão a cada arquivo.
 app.use(express.static(path.join(__dirname, 'public')));
@@ -125,10 +221,39 @@ app.get('/js/validacao.js', (req, res) => {
 app.use(express.urlencoded({ extended: true })); // formulários HTML
 app.use(express.json({ strict: false, verify: capturarRaw })); // requisições fetch (login via JS) — strict:false aceita corpo em string
 
+
+// --------------------------------------------------------------------------
+// Segredo que assina o cookie de sessão
+//
+// Antes havia um valor fixo de reserva ('segredo-de-desenvolvimento-troque-me').
+// Isso é um buraco silencioso: se a variável faltasse nas Environment Variables
+// do Vercel, o sistema subiria normalmente assinando os cookies com um segredo
+// que está escrito no código — e qualquer pessoa forjaria um cookie de admin.
+// Falta de segredo em produção agora derruba o boot, que é um problema visível.
+//
+// Local continua com valor de reserva, para não pedir configuração de quem só
+// quer rodar "npm run dev".
+// --------------------------------------------------------------------------
+const SESSION_SECRET = (() => {
+  const s = process.env.SESSION_SECRET;
+  if (s && s.length >= 16) return s;
+
+  if (EM_PRODUCAO) {
+    throw new Error(
+      'SESSION_SECRET ausente ou curto demais (mínimo 16 caracteres).\n' +
+        'Defina nas Environment Variables do Vercel um valor longo e aleatório, ex.:\n' +
+        '  node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'base64url\'))"'
+    );
+  }
+
+  console.warn('[sessão] SESSION_SECRET não definido — usando segredo de desenvolvimento.');
+  return 'segredo-de-desenvolvimento-troque-me';
+})();
+
 app.use(
   session({
     store: new SessaoStore(),
-    secret: process.env.SESSION_SECRET || 'segredo-de-desenvolvimento-troque-me',
+    secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -155,6 +280,17 @@ app.get('/login', (req, res) => {
 });
 
 // Processa o login (chamado via fetch pela tela de login).
+//
+// Três coisas acontecem aqui, nesta ordem:
+//   1. o freio de força bruta (src/limite-login.js) barra quem já errou demais;
+//   2. as credenciais são conferidas;
+//   3. a sessão é REGENERADA antes de virar sessão logada.
+//
+// Sobre o (3): sem regenerar, o id de sessão que o navegador já tinha ANTES do
+// login continua valendo depois dele. Quem conseguisse plantar um id no
+// navegador da vítima (fixação de sessão) passaria a compartilhar a sessão
+// autenticada dela. Regenerar troca o id no momento em que ele passa a valer
+// algo, e custa uma linha.
 app.post(
   '/api/login',
   wrap(async (req, res) => {
@@ -165,18 +301,47 @@ app.post(
       return res.status(400).json({ ok: false, erro: 'Informe e-mail e senha.' });
     }
 
+    const chaves = limiteLogin.chavesDoLogin(email, req.ip);
+
+    const freio = await limiteLogin.verificar(chaves);
+    if (freio.bloqueado) {
+      const minutos = Math.max(1, Math.ceil(freio.segundos / 60));
+      res.set('Retry-After', String(freio.segundos));
+      return res.status(429).json({
+        ok: false,
+        erro: `Muitas tentativas de login. Tente de novo em ${minutos} minuto(s).`,
+      });
+    }
+
     const usuario = await usuarios.validarCredenciais(email, senha);
     if (!usuario) {
+      await limiteLogin.registrarFalha(chaves);
+      // Mesma mensagem para e-mail inexistente e senha errada, de propósito:
+      // distinguir os dois entrega a lista de quem tem conta.
       return res.status(401).json({ ok: false, erro: 'E-mail ou senha inválidos.' });
     }
 
-    // Guarda apenas o essencial na sessão.
+    await limiteLogin.limpar(chaves);
+
+    await new Promise((resolve, reject) =>
+      req.session.regenerate((err) => (err ? reject(err) : resolve()))
+    );
+
+    // Guarda apenas o essencial na sessão. "verificadoEm" é o relógio da
+    // revalidação periódica feita em src/auth.js (exigirLogin).
     req.session.usuario = {
       id: usuario.id,
       nome: usuario.nome,
       email: usuario.email,
       papel: usuario.papel,
+      verificadoEm: Date.now(),
     };
+
+    // Espera o store gravar ANTES de responder: a tela redireciona na hora, e
+    // a requisição seguinte pode cair em outra instância da função.
+    await new Promise((resolve, reject) =>
+      req.session.save((err) => (err ? reject(err) : resolve()))
+    );
 
     res.json({ ok: true, redirect: paginaInicialPorPapel(usuario.papel) });
   })
@@ -222,6 +387,16 @@ app.get(
         rotuloCurto: m.rotuloCurto,
         icone: m.icone,
         descricao: m.descricao,
+        // O painel se desenha a partir daqui: candidato não se vincula a
+        // cliente, então a coluna e o filtro de clientes não existem para ele.
+        // Sem este sinal, a tela mostraria uma coluna sempre vazia — que em
+        // tabela parece dado faltando, não "não se aplica".
+        temOperacoes: m.operacoesPermitidas === null || (m.operacoesPermitidas || []).length > 0,
+        temRdo: !!m.temRdo,
+        // Teste prático é só do candidato. O painel genérico serve os três
+        // módulos, e é este sinal que decide se o ícone e a ficha existem na
+        // tela — a rota já nem é registrada para quem não tem.
+        temTestePratico: testePratico.permite(m.slug),
       },
     });
   }
@@ -327,15 +502,19 @@ app.get(
     const acompanha = papeis.podePainel(u.papel, m.slug);
     if (!dono && !acompanha) return res.status(403).json({ ok: false, erro: 'Sem permissão.' });
 
-    // Duas regras diferentes, de propósito:
-    //   a RESPOSTA do RDO (aprovou? quem? quando?) é de quem acompanha o painel;
-    //   o ARQUIVO anexado é só do admin.
-    // O responsável precisa decidir com base no resultado, não guardar o
-    // documento — e é o documento que carrega o dado sensível da pesquisa.
+    // A pesquisa RDO — resposta e ARQUIVO — é de quem acompanha o painel.
+    //
+    // O arquivo já foi restrito a admin, e a restrição saiu porque produzia o
+    // oposto do que prometia: o responsável é quem analisa e quem ANEXA o
+    // comprovante, então ele mandava o PDF e o via desaparecer da tela no
+    // instante seguinte — sem erro, sem aviso. O documento sumia da lista para
+    // a mesma pessoa que acabara de enviá-lo, e a leitura natural disso é que
+    // o envio falhou. O SOLICITANTE continua fora, que é a restrição que
+    // importa: a pesquisa é conferência interna sobre ele mesmo.
     const podeRdo = papeis.podeRdo(u.papel, m.slug);
     let docs = await documentos.listar(m.slug, id);
     const temComprovanteRdo = docs.some((d) => String(d.tipo).toUpperCase() === fluxo.DOC_RDO);
-    if (!papeis.ehAdmin(u.papel)) {
+    if (!podeRdo) {
       docs = docs.filter((d) => String(d.tipo).toUpperCase() !== fluxo.DOC_RDO);
     }
 
@@ -348,6 +527,9 @@ app.get(
       // Quem passou pelo cadastro, inclusive quem já saiu — é o histórico que
       // responde "com quem eu falo sobre isso" depois que a pessoa trocou.
       historico: await atendimentos.historico(m.slug, id),
+      // O teste prático, quando o módulo tem um. Fora para o SOLICITANTE pelo
+      // mesmo motivo do RDO: é julgamento interno sobre ele mesmo.
+      teste: acompanha ? await testePratico.atual(m.slug, id) : null,
     });
   })
 );
@@ -622,9 +804,23 @@ app.get(
 // Encontra o cadastro que uma RENOVAÇÃO vai renovar, e diz quais anexos dele
 // estão vencidos ou faltando. A tela chama enquanto a pessoa digita o CPF ou a
 // placa, para mostrar quem foi encontrado antes de enviar.
+//
+// DUAS TRAVAS, porque esta rota responde sobre PESSOA a partir de um CPF ou de
+// uma placa — é a única do sistema com essa forma, e era aberta a qualquer
+// usuário logado:
+//
+//   exigirAcessoAoModulo('terceiro')  só quem preenche ou acompanha o cadastro
+//       de terceiro tem motivo para consultar renovação. Antes, qualquer papel
+//       logado consultava.
+//
+//   limitarConsultaDeCadastro        a tela chama a cada digitação, então o
+//       teto é alto; o que ele impede é a varredura (rodar uma lista de CPFs
+//       para descobrir quem está cadastrado, com nome e documentos).
 app.get(
   '/api/cadastros/existente',
   exigirLogin,
+  exigirAcessoAoModulo('terceiro'),
+  limitarConsultaDeCadastro,
   wrap(async (req, res) => {
     const recorte = pesquisas.resolver('renovacao', req.query.alvo);
     if (!recorte.ok) return res.status(400).json({ ok: false, erro: recorte.erro });
@@ -784,11 +980,84 @@ function exigirAcessoAoModulo(slug) {
   };
 }
 
+/**
+ * Acesso a UMA solicitação — a segunda pergunta, que faltava.
+ *
+ * exigirAcessoAoModulo responde "esta pessoa mexe neste MÓDULO?". Não responde
+ * "pode mexer NESTE cadastro?". Sem a segunda, quem só preenche formulário
+ * (papéis terceiro/agregado/candidato/solicitante) alcançava qualquer :id do
+ * módulo trocando o número na URL — e, com ele, os anexos de qualquer pessoa:
+ * CNH, CPF, CRLV. Também dava para apagar.
+ *
+ * A regra é a mesma que a rota .../detalhe já usava: DONO do cadastro, ou quem
+ * acompanha o painel do módulo. Quem acompanha o painel continua vendo tudo,
+ * que é o trabalho dele.
+ *
+ * Guarda a solicitação em req.solicitacao — quem já a leu aqui não precisa
+ * buscar de novo no handler.
+ */
+function exigirAcessoASolicitacao(slug) {
+  return wrap(async (req, res, next) => {
+    const u = req.session.usuario;
+    if (papeis.podePainel(u.papel, slug)) return next();
+
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
+
+    const dados = dadosDe(slug);
+    const s = dados && (await dados.buscarPorId(id));
+    if (!s) return res.status(404).json({ ok: false, erro: 'Solicitação não encontrada.' });
+
+    const dono =
+      String(s.solicitante_email || '').toLowerCase() === String(u.email || '').toLowerCase();
+    if (!dono) return res.status(403).json({ ok: false, erro: 'Sem permissão para este cadastro.' });
+
+    req.solicitacao = s;
+    return next();
+  });
+}
+
+/**
+ * Este documento é DESTE módulo e DESTA solicitação?
+ *
+ * A tabela "documentos" é uma só para os três módulos, e buscarPorId lê por id
+ * puro. Sem esta conferência o :id da URL era enfeite: qualquer docId de
+ * qualquer módulo respondia na rota de qualquer outro — inclusive no DELETE.
+ */
+function documentoDaSolicitacao(d, slug, id) {
+  return !!d && String(d.modulo) === String(slug) && Number(d.solicitacao_id) === Number(id);
+}
+
+/**
+ * O comprovante do RDO é de quem ACOMPANHA o painel, nunca do solicitante.
+ *
+ * As listagens já filtram o tipo, mas listagem não é controle de acesso: as
+ * rotas /:docId/url e /:docId/baixar recebem o id do documento direto, e sem
+ * esta conferência o dono do cadastro baixava a própria pesquisa trocando o
+ * número na URL — justamente o documento que a regra esconde dele.
+ */
+function podeVerDocumento(d, slug, usuario) {
+  if (String(d && d.tipo).toUpperCase() !== fluxo.DOC_RDO) return true;
+  return papeis.podeRdo(usuario.papel, slug);
+}
+
 for (const m of MODULOS) {
   const base = `/api/modulos/${m.slug}/solicitacoes/:id/documentos`;
   const dados = dadosDe(m.slug);
 
-  /** Dono do cadastro: define o nome da pasta (NOME_CPF). */
+  /**
+   * Dono do cadastro: define o nome da pasta (ID_NOME_CPF).
+   *
+   * O condutor é procurado em três lugares, nesta ordem — e a ordem importa:
+   *
+   *   1. solicitacao_cadastro, quando o cadastro veio do formulário NATIVO;
+   *   2. o texto "detalhes", quando veio do Microsoft Forms pelo webhook —
+   *      que é o caso de quase tudo (401 solicitações para 2 vínculos);
+   *   3. o solicitante, como último recurso.
+   *
+   * O passo 2 faltava, e era o que jogava todo anexo do Forms numa pasta
+   * batizada com o e-mail de quem abriu o chamado e terminada em "_SEM_CPF".
+   */
   async function donoDaSolicitacao(id) {
     const s = await dados.buscarPorId(id);
     if (!s) return null;
@@ -797,11 +1066,21 @@ for (const m of MODULOS) {
     // estruturadas, os demais no JSON "dados".
     if (m.slug === 'terceiro') {
       const e = await cadastros.buscarPorSolicitacao(id);
-      if (e) return { nome: e.condutor_nome, cpf: e.condutor_cpf };
+      if (e && e.condutor_nome) return { nome: e.condutor_nome, cpf: e.condutor_cpf };
+
+      const doTexto = cadastros.condutorDosDetalhes(s.detalhes);
+      if (doTexto.nome) return doTexto;
+
       return { nome: s.solicitante_nome, cpf: '' };
     }
+
     const d = s.dados || {};
-    return { nome: d.condutor_nome || s.solicitante_nome, cpf: d.condutor_cpf || d.cpf || '' };
+    if (d.condutor_nome) return { nome: d.condutor_nome, cpf: d.condutor_cpf || d.cpf || '' };
+
+    const doTexto = cadastros.condutorDosDetalhes(s.detalhes);
+    if (doTexto.nome) return doTexto;
+
+    return { nome: s.solicitante_nome, cpf: d.cpf || '' };
   }
 
   // ------------------------------------------------------------------------
@@ -815,7 +1094,7 @@ for (const m of MODULOS) {
   app.get(
     baseAt,
     exigirLogin,
-    exigirAcessoAoModulo(m.slug),
+    exigirPainel(m.slug),
     wrap(async (req, res) => {
       const id = Number(req.params.id);
       if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
@@ -834,7 +1113,7 @@ for (const m of MODULOS) {
   app.post(
     baseAt,
     exigirLogin,
-    exigirAcessoAoModulo(m.slug),
+    exigirPainel(m.slug),
     wrap(async (req, res) => {
       const id = Number(req.params.id);
       if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
@@ -856,7 +1135,7 @@ for (const m of MODULOS) {
   app.delete(
     baseAt,
     exigirLogin,
-    exigirAcessoAoModulo(m.slug),
+    exigirPainel(m.slug),
     wrap(async (req, res) => {
       const id = Number(req.params.id);
       if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
@@ -875,16 +1154,18 @@ for (const m of MODULOS) {
     base,
     exigirLogin,
     exigirAcessoAoModulo(m.slug),
+    exigirAcessoASolicitacao(m.slug),
     wrap(async (req, res) => {
       const id = Number(req.params.id);
       if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
 
       let lista = await documentos.listar(m.slug, id);
 
-      // O ARQUIVO do RDO é só do admin — inclusive para o responsável, que vê
-      // a resposta da pesquisa mas não o documento. Sem esta linha o resultado
-      // vazaria pelo nome do anexo na lista.
-      if (!papeis.ehAdmin(req.session.usuario.papel)) {
+      // O comprovante do RDO é de quem acompanha o painel (mesma regra da rota
+      // /detalhe). Para o SOLICITANTE ele sai da lista: a pesquisa é
+      // conferência interna sobre ele, e sem esta linha o resultado vazaria
+      // pelo nome do anexo.
+      if (!papeis.podeRdo(req.session.usuario.papel, m.slug)) {
         lista = lista.filter((d) => String(d.tipo).toUpperCase() !== fluxo.DOC_RDO);
       }
 
@@ -908,6 +1189,7 @@ for (const m of MODULOS) {
     `${base}/preparar`,
     exigirLogin,
     exigirAcessoAoModulo(m.slug),
+    exigirAcessoASolicitacao(m.slug),
     wrap(async (req, res) => {
       const id = Number(req.params.id);
       if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
@@ -948,6 +1230,7 @@ for (const m of MODULOS) {
     `${base}/enviar`,
     exigirLogin,
     exigirAcessoAoModulo(m.slug),
+    exigirAcessoASolicitacao(m.slug),
     express.raw({ type: () => true, limit: require('./src/storage').TAMANHO_MAXIMO }),
     wrap(async (req, res) => {
       const caminho = String(req.query.caminho || '');
@@ -996,12 +1279,20 @@ for (const m of MODULOS) {
     `${base}/:docId/baixar`,
     exigirLogin,
     exigirAcessoAoModulo(m.slug),
+    exigirAcessoASolicitacao(m.slug),
     wrap(async (req, res) => {
       const docId = Number(req.params.docId);
       if (!Number.isInteger(docId)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
 
       const d = await documentos.buscarPorId(docId);
-      if (!d || !d.caminho) return res.status(404).json({ ok: false, erro: 'Documento não encontrado.' });
+      if (!documentoDaSolicitacao(d, m.slug, req.params.id) || !d.caminho) {
+        return res.status(404).json({ ok: false, erro: 'Documento não encontrado.' });
+      }
+      // Mesma resposta de "não existe": dizer "sem permissão" já confirmaria
+      // ao solicitante que a pesquisa do RDO dele está anexada.
+      if (!podeVerDocumento(d, m.slug, req.session.usuario)) {
+        return res.status(404).json({ ok: false, erro: 'Documento não encontrado.' });
+      }
 
       const prov = documentos.armazenamentoDe(d);
       if (!prov) return res.status(409).json({ ok: false, erro: documentos.motivoIndisponivel(d) });
@@ -1024,6 +1315,7 @@ for (const m of MODULOS) {
     `${base}/registrar`,
     exigirLogin,
     exigirAcessoAoModulo(m.slug),
+    exigirAcessoASolicitacao(m.slug),
     wrap(async (req, res) => {
       const id = Number(req.params.id);
       if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
@@ -1060,12 +1352,20 @@ for (const m of MODULOS) {
     `${base}/:docId/url`,
     exigirLogin,
     exigirAcessoAoModulo(m.slug),
+    exigirAcessoASolicitacao(m.slug),
     wrap(async (req, res) => {
       const docId = Number(req.params.docId);
       if (!Number.isInteger(docId)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
 
       const d = await documentos.buscarPorId(docId);
-      if (!d) return res.status(404).json({ ok: false, erro: 'Documento não encontrado.' });
+      if (!documentoDaSolicitacao(d, m.slug, req.params.id)) {
+        return res.status(404).json({ ok: false, erro: 'Documento não encontrado.' });
+      }
+      // Ver podeVerDocumento: sem isto, a URL assinada do comprovante do RDO
+      // sairia para o próprio solicitante.
+      if (!podeVerDocumento(d, m.slug, req.session.usuario)) {
+        return res.status(404).json({ ok: false, erro: 'Documento não encontrado.' });
+      }
 
       // O arquivo pode estar num armazenamento que este ambiente não alcança
       // (gravado na pasta do canal, portal rodando no Vercel). Dizer isso vale
@@ -1090,9 +1390,17 @@ for (const m of MODULOS) {
     `${base}/:docId`,
     exigirLogin,
     exigirAcessoAoModulo(m.slug),
+    exigirAcessoASolicitacao(m.slug),
     wrap(async (req, res) => {
       const docId = Number(req.params.docId);
       if (!Number.isInteger(docId)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
+
+      // Confere ANTES de apagar: excluir() recebe só o id e não sabe de qual
+      // cadastro o arquivo é.
+      const d = await documentos.buscarPorId(docId);
+      if (!documentoDaSolicitacao(d, m.slug, req.params.id)) {
+        return res.status(404).json({ ok: false, erro: 'Documento não encontrado.' });
+      }
 
       const r = await documentos.excluir(docId);
       if (!r.ok) return res.status(400).json({ ok: false, erro: r.erro });
@@ -1406,21 +1714,119 @@ for (const m of MODULOS) {
         dados.listar(),
         documentos.contarPorSolicitacao(m.slug),
       ]);
+
+      const porAtendimento = await atendimentos.resumoDeVarias(m.slug, lista.map((s) => s.id));
+
+      // O RESULTADO do RDO é de quem ACOMPANHA o painel, e o filtro é feito
+      // AQUI, não na tela: esconder no HTML deixaria o dado viajando na
+      // resposta, visível a quem abrisse o inspetor do navegador.
+      const podeVerRdo = m.temRdo && papeis.podeRdo(req.session.usuario.papel, m.slug);
+
+      // A SITUAÇÃO vem montada do servidor (src/fluxo.js) para não existir uma
+      // segunda tabela de nomes na tela, envelhecendo por conta própria.
+      const comComprovante = m.temRdo
+        ? await documentos.idsComTipo(m.slug, fluxo.DOC_RDO)
+        : new Set();
+
+      // Módulo sem RDO (candidato) não ganha "situacao": o status simples já
+      // diz tudo, e anunciar uma etapa que não existe seria inventar processo.
+      const visiveis = !m.temRdo
+        ? lista
+        : lista.map((s) => {
+            const at = porAtendimento[s.id];
+            return {
+              ...s,
+              situacao: fluxo.situacaoSimplesDe({
+                rdoAprovado: s.rdo ? s.rdo.aprovado : null,
+                status: s.status,
+                assumido: !!(at && at.emAtendimento),
+              }),
+              rdo: podeVerRdo
+                ? { ...s.rdo, temComprovante: comComprovante.has(Number(s.id)) }
+                : { aprovado: null, por: null, em: null, obs: null, restrito: true },
+            };
+          });
+
       res.json({
         ok: true,
         modulo: m.slug,
+        temRdo: !!m.temRdo,
+        podeVerRdo,
         resumo,
-        solicitacoes: lista,
+        solicitacoes: visiveis,
         // Quantos anexos cada solicitação tem — o painel usa para o marcador
         // na lista e para o usuário saber o que a exportação vai trazer.
         anexos,
         podeExcluir: papeis.ehAdmin(req.session.usuario.papel),
         usuarioId: req.session.usuario.id,
         // Quem está cuidando de cada cadastro, para a coluna "Em atendimento".
-        atendimentos: await atendimentos.resumoDeVarias(m.slug, lista.map((s) => s.id)),
+        atendimentos: porAtendimento,
+        // Estado do teste prático de cada cadastro, para o ícone da linha.
+        // Devolve {} sem ir ao banco nos módulos que não têm teste.
+        testes: await testePratico.resumoDeVarias(m.slug, lista.map((s) => s.id)),
       });
     })
   );
+
+  // ---- Teste prático de direção ----
+  //
+  // REGISTRADAS SÓ PARA O MÓDULO QUE TEM TESTE. Não é um "if" dentro do
+  // handler: para agregado e terceiro estas rotas simplesmente NÃO EXISTEM, e
+  // trocar o slug na URL devolve 404 — que é a regra "o teste só existe para
+  // candidato" valendo também para quem monta a requisição na mão.
+  //
+  // Quem preenche é quem ACOMPANHA o painel (exigirPainel). O candidato não
+  // lê a própria avaliação: é julgamento interno sobre ele, e a rota de
+  // detalhe também o deixa de fora (ver /detalhe, acima).
+  if (testePratico.permite(m.slug)) {
+    app.get(
+      `${base}/:id/teste`,
+      exigirLogin,
+      exigirPainel(m.slug),
+      wrap(async (req, res) => {
+        const id = Number(req.params.id);
+        if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
+
+        const solicitacao = await dados.buscarPorId(id);
+        if (!solicitacao) {
+          return res.status(404).json({ ok: false, erro: 'Solicitação não encontrada.' });
+        }
+
+        res.json({
+          ok: true,
+          // A ficha (critérios, conceitos, resultados) vem do servidor para a
+          // tela não manter uma segunda cópia da lista, que envelheceria
+          // separada da validação que cobra o preenchimento.
+          config: testePratico.configuracao(),
+          teste: await testePratico.atual(m.slug, id),
+          // Tentativas anteriores. Hoje sempre no máximo uma; a estrutura
+          // existe para o reteste não exigir migração depois.
+          historico: await testePratico.historico(m.slug, id),
+        });
+      })
+    );
+
+    app.post(
+      `${base}/:id/teste`,
+      exigirLogin,
+      exigirPainel(m.slug),
+      wrap(async (req, res) => {
+        const id = Number(req.params.id);
+        if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
+
+        const solicitacao = await dados.buscarPorId(id);
+        if (!solicitacao) {
+          return res.status(404).json({ ok: false, erro: 'Solicitação não encontrada.' });
+        }
+
+        // O avaliador vem SEMPRE da sessão, nunca do corpo — ninguém assina
+        // uma avaliação em nome de outra pessoa.
+        const r = await testePratico.salvar(m.slug, id, req.body || {}, req.session.usuario);
+        if (!r.ok) return res.status(400).json(r);
+        res.json(r);
+      })
+    );
+  }
 
   // ---- Impressão digital, para a atualização automática ----
   app.get(
@@ -1506,6 +1912,47 @@ for (const m of MODULOS) {
     );
   }
 
+  // ---- Pesquisa RDO, nos módulos que passam por ela ----
+  //
+  // Mesma regra do terceiro: reprovar exige o comprovante JÁ ANEXADO, e a
+  // conferência é feita no servidor. Um "reprovado" gravado sem prova é
+  // exatamente o registro que falta quando alguém audita meses depois.
+  //
+  // A rota só existe onde a etapa existe: no candidato ela nem é registrada,
+  // então não há como chamá-la por engano nem de propósito.
+  if (m.temRdo) {
+    app.post(
+      `${base}/:id/rdo`,
+      exigirLogin,
+      exigirPainel(m.slug),
+      wrap(async (req, res) => {
+        const id = Number(req.params.id);
+        if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
+
+        const { aprovado, observacao } = req.body || {};
+        if (aprovado !== true && aprovado !== false) {
+          return res.status(400).json({ ok: false, erro: 'Responda se o RDO foi aprovado.' });
+        }
+
+        // O comprovante é procurado entre os documentos já enviados: o upload
+        // usa o mesmo caminho de qualquer outro anexo, então não há um fluxo
+        // especial para manter e o arquivo já nasce no histórico do cadastro.
+        const docs = await documentos.listar(m.slug, id);
+        const temComprovante = docs.some((d) => String(d.tipo).toUpperCase() === fluxo.DOC_RDO);
+
+        const r = await dados.registrarRdo(id, {
+          aprovado,
+          observacao,
+          por: req.session.usuario.nome,
+          temComprovante,
+        });
+
+        if (!r.ok) return res.status(409).json(r);
+        res.json(r);
+      })
+    );
+  }
+
   // ---- Decisão do responsável ----
   app.post(
     `${base}/:id/decisao`,
@@ -1526,6 +1973,12 @@ for (const m of MODULOS) {
         observacao,
         revisadoPor: req.session.usuario.nome,
       });
+      // 409: o pedido faz sentido, mas o processo não está nesse ponto — é o
+      // caso de decidir antes de responder o RDO. Distinguir de 404 importa
+      // para a tela dizer o que fazer em vez de "não encontrado".
+      if (atualizada && atualizada.erro) {
+        return res.status(409).json({ ok: false, erro: atualizada.erro });
+      }
       if (!atualizada) {
         return res.status(404).json({ ok: false, erro: 'Solicitação não encontrada.' });
       }
@@ -1724,7 +2177,11 @@ app.post(
         .json({ ok: false, erro: 'Webhook não configurado (defina FORMS_WEBHOOK_SECRET no .env).' });
     }
 
-    if (req.get('x-webhook-secret') !== segredoEsperado) {
+    // Comparação em TEMPO CONSTANTE. Com "!==", o tempo de resposta cresce
+    // conforme o número de caracteres iniciais que já batem, e isso permite
+    // descobrir o segredo caractere a caractere sem nunca acertá-lo inteiro.
+    // timingSafeEqual gasta o mesmo tempo em qualquer caso.
+    if (!segredoConfere(req.get('x-webhook-secret'), segredoEsperado)) {
       return res.status(401).json({ ok: false, erro: 'Segredo inválido.' });
     }
 
@@ -1748,17 +2205,23 @@ app.post(
     // Obrigatórios: e-mail e assunto. O nome é opcional — se não vier, usamos a
     // parte antes do "@" do e-mail (o Forms nem sempre coleta o nome de quem responde).
     if (!solicitante_email || !assunto) {
+      // O diagnóstico vai para o LOG, não para a resposta: o corpo cru do
+      // Forms carrega dado de pessoa (nome, CPF, link de anexo), e devolvê-lo
+      // ao chamador o entrega a quem disparou a requisição. No log ele fica
+      // onde já se olha quando o fluxo do Power Automate quebra.
+      console.warn('[webhook] campos obrigatórios ausentes:', {
+        tipo_corpo: typeof req.body,
+        chaves_recebidas: b && typeof b === 'object' ? Object.keys(b) : null,
+        raw_tamanho: req.rawBody ? req.rawBody.length : 0,
+        raw_amostra: (req.rawBody || '').slice(0, 400),
+        content_type: req.get('content-type') || null,
+      });
+
       return res.status(400).json({
         ok: false,
         erro: 'Campos obrigatórios ausentes: solicitante_email e assunto.',
-        // Diagnóstico: mostra o que realmente chegou, para ajustar o fluxo.
-        _debug: {
-          tipo_corpo: typeof req.body,
-          chaves_recebidas: b && typeof b === 'object' ? Object.keys(b) : null,
-          raw_tamanho: req.rawBody ? req.rawBody.length : 0,
-          raw_amostra: (req.rawBody || '').slice(0, 400),
-          content_type: req.get('content-type') || null,
-        },
+        // O que chegou fica no log do servidor (Vercel > Logs), não aqui.
+        chaves_recebidas: b && typeof b === 'object' ? Object.keys(b) : null,
       });
     }
     if (!solicitante_nome) {

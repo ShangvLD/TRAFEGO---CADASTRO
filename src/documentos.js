@@ -38,7 +38,9 @@ async function prepararEnvio({ modulo, solicitacaoId, tipo, nomeArquivo, content
     };
   }
 
-  const pasta = armazenamento.pastaDoCadastro(dono && dono.nome, dono && dono.cpf);
+  // O id entra na pasta: é o que amarra o arquivo a ESTE cadastro, e não ao
+  // e-mail de quem o abriu (ver pastaDoCadastro).
+  const pasta = armazenamento.pastaDoCadastro(dono && dono.nome, dono && dono.cpf, solicitacaoId);
 
   // Mesmo tipo enviado de novo: acrescenta sufixo em vez de sobrescrever, para
   // não perder o anterior sem querer (CNH e CNH_2, por exemplo).

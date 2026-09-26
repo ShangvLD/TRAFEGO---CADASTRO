@@ -173,18 +173,96 @@ function montar(situacao, extra) {
 }
 
 /**
+ * Em que ponto está um cadastro de DECISÃO ÚNICA.
+ *
+ * O agregado passa pelo RDO como o terceiro, mas quem analisa decide o
+ * cadastro inteiro de uma vez — não há selo por gerenciadora. situacaoDe()
+ * não serve: ela deriva o fim da lista de clientes, e aqui essa lista não
+ * governa a decisão.
+ *
+ * Os RÓTULOS são os mesmos (SITUACOES acima), de propósito: "Aguardando RDO"
+ * precisa dizer a mesma coisa nos dois painéis, senão a pessoa que acompanha
+ * os dois aprende duas linguagens para o mesmo processo.
+ *
+ * @param status  o status gravado: pendente | aprovado | reprovado
+ */
+function situacaoSimplesDe({ rdoAprovado, status = 'pendente', assumido = false }) {
+  // Mesma ordem do fluxo com clientes: quem ainda não tem dono está parado
+  // na fila, e isso é diferente de estar esperando uma pesquisa.
+  if (!assumido && status === 'pendente') {
+    return montar('em_analise', {
+      finalizado: false,
+      podeDecidir: false,
+      falta: ['Alguém assumir o atendimento'],
+    });
+  }
+
+  // Os RÓTULOS são os mesmos do fluxo com clientes; as AJUDAS, não. Elas
+  // falam em "gerenciadoras", que existem no terceiro e não aqui — repetidas
+  // neste painel, mandariam a pessoa esperar uma etapa que não vai acontecer.
+  // Só o texto muda; o nome do estado continua um só.
+  if (rdoAprovado === null || rdoAprovado === undefined) {
+    return montar('aguardando_rdo', {
+      finalizado: false,
+      podeDecidir: false,
+      ajuda: 'Faça a pesquisa no RDO antes de decidir o cadastro.',
+      falta: ['Responder "RDO aprovado?"'],
+    });
+  }
+
+  if (rdoAprovado === false) {
+    // Igual ao terceiro: reprovar no RDO encerra: o cadastro não avança para
+    // a decisão, e uma decisão anterior deixa de valer.
+    return montar('reprovado_rdo', {
+      finalizado: true,
+      podeDecidir: false,
+      ajuda: 'Reprovado na pesquisa interna. O cadastro não segue para a decisão.',
+      falta: [],
+    });
+  }
+
+  if (status === 'aprovado') {
+    return montar('aprovado', {
+      finalizado: true, podeDecidir: true, ajuda: 'Cadastro aprovado.', falta: [],
+    });
+  }
+  if (status === 'reprovado') {
+    return montar('reprovado', {
+      finalizado: true, podeDecidir: true, ajuda: 'Cadastro reprovado.', falta: [],
+    });
+  }
+
+  return montar('em_andamento', {
+    finalizado: false,
+    podeDecidir: true,
+    falta: ['Aprovar ou reprovar o cadastro'],
+  });
+}
+
+/**
  * O que impede de registrar o resultado do RDO.
  *
- * A reprovação exige o comprovante ANEXADO ANTES: gravar primeiro e cobrar o
- * anexo depois deixaria cadastros reprovados sem prova, e é exatamente esse
- * registro que uma auditoria vai procurar.
+ * A reprovação exige DUAS coisas, e as duas pelo mesmo motivo: reprovar
+ * encerra o cadastro, e é a decisão que alguém vai reler meses depois.
+ *
+ *   comprovante ANEXADO ANTES  gravar primeiro e cobrar o anexo depois
+ *       deixaria cadastros reprovados sem prova.
+ *   MOTIVO escrito            "reprovado" sem motivo não se explica a quem
+ *       chega depois — e foi o que aconteceu com a solicitação 302, reprovada
+ *       com o campo em branco porque ele era opcional.
+ *
+ * Aprovar não exige nenhum dos dois: só libera a etapa seguinte.
  *
  * @param temComprovante  já existe documento do tipo DOC_RDO?
+ * @param observacao      o motivo, obrigatório na reprovação
  * @returns null quando pode gravar, ou a mensagem do impedimento
  */
-function impedimentoParaRdo({ aprovado, temComprovante }) {
+function impedimentoParaRdo({ aprovado, temComprovante, observacao }) {
   if (aprovado !== true && aprovado !== false) {
     return 'Responda se o RDO foi aprovado.';
+  }
+  if (aprovado === false && !String(observacao == null ? '' : observacao).trim()) {
+    return 'Informe o motivo da reprovação.';
   }
   if (aprovado === false && !temComprovante) {
     return `Anexe o resultado do RDO ("${DOC_RDO}") antes de reprovar.`;
@@ -313,6 +391,7 @@ module.exports = {
   temposDe,
   DOC_RDO,
   situacaoDe,
+  situacaoSimplesDe,
   impedimentoParaRdo,
   statusLegadoDe,
 };

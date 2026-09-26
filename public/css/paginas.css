@@ -214,9 +214,13 @@
 .btn-acao.reprovar:hover { background: var(--danger-soft); border-color: var(--danger); }
 
 /* ---- KPIs do painel ------------------------------------------------- */
+/* auto-fit, e não repeat(5, 1fr): o painel do terceiro tem cinco indicadores
+   (inclui "aprovado em parte"), o dos demais módulos tem quatro, porque neles
+   a decisão é do cadastro inteiro. Com as colunas fixas em cinco, o quarto
+   card parava no meio da linha e sobrava um vão à direita. */
 .kpi-grid {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
     gap: var(--space-4);
     margin-bottom: var(--space-6);
 }
@@ -244,6 +248,56 @@
     color: var(--text);
     margin-top: var(--space-2);
 }
+
+/* ---- Célula do solicitante -----------------------------------------
+   E-mail em cima (quem pediu) e o resumo do cadastro embaixo (o que foi
+   pedido). Antes eram nome e e-mail, que em boa parte dos usuários são o
+   mesmo texto — duas linhas para uma informação só. */
+.sol-cel {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.sol-email {
+    font-weight: 600;
+    color: var(--text);
+}
+
+.sol-nome {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.sol-resumo {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    margin-top: 3px;
+    padding-top: 4px;
+    border-top: 1px dashed var(--border);
+}
+
+.sol-item {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+
+/* O rótulo tem largura fixa para os valores alinharem em coluna: com o
+   rótulo colado no texto, "Placa ABC1D23" e "Proprietário Fulano" começavam
+   em pontos diferentes e a leitura vertical se perdia. */
+.sol-rot {
+    display: inline-block;
+    min-width: 74px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+    opacity: 0.75;
+}
+
+.sol-item { color: var(--text); }
 
 /* Linha clicável (abre o detalhe) e botão "ver" */
 .data-table tr.linha-clic { cursor: pointer; }
@@ -781,7 +835,6 @@ a.anexo-card:hover {
     color: var(--success, #15803d);
 }
 
-#rdo-reprova input[type=file],
 #rdo-reprova textarea {
     display: block;
     width: 100%;
@@ -793,6 +846,95 @@ a.anexo-card:hover {
     font-size: 0.85rem;
 }
 
+/* Rótulo de cada campo do formulário de reprovação. Os dois são obrigatórios,
+   e o asterisco diz isso antes de o botão recusar. */
+.rdo-campo {
+    display: block;
+    margin: var(--space-3) 0 4px;
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.rdo-req { color: var(--danger, #b91c1c); }
+
+.btn-rdo.escolher {
+    display: inline-flex;
+    margin-bottom: var(--space-2);
+}
+
+/* Como em .rdo-escolhido: o display explícito vence o atributo hidden, e sem
+   isto o seletor continuava na tela ao lado do arquivo já escolhido. */
+.btn-rdo.escolher[hidden] { display: none; }
+
+/* O arquivo escolhido, com nome e tamanho: é o que faltava para o clique no
+   seletor deixar rastro na tela. */
+.rdo-escolhido,
+.rdo-doc {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: var(--space-2) 0;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: #fff;
+    font-size: 0.85rem;
+}
+
+/* "display: flex" vence o display:none que o atributo hidden aplica, e sem
+   esta regra o espaço do arquivo escolhido aparece como uma faixa vazia antes
+   de haver arquivo nenhum. */
+.rdo-escolhido[hidden] { display: none; }
+
+.rdo-doc-nome {
+    flex: 1;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rdo-doc-tam { color: var(--text-secondary); font-size: 0.8rem; }
+
+.rdo-remover,
+.rdo-ver {
+    border: 0;
+    background: none;
+    padding: 2px 4px;
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.rdo-remover { color: var(--danger, #b91c1c); }
+.rdo-ver { color: var(--primary); }
+.rdo-ver:disabled { opacity: .6; cursor: default; }
+
+.rdo-rotulo-obs {
+    margin-top: var(--space-3);
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--text-secondary);
+}
+
+/* Estado do envio: enviando, anexado, ou falhou. Fica separado de .rdo-erro
+   (que traz a mensagem técnica) porque responde outra pergunta — "e agora?". */
+.rdo-estado {
+    margin-top: var(--space-2);
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    font-size: 0.83rem;
+    font-weight: 600;
+}
+
+.rdo-estado.is-enviando { background: var(--surface-muted, #f1f5f9); color: var(--text-secondary); }
+.rdo-estado.is-ok       { background: var(--success-soft, #dcfce7); color: var(--success, #15803d); }
+.rdo-estado.is-erro     { background: var(--danger-soft, #fee2e2); color: var(--danger, #b91c1c); }
+
 .rdo-erro {
     margin-top: var(--space-2);
     padding: 8px 10px;
@@ -802,15 +944,6 @@ a.anexo-card:hover {
     color: var(--danger, #b91c1c);
 }
 
-.rdo-doc {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: var(--space-2);
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: var(--danger, #b91c1c);
-}
 
 /* O que falta para o cadastro terminar, no topo do detalhe. Fica ao lado do
    nome porque é a resposta de "e agora?", perguntada antes de qualquer outra. */

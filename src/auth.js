@@ -14,6 +14,7 @@
 
 const { acharModulo, dominioPermitido, rotaFormulario, rotaPainel } = require('./modulos');
 const papeis = require('./papeis');
+const usuarios = require('./usuarios');
 
 /** Responde negativa no formato certo: JSON em /api/, redirecionamento em página. */
 function negar(req, res, { status, erro, destino }) {
@@ -38,12 +39,60 @@ function paginaInicialPorPapel(papel) {
   return '/minhas-solicitacoes';
 }
 
-/** Deixa passar apenas quem tem sessão ativa. */
-function exigirLogin(req, res, next) {
-  if (req.session && req.session.usuario) {
+/**
+ * Deixa passar apenas quem tem sessão ativa — e reconfere no banco, de minuto
+ * em minuto, se o usuário continua existindo, ativo e com o mesmo papel.
+ *
+ * POR QUE RECONFERIR: a sessão guarda uma CÓPIA do papel, tirada no login, e
+ * vale 8 horas. Sem isto, desativar um usuário ou rebaixar o papel dele não
+ * tinha efeito nenhum até a sessão vencer — a pessoa seguia entrando e
+ * decidindo cadastro com o crachá antigo.
+ *
+ * POR QUE NÃO A CADA REQUISIÇÃO: seria uma consulta a mais em toda chamada de
+ * tela. Um minuto é curto demais para virar brecha e longo o bastante para o
+ * custo não aparecer.
+ */
+const INTERVALO_REVALIDACAO_MS = 60_000;
+
+async function exigirLogin(req, res, next) {
+  const sessao = req.session;
+  if (!sessao || !sessao.usuario) {
+    return negar(req, res, { status: 401, erro: 'Não autenticado.', destino: '/login' });
+  }
+
+  const u = sessao.usuario;
+  const agora = Date.now();
+  if (u.verificadoEm && agora - u.verificadoEm < INTERVALO_REVALIDACAO_MS) {
     return next();
   }
-  return negar(req, res, { status: 401, erro: 'Não autenticado.', destino: '/login' });
+
+  let atual;
+  try {
+    atual = await usuarios.buscarPorId(u.id);
+  } catch (err) {
+    return next(err); // falha de banco não deve virar "não autenticado"
+  }
+
+  if (!atual || Number(atual.ativo) !== 1) {
+    return sessao.destroy(() =>
+      negar(req, res, {
+        status: 401,
+        erro: 'Sua sessão foi encerrada porque o acesso mudou. Entre de novo.',
+        destino: '/login',
+      })
+    );
+  }
+
+  // Só o essencial volta para a sessão: buscarPorId traz o senha_hash, que não
+  // pode ser gravado no store de sessão.
+  sessao.usuario = {
+    id: atual.id,
+    nome: atual.nome,
+    email: atual.email,
+    papel: atual.papel,
+    verificadoEm: agora,
+  };
+  return next();
 }
 
 /** Deixa passar apenas quem tem um dos papéis informados. */

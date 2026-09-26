@@ -444,7 +444,7 @@ const TIPOS_DE_CAMPO = [
   },
   {
     valor: 'anexo', rotulo: 'Anexo (arquivo)', icone: 'attach_file',
-    ajuda: 'Pede um arquivo: PDF, JPG ou PNG.',
+    ajuda: 'Pede um arquivo: PDF, JPG, JPEG ou PNG.',
     config: [],
   },
   // Tipos com validação própria, mantidos para as perguntas que já existem e
