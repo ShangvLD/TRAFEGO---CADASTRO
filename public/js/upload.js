@@ -84,8 +84,33 @@
       if (opcoes.aoMudar) opcoes.aoMudar(enviados);
     }
 
+    /**
+     * Normaliza um código de documento para comparação.
+     * Espelha canonico() de src/tipos-documento.js, sem os apelidos — a tela
+     * só precisa que grafia não separe o que é o mesmo documento.
+     */
+    function mesmoCodigo(a, b) {
+      const limpar = (t) =>
+        String(t || '')
+          .normalize('NFD')
+          .replace(/[̀-ͯ]/g, '')
+          .toUpperCase()
+          .replace(/[^A-Z0-9]+/g, '_')
+          .replace(/^_+|_+$/g, '');
+      return limpar(a) === limpar(b);
+    }
+
+    /**
+     * Quais arquivos já enviados são deste tipo.
+     *
+     * A comparação é pelo código normalizado, e não por ===, porque a lista
+     * de documentos vem de cfg_documentos e os enviados vêm de documentos —
+     * duas tabelas que já divergiram na grafia do mesmo tipo. Quando divergem,
+     * o item aparece como pendente e a pessoa reenvia um documento que ela já
+     * tinha entregado.
+     */
     function enviadosDoTipo(codigo) {
-      return enviados.filter((d) => d.tipo === codigo);
+      return enviados.filter((d) => mesmoCodigo(d.tipo, codigo));
     }
 
     function desenhar() {

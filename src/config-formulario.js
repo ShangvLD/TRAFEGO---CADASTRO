@@ -20,6 +20,7 @@
    ========================================================================== */
 
 const db = require('./db');
+const tiposDocumento = require('./tipos-documento');
 const { OPERACOES, TIPOS_DOCUMENTO, limparTexto, vazio } = require('./validacao');
 const { MODULOS, acharModulo } = require('./modulos');
 const campos = require('./campos');
@@ -910,12 +911,13 @@ async function criarDocumento({ modulo, codigo, rotulo, temValidade = false, obr
   // ("á" -> "a" + U+0301) e o replace seguinte apaga os acentos soltos, para
   // "Currículo" e "curriculo" darem o MESMO código e a checagem de duplicado
   // pegá-los.
-  const cod = limparTexto(codigo)
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
+  //
+  // Passa pelo canônico (src/tipos-documento.js) e não só pela limpeza: quem
+  // digita "Certificado de Direção Segura" nesta tela está criando o MESMO
+  // documento que os outros módulos chamam de CERT_DIRECAO_SEGURA. Sem o
+  // apelido, a tela recriaria a divergência de três códigos que a migration
+  // 002 acabou de desfazer — e ninguém notaria, porque o cadastro funciona.
+  const cod = tiposDocumento.canonico(limparTexto(codigo));
 
   if (!cod) return { ok: false, erro: 'Informe o nome do documento.' };
   const rot = limparTexto(rotulo) || cod;

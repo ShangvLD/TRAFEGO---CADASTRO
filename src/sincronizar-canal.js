@@ -91,10 +91,31 @@ async function documentosDoPortal() {
 
 /**
  * Caminho local de um documento.
- * O prefixo "CADASTROS/" do storage é descartado: a pasta do canal JÁ é a raiz
- * dos cadastros, e repetir criaria "…/CADASTROS/CADASTROS/…".
+ *
+ * Duas formas chegam aqui, porque o storage tem duas (ver
+ * validarCaminhoLogico em src/storage.js):
+ *
+ *   CADASTROS/JOAO_.../CNH.pdf                 ->  JOAO_.../CNH.pdf
+ *   terceiro/000000/000302_JOAO_.../CNH.pdf    ->  TERCEIRO/000302_JOAO_.../CNH.pdf
+ *
+ * O prefixo "CADASTROS/" é descartado: a pasta do canal JÁ é a raiz dos
+ * cadastros, e repetir criaria "…/CADASTROS/CADASTROS/…".
+ *
+ * A FAIXA (o "000000") também é descartada, e por um motivo diferente: ela
+ * existe para nenhum prefixo do bucket passar de mil objetos, que é um
+ * problema da API de listagem do Supabase. Aqui é uma pasta do Windows que
+ * gente abre para procurar um documento, e um nível a mais de números só
+ * atrapalha quem procura. Espelhar não é copiar a estrutura; é entregar os
+ * mesmos arquivos onde eles fazem sentido.
  */
 function caminhoLocal(caminhoNoStorage) {
+  const partes = String(caminhoNoStorage).split('/');
+
+  // Formato novo: <modulo>/<faixa>/<pasta>/<arquivo>
+  if (partes.length === 4) {
+    return path.join(PASTA, partes[0].toUpperCase(), partes[2], partes[3]);
+  }
+
   const relativo = caminhoNoStorage.replace(/^CADASTROS\//, '');
   return path.join(PASTA, ...relativo.split('/'));
 }

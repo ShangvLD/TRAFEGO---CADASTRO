@@ -178,6 +178,20 @@
     <script src="/js/zip.js"></script>
     <script src="/js/xlsx.js"></script>
     <script>
+        /**
+         * É o resultado do RDO?
+         *
+         * Reconhece as duas grafias: "RESULTADO RDO" nas linhas gravadas antes
+         * da padronização e "RESULTADO_RDO" nas novas. Comparar com uma string
+         * só faria o relatório contar o comprovante do RDO como anexo comum —
+         * e ele não é do solicitante.
+         *
+         * Espelha canonico() de src/tipos-documento.js.
+         */
+        const ehRdo = (tipo) =>
+          String(tipo || '').toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') ===
+          'RESULTADO_RDO';
+
         const corpo = document.getElementById('corpo');
         const elCards = document.getElementById('cards');
         const elContagem = document.getElementById('contagem');
