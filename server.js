@@ -38,6 +38,7 @@ const atendimentos = require('./src/atendimentos');
 const limiteLogin = require('./src/limite-login');
 const fluxo = require('./src/fluxo');
 const testePratico = require('./src/teste-pratico');
+const blacklist = require('./src/blacklist');
 const {
   exigirLogin,
   exigirAdmin,
@@ -601,6 +602,12 @@ app.get(
       historico: await atendimentos.historico(m.slug, id),
       // O teste prático, quando o módulo tem um. Fora para o SOLICITANTE pelo
       // mesmo motivo do RDO: é julgamento interno sobre ele mesmo.
+      //
+      // O sinal vem SEPARADO do teste porque "null" responde a duas perguntas
+      // diferentes — módulo sem teste, e candidato ainda não avaliado — e a
+      // tela precisa distinguir: numa ela não mostra nada, na outra mostra
+      // "ainda não aplicado".
+      temTestePratico: acompanha && testePratico.permite(m.slug),
       teste: acompanha ? await testePratico.atual(m.slug, id) : null,
     });
   })
@@ -1896,9 +1903,28 @@ for (const m of MODULOS) {
           return res.status(404).json({ ok: false, erro: 'Solicitação não encontrada.' });
         }
 
+        // De quem é a avaliação: lido da SOLICITAÇÃO, nunca do corpo. Vai
+        // gravado junto para a tabela ser legível sozinha no Supabase, e vem
+        // daqui para o nome no registro ser o mesmo do cadastro — não um texto
+        // que a tela mandou e ninguém conferiu.
+        const dadosCand = solicitacao.dados || {};
+        const doTexto = cadastros.condutorDosDetalhes(solicitacao.detalhes);
+        const candidato = {
+          candidato_nome:
+            dadosCand.condutor_nome || doTexto.nome || solicitacao.solicitante_nome || null,
+          candidato_cpf: dadosCand.cpf || dadosCand.condutor_cpf || doTexto.cpf || null,
+        };
+
         // O avaliador vem SEMPRE da sessão, nunca do corpo — ninguém assina
-        // uma avaliação em nome de outra pessoa.
-        const r = await testePratico.salvar(m.slug, id, req.body || {}, req.session.usuario);
+        // uma avaliação em nome de outra pessoa. O espalhamento do candidato
+        // vem DEPOIS do corpo de propósito: o servidor ganha de quem tentar
+        // mandar outro nome na requisição.
+        const r = await testePratico.salvar(
+          m.slug,
+          id,
+          { ...(req.body || {}), ...candidato },
+          req.session.usuario
+        );
         if (!r.ok) return res.status(400).json(r);
         res.json(r);
       })

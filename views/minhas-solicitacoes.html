@@ -15,6 +15,7 @@
     <link rel="stylesheet" href="/css/paginas.css">
     <link rel="stylesheet" href="/css/cadastro.css">
     <link rel="stylesheet" href="/css/acompanhamento.css">
+    <link rel="stylesheet" href="/css/teste-pratico.css">
 </head>
 <body class="has-header">
 
@@ -160,6 +161,7 @@
 
     <script src="/js/app.js"></script>
     <script src="/js/validacao.js"></script>
+    <script src="/js/teste-pratico.js"></script>
     <script>
         /**
          * É o resultado do RDO?
@@ -456,6 +458,11 @@
         // um é aberto por vez.
         // ------------------------------------------------------------------
         const overlay = document.getElementById("modal-detalhe");
+
+        // O que está aberto no modal. O teste prático precisa da solicitação
+        // inteira (é dela que sai a identificação do candidato na ficha), e
+        // não só do id que veio no botão.
+        let aberto = null;
         const modalBody = document.getElementById("modal-body");
 
         function fecharModal() {
@@ -636,6 +643,32 @@
                 ? '<div class="detalhe-grid">' + campos.map(function (c) { return linhaDet(c[0], esc(c[1])); }).join("") + "</div>"
                 : '<p class="modal-vazio">Sem dados detalhados.</p>');
 
+            // ---- Teste prático de direção ----
+            //
+            // É AQUI que o teste é APLICADO, e não no painel. Quem coloca o
+            // candidato para dirigir é quem cadastrou o candidato, e é nesta
+            // tela que essa pessoa encontra o cadastro dele. O painel mostra o
+            // mesmo cartão, mas só para leitura: lá o trabalho é acompanhar o
+            // resultado, não produzir um.
+            //
+            // Só existe para o candidato, e só para quem acompanha o painel —
+            // o servidor manda o sinal já resolvido, e a tela não repete a
+            // regra de quem pode ver o quê.
+            //
+            // Entra ANTES dos documentos de propósito: quem abre um candidato
+            // quer saber como ele foi no teste, e não rolar a lista de anexos
+            // até o fim para descobrir.
+            if (j.temTestePratico) {
+                partes.push('<h4 class="detalhe-secao"><span class="material-symbols-rounded" ' +
+                    'style="vertical-align:-5px;color:var(--primary)">assignment_turned_in</span> ' +
+                    'Teste prático de direção</h4>');
+                // Num container próprio: ao salvar, só este pedaço é
+                // redesenhado — recarregar o modal inteiro perderia a rolagem
+                // de quem estava lendo o cadastro.
+                partes.push('<div id="bloco-teste">' +
+                    window.TestePratico.resumo(j.teste, s.id) + '</div>');
+            }
+
             partes.push('<h4 class="detalhe-secao"><span class="material-symbols-rounded" ' +
                 'style="vertical-align:-5px;color:var(--primary)">folder_open</span> Documentos (' + docs.length + ")</h4>");
             partes.push(docs.length
@@ -647,7 +680,31 @@
             partes.push(hist);
 
             modalBody.innerHTML = partes.join("");
+            aberto = { solicitacao: s, modulo: modulo, teste: j.teste || null };
         }
+
+        /**
+         * Abre a ficha do teste para PREENCHER.
+         *
+         * Ao salvar, o cartão é redesenhado no lugar — recarregar a lista
+         * inteira fecharia o detalhe que a pessoa está lendo.
+         */
+        function aplicarTeste() {
+            if (!aberto) return;
+            window.TestePratico.abrir(aberto.modulo, aberto.solicitacao, {
+                aoSalvar: function (teste) {
+                    aberto.teste = teste;
+                    const bloco = document.getElementById('bloco-teste');
+                    if (bloco) {
+                        bloco.innerHTML = window.TestePratico.resumo(teste, aberto.solicitacao.id);
+                    }
+                },
+            });
+        }
+
+        modalBody.addEventListener('click', function (e) {
+            if (e.target.closest('[data-abrir-teste]')) aplicarTeste();
+        });
 
         corpo.addEventListener("click", function (e) {
             const btn = e.target.closest("[data-ver]");
@@ -657,6 +714,8 @@
         document.getElementById("modal-fechar").addEventListener("click", fecharModal);
         overlay.addEventListener("click", function (e) { if (e.target === overlay) fecharModal(); });
         document.addEventListener("keydown", function (e) {
+            // Com a ficha do teste aberta por cima, o Esc é dela.
+            if (document.querySelector(".modal-overlay.tp-ficha")) return;
             if (e.key === "Escape" && !overlay.hidden) fecharModal();
         });
 

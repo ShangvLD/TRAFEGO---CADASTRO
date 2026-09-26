@@ -66,39 +66,93 @@
     // -----------------------------------------------------------------------
 
     /**
-     * O ícone é sempre o mesmo (volante); o que muda com o estado é a COR e o
-     * tooltip. Trocar o desenho a cada estado faria a coluna de ações parecer
-     * cinco botões diferentes, e quem varre a tabela procura sempre o mesmo.
+     * O ícone é sempre o mesmo; o que muda com o estado é a COR e o tooltip.
+     * Trocar o desenho a cada estado faria a coluna de ações parecer cinco
+     * botões diferentes, e quem varre a tabela procura sempre o mesmo.
+     *
+     * @param opcoes.somenteLeitura  true no painel, onde o ícone CONSULTA a
+     *        ficha em vez de aplicá-la. Sem ficha ainda, ele vem desabilitado:
+     *        abrir um formulário vazio e travado não responderia nada, e um
+     *        botão que não faz nada ao clique é pior que um botão apagado.
      */
-    function icone(teste, id) {
+    function icone(teste, id, opcoes) {
         const e = estadoDe(teste);
+        const somenteLeitura = !!(opcoes && opcoes.somenteLeitura);
+        const vazio = !teste;
         const classeCor = e.estado === 'nao_realizado' ? '' : ' ' + e.cor;
+
+        const ajuda = somenteLeitura
+            ? (vazio ? e.ajuda : e.rotulo + ' — ver a ficha preenchida')
+            : e.rotulo + ' — ' + e.ajuda;
+
         return (
             '<button class="btn-acao teste' + classeCor + '" data-teste="' + esc(id) + '"' +
-            ' title="' + esc(e.rotulo + ' — ' + e.ajuda) + '"' +
+            (somenteLeitura && vazio ? ' disabled' : '') +
+            ' title="' + esc(ajuda) + '"' +
             ' aria-label="' + esc(e.rotulo) + '">' +
             '<span class="material-symbols-rounded">assignment_turned_in</span></button>'
         );
     }
 
-    /** Bloco do teste dentro do modal de detalhe do cadastro. */
-    function resumo(teste, id) {
+    /**
+     * O cartão da nota — leitura pura, sem ação.
+     *
+     * A nota fica GRANDE porque é a resposta que se procura ao abrir um
+     * candidato: "ele foi bem no teste?". O resultado (aprovado / reprovado)
+     * vem ao lado e não no lugar dela, porque são coisas diferentes — a nota é
+     * o desempenho medido, o resultado é a decisão de quem aplicou, e um
+     * "aprovado com ressalvas" com 5,5 diz mais junto do que separado.
+     *
+     * Ficha pela metade mostra a nota como PARCIAL em vez de escondê-la: um
+     * rascunho de três critérios tem um número verdadeiro sobre três critérios,
+     * e omiti-lo seria menos informativo que dizer de quantos ele saiu.
+     */
+    function cartaoNota(teste) {
         const e = estadoDe(teste);
-        const d = teste && teste.desempenho;
-        const assinatura = teste && teste.avaliador_nome
-            ? '<span class="tp-resumo__texto">por ' + esc(teste.avaliador_nome) +
-              (teste.finalizado_em || teste.atualizado_em
-                  ? ' · ' + esc(quando(teste.finalizado_em || teste.atualizado_em))
-                  : '') + '</span>'
-            : '';
+
+        if (!teste) {
+            return '<div class="tp-nota tp-nota--vazia">' +
+                '<span class="material-symbols-rounded">assignment_turned_in</span>' +
+                '<div><strong>Teste prático ainda não aplicado</strong>' +
+                '<small>A nota aparece aqui quando o avaliador finalizar a ficha.</small></div>' +
+                '</div>';
+        }
+
+        const p = teste.pontuacao;
+        const assinatura = [
+            teste.avaliador_nome ? 'por ' + teste.avaliador_nome : '',
+            quando(teste.finalizado_em || teste.atualizado_em),
+        ].filter(Boolean).join(' · ');
+
+        const criterios = p
+            ? (p.parcial
+                ? 'Parcial — ' + p.respondidos + ' de ' + p.total + ' critérios respondidos'
+                : p.total + ' critérios avaliados')
+            : 'Nenhum critério respondido ainda';
 
         return (
-            '<div class="tp-resumo">' +
+            '<div class="tp-nota ' + esc(e.cor) + '">' +
+            '<div class="tp-nota__valor">' +
+            (p ? '<strong>' + esc(p.nota.toFixed(1).replace('.', ',')) + '</strong>' +
+                 '<span>de ' + esc(p.maximo) + '</span>'
+               : '<strong>—</strong><span>de 10</span>') +
+            '</div>' +
+            '<div class="tp-nota__texto">' +
             '<span class="badge ' + esc(e.cor) + '">' +
             '<span class="material-symbols-rounded" style="font-size:16px">' + esc(e.icone) + '</span> ' +
             esc(e.rotulo) + '</span>' +
-            (d ? '<span class="tp-resumo__texto">Desempenho: ' + esc(d.texto) + '</span>' : '') +
-            assinatura +
+            '<small>' + esc(criterios) + '</small>' +
+            (assinatura ? '<small>' + esc(assinatura) + '</small>' : '') +
+            '</div>' +
+            '</div>'
+        );
+    }
+
+    /** O cartão MAIS a ação de abrir a ficha — é o que o painel usa. */
+    function resumo(teste, id) {
+        return (
+            cartaoNota(teste) +
+            '<div class="tp-resumo">' +
             '<button type="button" class="btn-modal" data-abrir-teste="' + esc(id) + '">' +
             '<span class="material-symbols-rounded">assignment_turned_in</span> ' +
             (teste ? 'Abrir teste prático' : 'Aplicar teste prático') +
@@ -238,7 +292,7 @@
     }
 
     /** Cabeçalho do que já foi decidido, quando o teste está finalizado. */
-    function blocoFinalizado(teste) {
+    function blocoFinalizado(teste, podeEditar) {
         if (!teste || teste.status !== 'finalizado') return '';
         const e = estadoDe(teste);
         const classe =
@@ -252,8 +306,13 @@
             esc(e.rotulo) + '</div>' +
             '<p class="tp-ajuda">Finalizado por ' + esc(teste.avaliador_nome || '—') +
             (teste.finalizado_em ? ' · ' + esc(quando(teste.finalizado_em)) : '') +
-            (teste.desempenho ? ' · desempenho ' + esc(teste.desempenho.texto) : '') +
-            '. Alterar o que está abaixo e finalizar de novo substitui esta decisão.</p>' +
+            (teste.pontuacao ? ' · nota ' + esc(teste.pontuacao.texto) : '') + '. ' +
+            // Sem permissão de editar, prometer "altere e finalize de novo"
+            // seria anunciar um botão que não existe nesta tela.
+            (podeEditar
+                ? 'Alterar o que está abaixo e finalizar de novo substitui esta decisão.'
+                : 'Esta é a ficha como o avaliador a finalizou.') +
+            '</p>' +
             '</div>'
         );
     }
@@ -277,7 +336,10 @@
         const url = '/api/modulos/' + modulo + '/solicitacoes/' + solicitacao.id + '/teste';
 
         const ov = document.createElement('div');
-        ov.className = 'modal-overlay';
+        // A classe extra identifica a ficha para as telas de trás: as duas
+        // ouvem Escape no document, e sem isso um Esc fecharia a ficha E o
+        // detalhe do cadastro de uma vez só.
+        ov.className = 'modal-overlay tp-ficha';
         ov.innerHTML =
             '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="tp-titulo">' +
             '<div class="modal-header"><h3 id="tp-titulo">' +
@@ -289,6 +351,12 @@
             '<div class="modal-footer"></div></div>';
 
         document.body.appendChild(ov);
+
+        // A ficha abre POR CIMA do modal de detalhe, que já travou a rolagem
+        // da página. Guardar e devolver o valor anterior, em vez de limpar, é
+        // o que evita a página de trás voltar a rolar atrás de um modal que
+        // continua aberto.
+        const rolagemAnterior = document.body.style.overflow;
         document.body.style.overflow = 'hidden';
 
         const corpo = ov.querySelector('.modal-body');
@@ -297,7 +365,7 @@
         function fechar() {
             document.removeEventListener('keydown', aoTeclar);
             ov.remove();
-            document.body.style.overflow = '';
+            document.body.style.overflow = rolagemAnterior;
         }
         function aoTeclar(e) {
             if (e.key === 'Escape') fechar();
@@ -321,7 +389,7 @@
         let teste = pacote.teste;
 
         corpo.innerHTML =
-            blocoFinalizado(teste) +
+            blocoFinalizado(teste, podeEditar) +
             identificacao(solicitacao, teste) +
             camposDoTeste(teste, podeEditar) +
             fichaHtml(config, teste, !podeEditar);
@@ -467,5 +535,5 @@
         );
     }
 
-    window.TestePratico = { icone, resumo, abrir, estadoDe };
+    window.TestePratico = { icone, resumo, cartaoNota, abrir, estadoDe };
 })();

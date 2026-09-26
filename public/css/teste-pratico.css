@@ -238,3 +238,84 @@
 @media (max-width: 640px) {
     .tp-criterio { grid-template-columns: 1fr; }
 }
+
+/* ---------------------------------------------------------------------------
+   O cartão da nota
+
+   A nota ocupa o canto esquerdo em corpo grande porque é a pergunta que leva
+   alguém a abrir um candidato — "foi bem no teste?". O resultado fica ao lado,
+   em selo: é decisão, não medida, e misturar os dois num número só faria a
+   tela parecer que a nota reprova sozinha.
+   --------------------------------------------------------------------------- */
+.tp-nota {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    margin-bottom: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--primary);
+    border-radius: var(--radius);
+    background: var(--surface-muted, #f8fafc);
+}
+
+.tp-nota.is-success { border-left-color: var(--success, #15803d); }
+.tp-nota.is-danger  { border-left-color: var(--danger, #b91c1c); }
+.tp-nota.is-parcial { border-left-color: #6d28d9; }
+.tp-nota.is-info    { border-left-color: var(--primary); }
+.tp-nota.is-warning { border-left-color: var(--warning, #b45309); }
+
+.tp-nota__valor {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 76px;
+    line-height: 1;
+}
+
+.tp-nota__valor strong {
+    font-size: 2.1rem;
+    font-weight: 800;
+    letter-spacing: -.02em;
+}
+
+.tp-nota__valor span {
+    margin-top: 2px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+}
+
+.tp-nota.is-success .tp-nota__valor strong { color: var(--success, #15803d); }
+.tp-nota.is-danger  .tp-nota__valor strong { color: var(--danger, #b91c1c); }
+.tp-nota.is-parcial .tp-nota__valor strong { color: #6d28d9; }
+.tp-nota.is-info    .tp-nota__valor strong { color: var(--primary); }
+.tp-nota.is-warning .tp-nota__valor strong { color: var(--text-secondary); }
+
+.tp-nota__texto {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-width: 0;
+}
+
+.tp-nota__texto small { font-size: 0.79rem; color: var(--text-secondary); }
+
+/* Sem ficha ainda: um aviso discreto, não um zero — "não avaliado" e "tirou
+   zero" são coisas opostas e não podem parecer a mesma. */
+.tp-nota--vazia {
+    border-left-color: var(--border);
+    color: var(--text-secondary);
+}
+
+.tp-nota--vazia .material-symbols-rounded { font-size: 28px; }
+.tp-nota--vazia strong { display: block; font-size: 0.88rem; color: var(--text); }
+.tp-nota--vazia small { font-size: 0.79rem; }
+
+@media (max-width: 480px) {
+    .tp-nota { flex-direction: column; align-items: flex-start; gap: var(--space-2); }
+}

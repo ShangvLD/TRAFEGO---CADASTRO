@@ -33,6 +33,9 @@ const { MODULOS } = require('./modulos');
 const { NOMES_PAPEIS } = require('./papeis');
 const { NOMES_TIPOS_CAMPO } = require('./tipos-campo');
 const { ESCOPOS } = require('./pesquisas');
+// A ficha do teste prático, para gerar a visão de leitura (uma coluna por
+// critério). src/ficha-teste.js não importa nada, então não fecha ciclo com o db.
+const fichaTeste = require('./ficha-teste');
 
 // --------------------------------------------------------------------------
 // Tipos: BIGINT (int8) chega como string por padrão no "pg", porque pode
@@ -188,6 +191,68 @@ const TIPOS_CAMPO_SQL = NOMES_TIPOS_CAMPO.map((t) => `'${t}'`).join(', ');
 // Mesma ideia dos tipos de campo: a lista viva em um módulo, e o CHECK sai
 // dela. src/pesquisas.js não importa nada, então não fecha ciclo com o db.
 const ESCOPOS_SQL = ESCOPOS.map((e) => `'${e.id}'`).join(', ');
+
+/**
+ * Visão de leitura das fichas do teste prático, uma coluna por critério.
+ *
+ * POR QUE EXISTE: as respostas são gravadas em JSON, que é o formato certo
+ * para GUARDAR (acrescentar um critério não pede migração de schema) e o
+ * formato errado para LER — no editor de tabelas do Supabase, uma coluna
+ * "avaliacoes" com {"baliza_re":"regular",...} não responde nenhuma pergunta
+ * sem alguém decifrar o JSON linha a linha.
+ *
+ * A visão resolve as duas coisas: a tabela continua flexível e existe uma
+ * grade legível ao lado, com o nome do candidato, a nota e cada critério em
+ * sua coluna, pelo rótulo que o avaliador viu na tela.
+ *
+ * DERRUBADA E RECRIADA a cada inicialização, de propósito: as colunas saem da
+ * lista de critérios em src/ficha-teste.js, e um critério acrescentado lá tem
+ * de virar coluna aqui sem ninguém lembrar de mexer no banco. É a mesma
+ * técnica que as restrições de papel e de escopo já usam acima — barata, e
+ * mantém o banco alinhado com o código.
+ */
+const VISAO_TESTE_SQL = (() => {
+  const colunas = fichaTeste.TODOS_CRITERIOS.map((c) => {
+    // O rótulo vira nome de coluna: "Baliza / manobra de ré" -> "baliza_manobra_de_re".
+    // Entre aspas porque o identificador é gerado, e sem elas um rótulo com
+    // acento ou espaço quebraria a instrução inteira.
+    const nome = c.rotulo
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 55);
+    // O id é o que está gravado no JSON; o rótulo é só o nome da coluna.
+    const casos = fichaTeste.CONCEITOS.map(
+      (k) => `WHEN '${k.id}' THEN '${k.rotulo.replace(/'/g, "''")}'`
+    ).join(' ');
+    return `CASE t.avaliacoes::jsonb ->> '${c.id}' ${casos} ELSE NULL END AS "${nome}"`;
+  }).join(', ');
+
+  return `
+  DROP VIEW IF EXISTS vw_teste_pratico_respostas;
+  CREATE VIEW vw_teste_pratico_respostas AS
+    SELECT t.id,
+           t.solicitacao_id,
+           t.candidato_nome,
+           t.candidato_cpf,
+           t.tentativa,
+           t.status,
+           t.pontuacao,
+           t.resultado,
+           ${colunas},
+           t.observacoes,
+           t.justificativa,
+           t.veiculo,
+           t.data_teste,
+           t.avaliador_nome,
+           t.criado_em,
+           t.finalizado_em
+      FROM testes_praticos t
+     ORDER BY t.id DESC;
+`;
+})();
 
 /**
  * Tabela de um módulo de cadastro (agregado, candidato, e os futuros).
@@ -672,6 +737,22 @@ const SCHEMA_SQL = `
 
   CREATE INDEX IF NOT EXISTS idx_testes_praticos_solicitacao
     ON testes_praticos (modulo, solicitacao_id);
+
+  -- A NOTA, de 0 a 10, gravada e não recalculada na leitura. É o que permite
+  -- perguntar "quem tirou abaixo de 6?" direto no Supabase, e é o que preserva
+  -- a nota com que cada candidato foi julgado se o peso de um conceito mudar.
+  ALTER TABLE testes_praticos ADD COLUMN IF NOT EXISTS pontuacao numeric(4,1);
+
+  -- De QUEM é esta avaliação. Copiado da solicitação de propósito: sem o nome,
+  -- ler a tabela no Supabase exigiria um join a cada consulta.
+  ALTER TABLE testes_praticos ADD COLUMN IF NOT EXISTS candidato_nome text;
+  ALTER TABLE testes_praticos ADD COLUMN IF NOT EXISTS candidato_cpf  text;
+
+  -- Fila por nota, para "os melhores candidatos do mês" não varrer a tabela.
+  CREATE INDEX IF NOT EXISTS idx_testes_praticos_pontuacao
+    ON testes_praticos (pontuacao DESC NULLS LAST) WHERE status = 'finalizado';
+
+  ${VISAO_TESTE_SQL}
 
   -- ======================================================================
   -- CONFIGURAÇÃO DO FORMULÁRIO (editável pelo admin, sem deploy)

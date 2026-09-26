@@ -516,7 +516,10 @@
             // O teste só entra na linha do módulo que aplica teste. A cor e o
             // tooltip do botão carregam o estado (não realizado, em andamento,
             // aprovado, reprovado), então a situação se lê sem abrir nada.
-            const testeBtn = temTestePratico ? TestePratico.icone(testePorId[s.id], s.id) : '';
+            const testeBtn = temTestePratico
+                ? TestePratico.icone(testePorId[s.id], s.id, { somenteLeitura: true })
+                : '';
+
 
             const excluirBtn = podeExcluir
                 ? `<button class="btn-acao excluir" data-id="${s.id}" title="Excluir">
@@ -812,8 +815,19 @@
             if (!temTestePratico) return '';
             const pacote = detalheDoModal[s.id];
             const teste = (pacote && pacote.teste !== undefined) ? pacote.teste : testePorId[s.id];
+            // cartaoNota, e não resumo(): aqui o cartão vem SEM o botão de
+            // aplicar. O teste é aplicado em "Minhas solicitações", por quem
+            // cadastrou o candidato; neste painel o trabalho é acompanhar o
+            // resultado. Dois lugares para preencher a mesma ficha seriam dois
+            // lugares para preenchê-la por engano.
             return secao('assignment_turned_in', 'Teste prático de direção') +
-                   TestePratico.resumo(teste, s.id);
+                   TestePratico.cartaoNota(teste) +
+                   (teste
+                       ? '<div class="tp-resumo"><button type="button" class="btn-modal" ' +
+                         'data-abrir-teste="' + s.id + '">' +
+                         '<span class="material-symbols-rounded">visibility</span> ' +
+                         'Ver a ficha preenchida</button></div>'
+                       : '');
         }
 
         function detalheHtml(s) {
@@ -1060,14 +1074,11 @@
             const s = lista.find((x) => String(x.id) === String(id));
             if (!s) return;
 
-            TestePratico.abrir(SLUG, s, {
-                aoSalvar(teste) {
-                    testePorId[s.id] = teste;
-                    if (detalheDoModal[s.id]) detalheDoModal[s.id].teste = teste;
-                    desenhar();
-                    if (!overlay.hidden && String(idAtual) === String(s.id)) redesenharDetalhe(s);
-                },
-            });
+            // SÓ LEITURA neste painel. Quem aplica o teste o faz em "Minhas
+            // solicitações", onde está o cadastro que a própria pessoa enviou;
+            // aqui o que se faz é conferir o que foi respondido antes de
+            // decidir o cadastro.
+            TestePratico.abrir(SLUG, s, { podeEditar: false });
         }
 
         corpo.addEventListener('click', (e) => {
@@ -1260,7 +1271,11 @@
 
         document.getElementById('modal-fechar').addEventListener('click', fecharModal);
         overlay.addEventListener('click', (e) => { if (e.target === overlay) fecharModal(); });
-        document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !overlay.hidden) fecharModal(); });
+        document.addEventListener('keydown', (e) => {
+            // Com a ficha do teste aberta por cima, o Esc é dela.
+            if (document.querySelector('.modal-overlay.tp-ficha')) return;
+            if (e.key === 'Escape' && !overlay.hidden) fecharModal();
+        });
 
         // Ao fechar o modal, aplica o que tiver chegado enquanto ele estava aberto.
         document.getElementById('modal-fechar').addEventListener('click', () => {
