@@ -701,9 +701,11 @@
             const pacote = detalheDoModal[s.id];
             const docs = (pacote && pacote.documentos) || [];
 
-            // O ARQUIVO do comprovante é só do admin, então para o responsável
-            // ele não vem na lista. O que vem é o SINAL de que existe
-            // (rdo.temComprovante), suficiente para confirmar a reprovação.
+            // O arquivo vem para quem ACOMPANHA o painel (admin e
+            // responsável) — era restrito a admin, e isso fazia quem acabara
+            // de anexar ver o documento sumir da tela. Para quem não o recebe,
+            // resta o SINAL de que existe (rdo.temComprovante), suficiente
+            // para confirmar a reprovação.
             const comprovante = docs.find((d) => ehRdo(d.tipo));
             const anexado = !!comprovante || rdo.temComprovante === true;
 
@@ -756,6 +758,7 @@
                             ? `<p class="rdo-ok"><span class="material-symbols-rounded">check_circle</span>
                                  Comprovante anexado — o arquivo é visível ao administrador.</p>`
                             : '<p class="rdo-exigencia">Comprovante não localizado.</p>'}
+                    ${botaoDesfazerRdo(s)}
                 </div>`;
             }
 
@@ -763,7 +766,25 @@
                 <div class="rdo-titulo"><span class="material-symbols-rounded">verified</span> RDO aprovado</div>
                 <p class="rdo-ajuda">Liberado para a decisão. Aprovado por ${quem}.</p>
                 ${obs}
+                ${botaoDesfazerRdo(s)}
             </div>`;
+        }
+
+        /**
+         * "Refazer pesquisa": desfaz a resposta do RDO.
+         *
+         * Os dois botões gravam no primeiro clique, e errar o lado é fácil.
+         * Fica discreto, no rodapé do bloco, porque é conserto de engano e não
+         * uma etapa do processo.
+         *
+         * Aqui a decisão é ÚNICA (não há uma por cliente), então o que o aviso
+         * precisa dizer é se o cadastro já foi decidido.
+         */
+        function botaoDesfazerRdo(s) {
+            const decidido = s.status === 'aprovado' || s.status === 'reprovado';
+            return `<button type="button" class="rdo-desfazer" data-decidido="${decidido ? 1 : 0}">
+                <span class="material-symbols-rounded">undo</span> Refazer pesquisa
+            </button>`;
         }
 
         function linhaDetalhe(rot, val) {
@@ -1141,6 +1162,34 @@
 
             const btnTeste = e.target.closest('[data-abrir-teste]');
             if (btnTeste) { abrirTeste(btnTeste.dataset.abrirTeste); return; }
+
+            // ---- Desfazer a resposta do RDO ----
+            const btnDesfazer = e.target.closest('.rdo-desfazer');
+            if (btnDesfazer) {
+                // Aqui a decisão É o status do cadastro — não existe um
+                // registro separado como no terceiro, onde ela fica por
+                // cliente num JSON. Então desfazer o RDO devolve o cadastro a
+                // "pendente" e a decisão se PERDE. Quem clica tem que saber
+                // disso antes, e não depois.
+                const aviso = Number(btnDesfazer.dataset.decidido)
+                    ? '\n\nATENÇÃO: este cadastro já foi decidido, e a decisão será PERDIDA — ' +
+                      'ele volta a aguardar a pesquisa do RDO e precisará ser decidido de novo.'
+                    : '';
+                if (!confirm('Apagar a resposta do RDO e responder a pesquisa de novo?' + aviso)) return;
+
+                btnDesfazer.disabled = true;
+                try {
+                    const r = await fetch(`${API}/${idAtual}/rdo`, { method: 'DELETE' });
+                    const j = await r.json().catch(() => ({ ok: false, erro: 'Resposta inválida do servidor.' }));
+                    if (!j.ok) throw new Error(j.erro || 'Não foi possível desfazer.');
+                    await carregar();
+                    return reabrir(idAtual);
+                } catch (err) {
+                    alert(err.message);
+                    btnDesfazer.disabled = false;
+                }
+                return;
+            }
 
             const btnRdo = e.target.closest('.btn-rdo');
             if (!btnRdo) return;

@@ -184,6 +184,45 @@ function criarCamada(tabelaBruta, slugDoModulo, { temRdo = false } = {}) {
     return { ok: true, solicitacao: await buscarPorId(id) };
   }
 
+  /**
+   * Apaga a resposta da pesquisa RDO, devolvendo o cadastro para "Aguardando RDO".
+   *
+   * "RDO aprovado?" grava no primeiro clique, e errar o botão é fácil. Sem
+   * isto o engano não tinha conserto pela tela.
+   *
+   * O status volta a "pendente" — e aqui isso tem um custo que não existe no
+   * terceiro: neste modelo a DECISÃO é o próprio status, porque o cadastro é
+   * decidido de uma vez e não há registro por cliente. Desfazer o RDO de um
+   * cadastro já decidido, portanto, PERDE a decisão, e ele terá de ser
+   * decidido de novo. A tela avisa disso antes de confirmar.
+   *
+   * A observação da decisão é preservada: ela explica o que se concluiu, e
+   * serve de ponto de partida para quem decidir outra vez.
+   */
+  async function desfazerRdo(id, { por } = {}) {
+    if (!temRdo) return { ok: false, erro: 'Este formulário não passa por pesquisa RDO.' };
+
+    const atual = await buscarPorId(id);
+    if (!atual) return { ok: false, erro: 'Solicitação não encontrada.' };
+
+    const rdo = atual.rdo || {};
+    if (rdo.aprovado === null || rdo.aprovado === undefined) {
+      return { ok: false, erro: 'A pesquisa do RDO ainda não foi respondida.' };
+    }
+
+    await db
+      .prepare(
+        `UPDATE ${tabela}
+            SET rdo_aprovado = NULL, rdo_por = NULL, rdo_em = NULL, rdo_obs = NULL,
+                status = 'pendente', revisado_por = ?,
+                revisado_em = datetime('now', 'localtime')
+          WHERE id = ?`
+      )
+      .run(por || null, id);
+
+    return { ok: true, solicitacao: await buscarPorId(id) };
+  }
+
   /** Registra a decisão do responsável. Devolve null se o id não existir. */
   async function registrarDecisao(id, { status, observacao, revisadoPor }) {
     if (!['aprovado', 'reprovado', 'pendente'].includes(status)) {
@@ -271,6 +310,7 @@ function criarCamada(tabelaBruta, slugDoModulo, { temRdo = false } = {}) {
     tabela,
     temRdo,
     registrarRdo,
+    desfazerRdo,
     listar,
     listarPorEmail,
     buscarPorId,

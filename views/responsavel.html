@@ -492,6 +492,7 @@
                             ? `<p class="rdo-ok"><span class="material-symbols-rounded">check_circle</span>
                                  Comprovante anexado.</p>`
                             : '<p class="rdo-exigencia">Comprovante não localizado.</p>'}
+                    ${botaoDesfazerRdo(s)}
                 </div>`;
             }
 
@@ -499,7 +500,22 @@
                 <div class="rdo-titulo"><span class="material-symbols-rounded">verified</span> RDO aprovado</div>
                 <p class="rdo-ajuda">Liberado para as gerenciadoras. Aprovado por ${quem}.</p>
                 ${obs}
+                ${botaoDesfazerRdo(s)}
             </div>`;
+        }
+
+        /**
+         * "Refazer pesquisa": desfaz a resposta do RDO.
+         *
+         * Os dois botões ("Sim" e "Não") gravam no primeiro clique, e errar o
+         * lado é fácil — foi o que motivou isto. Fica discreto, no rodapé do
+         * bloco, porque é conserto de engano e não uma etapa do processo.
+         */
+        function botaoDesfazerRdo(s) {
+            const decididos = Object.keys(s.decisoes || {}).length;
+            return `<button type="button" class="rdo-desfazer" data-decisoes="${decididos}">
+                <span class="material-symbols-rounded">undo</span> Refazer pesquisa
+            </button>`;
         }
 
         function decisaoPorCliente(s) {
@@ -1164,6 +1180,33 @@
                 } finally {
                     btnVer.textContent = antes;
                     btnVer.disabled = false;
+                }
+                return;
+            }
+
+            // ---- Desfazer a resposta do RDO ----
+            const btnDesfazer = e.target.closest('.rdo-desfazer');
+            if (btnDesfazer) {
+                // Avisa quando já há decisão tomada: elas não são apagadas,
+                // mas somem da tela enquanto o RDO estiver sem resposta, e
+                // quem clica precisa saber disso antes de confirmar.
+                const decisoes = Number(btnDesfazer.dataset.decisoes || 0);
+                const aviso = decisoes
+                    ? `\n\nAtenção: este cadastro já tem ${decisoes} decisão(ões) de cliente registrada(s). ` +
+                      'Elas não serão apagadas, mas voltam a ficar indisponíveis até o RDO ser respondido de novo.'
+                    : '';
+                if (!confirm('Apagar a resposta do RDO e responder a pesquisa de novo?' + aviso)) return;
+
+                btnDesfazer.disabled = true;
+                try {
+                    const r = await fetch('/api/solicitacoes/' + idAtual + '/rdo', { method: 'DELETE' });
+                    const j = await r.json().catch(() => ({ ok: false, erro: 'Resposta inválida do servidor.' }));
+                    if (!j.ok) throw new Error(j.erro || 'Não foi possível desfazer.');
+                    await carregar();
+                    return reabrir(idAtual);
+                } catch (err) {
+                    alert(err.message);
+                    btnDesfazer.disabled = false;
                 }
                 return;
             }

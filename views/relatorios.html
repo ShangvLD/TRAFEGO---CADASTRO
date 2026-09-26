@@ -486,7 +486,7 @@
             const rdo = s.rdo || {};
             if (rdo.aprovado !== false) return '';
 
-            const anexos = docs.filter((d) => String(d.tipo).toUpperCase() === 'RESULTADO RDO');
+            const anexos = docs.filter((d) => ehRdo(d.tipo));
             const quem = `${esc(rdo.por || '—')}${rdo.em ? ' · ' + dataHora(rdo.em) : ''}`;
 
             return `<div class="rdo-bloco rdo-bloco--reprovado">
@@ -525,7 +525,7 @@
             const sit = situacaoDe(s);
             // O comprovante do RDO tem bloco próprio logo acima; repetí-lo na
             // lista geral faria o mesmo arquivo aparecer duas vezes.
-            const outros = docs.filter((d) => String(d.tipo).toUpperCase() !== 'RESULTADO RDO');
+            const outros = docs.filter((d) => !ehRdo(d.tipo));
 
             modalBody.innerHTML = `
                 ${blocoRdoDetalhe(s, docs, modulo)}

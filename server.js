@@ -1803,8 +1803,10 @@ for (const m of MODULOS) {
         ? await documentos.idsComTipo(m.slug, fluxo.DOC_RDO)
         : new Set();
 
-      // Módulo sem RDO (candidato) não ganha "situacao": o status simples já
-      // diz tudo, e anunciar uma etapa que não existe seria inventar processo.
+      // Módulo sem RDO não ganha "situacao": o status simples já diz tudo, e
+      // anunciar uma etapa que não existe seria inventar processo. Hoje os
+      // três módulos passam pelo RDO, mas a condição fica — ela é o que
+      // permite criar um módulo sem essa etapa sem mexer aqui.
       const visiveis = !m.temRdo
         ? lista
         : lista.map((s) => {
@@ -2002,12 +2004,14 @@ for (const m of MODULOS) {
 
   // ---- Pesquisa RDO, nos módulos que passam por ela ----
   //
-  // Mesma regra do terceiro: reprovar exige o comprovante JÁ ANEXADO, e a
-  // conferência é feita no servidor. Um "reprovado" gravado sem prova é
-  // exatamente o registro que falta quando alguém audita meses depois.
+  // Mesma regra do terceiro: reprovar exige o comprovante JÁ ANEXADO e o
+  // MOTIVO escrito, e a conferência é feita no servidor. Um "reprovado"
+  // gravado sem prova é exatamente o registro que falta quando alguém audita
+  // meses depois.
   //
-  // A rota só existe onde a etapa existe: no candidato ela nem é registrada,
-  // então não há como chamá-la por engano nem de propósito.
+  // A rota só existe onde a etapa existe. Hoje os três módulos passam pelo
+  // RDO; num módulo criado sem ela, a rota simplesmente não é registrada, e
+  // não há como chamá-la por engano nem de propósito.
   if (m.temRdo) {
     app.post(
       `${base}/:id/rdo`,
@@ -2035,6 +2039,25 @@ for (const m of MODULOS) {
           temComprovante,
         });
 
+        if (!r.ok) return res.status(409).json(r);
+        res.json(r);
+      })
+    );
+
+    // ---- Desfazer a resposta do RDO ----
+    //
+    // Mesma razão do terceiro: os dois botões gravam no primeiro clique, e
+    // sem isto o engano só se desfazia no banco. Permissão igual à de
+    // responder — quem errou corrige sozinho.
+    app.delete(
+      `${base}/:id/rdo`,
+      exigirLogin,
+      exigirPainel(m.slug),
+      wrap(async (req, res) => {
+        const id = Number(req.params.id);
+        if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
+
+        const r = await dados.desfazerRdo(id, { por: req.session.usuario.nome });
         if (!r.ok) return res.status(409).json(r);
         res.json(r);
       })
@@ -2224,6 +2247,30 @@ app.post(
       temComprovante,
     });
 
+    if (!r.ok) return res.status(409).json(r);
+    res.json(r);
+  })
+);
+
+// ---- Desfazer a resposta do RDO ----
+//
+// "RDO aprovado?" grava no primeiro clique, sem confirmação — é um par de
+// botões, e errar o lado é fácil. Sem esta rota o engano não tinha conserto
+// pela tela: o cadastro seguia liberado para as gerenciadoras (ou encerrado)
+// e só um UPDATE no banco desfazia.
+//
+// Mesma permissão de quem RESPONDE a pesquisa: quem errou o próprio clique
+// corrige sozinho. Restringir a admin faria o responsável parar o trabalho
+// para procurar alguém por causa de um clique torto.
+app.delete(
+  '/api/solicitacoes/:id/rdo',
+  exigirLogin,
+  exigirPainel('terceiro'),
+  wrap(async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ ok: false, erro: 'Id inválido.' });
+
+    const r = await solicitacoes.desfazerRdo(id, { por: req.session.usuario.nome });
     if (!r.ok) return res.status(409).json(r);
     res.json(r);
   })

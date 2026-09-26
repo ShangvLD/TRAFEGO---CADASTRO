@@ -912,6 +912,31 @@ a.anexo-card:hover {
 .rdo-ver { color: var(--primary); }
 .rdo-ver:disabled { opacity: .6; cursor: default; }
 
+/* "Refazer pesquisa": desfaz a resposta do RDO.
+
+   Discreto de propósito — é conserto de engano, não uma etapa do processo.
+   Um botão cheio ao lado de "RDO aprovado" competiria com a informação e
+   convidaria ao clique, que é justamente o problema que ele resolve. */
+.rdo-desfazer {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: var(--space-3);
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.rdo-desfazer:hover { background: #fff; color: var(--text); }
+.rdo-desfazer:disabled { opacity: .5; cursor: not-allowed; }
+.rdo-desfazer .material-symbols-rounded { font-size: 1rem; }
+
 /* Linha do relatório: abre o detalhe. O relatório era só leitura, então nada
    ali indicava que dava para clicar. */
 .rel-linha { cursor: pointer; }

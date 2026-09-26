@@ -539,6 +539,51 @@ async function registrarRdo(id, { aprovado, observacao, por, temComprovante }) {
 }
 
 /**
+ * Apaga a resposta da pesquisa RDO, devolvendo o cadastro para "Aguardando RDO".
+ *
+ * Existe porque "RDO aprovado?" é um par de botões que grava no primeiro
+ * clique: errar o botão é fácil, e até aqui o erro não tinha conserto pela
+ * tela — o cadastro seguia liberado (ou encerrado) sem que ninguém pudesse
+ * voltar atrás.
+ *
+ * O QUE NÃO É APAGADO: as decisões por cliente. Enquanto o RDO estiver sem
+ * resposta elas ficam fora do caminho (situacaoDe barra a etapa), e voltam a
+ * valer se o RDO for aprovado de novo. Apagá-las destruiria o registro de quem
+ * decidiu o quê — e quem desfaz quer corrigir um clique, não jogar o trabalho
+ * dos outros fora. O comprovante anexado também permanece: ele é a prova da
+ * consulta que foi feita, independente da resposta registrada.
+ */
+async function desfazerRdo(id, { por } = {}) {
+  const s = await buscarPorId(id);
+  if (!s) return { ok: false, erro: 'Solicitação não encontrada.' };
+
+  if (s.rdo.aprovado === null || s.rdo.aprovado === undefined) {
+    return { ok: false, erro: 'A pesquisa do RDO ainda não foi respondida.' };
+  }
+
+  const agora = await agoraDoBanco();
+
+  // Sem resposta do RDO a situação volta a ser "aguardando", que no status
+  // legado é "pendente" — e um cadastro pendente não tem data de conclusão.
+  const situacao = fluxo.situacaoDe({
+    rdoAprovado: null,
+    clientes: s.clientes,
+    decisoes: s.decisoes,
+  });
+
+  await db
+    .prepare(
+      `UPDATE solicitacoes
+          SET rdo_aprovado = NULL, rdo_por = NULL, rdo_em = NULL, rdo_obs = NULL,
+              status = ?, revisado_por = ?, revisado_em = ?, finalizado_em = NULL
+        WHERE id = ?`
+    )
+    .run(fluxo.statusLegadoDe(situacao.situacao), por || null, agora, id);
+
+  return { ok: true, solicitacao: await buscarPorId(id) };
+}
+
+/**
  * "Impressão digital" da lista, para o painel saber se algo mudou sem baixar
  * tudo de novo.
  *
@@ -666,6 +711,7 @@ async function registrarDecisaoTodos(id, { status, observacao, revisadoPor }) {
 module.exports = {
   listar,
   registrarRdo,
+  desfazerRdo,
   barrarPeloRdo,
   listarPorEmail,
   buscarPorId,
