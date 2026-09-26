@@ -156,6 +156,23 @@
         </section>
     </main>
 
+    <!-- Detalhe de uma linha do relatório.
+         A tela só listava e exportava; para conferir uma reprovação era preciso
+         sair daqui e procurar o cadastro no painel. O caso que motivou isto é o
+         "Reprovado no RDO": quem filtra por ele quer ver o motivo e abrir o
+         comprovante ali mesmo. -->
+    <div class="modal-overlay" id="modal-detalhe" hidden>
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
+            <div class="modal-header">
+                <h3 id="modal-titulo"><span class="material-symbols-rounded" style="color:var(--primary);vertical-align:-5px">assignment</span> Detalhes da solicitação</h3>
+                <button class="modal-close" id="modal-fechar" type="button" aria-label="Fechar">
+                    <span class="material-symbols-rounded">close</span>
+                </button>
+            </div>
+            <div class="modal-body" id="modal-body"></div>
+        </div>
+    </div>
+
     <script src="/js/app.js"></script>
     <script src="/js/validacao.js"></script>
     <script src="/js/zip.js"></script>
@@ -282,7 +299,9 @@
         function linha(s) {
             const t = s.tempos || {};
             const sit = situacaoDe(s);
-            return `<tr>
+            // modulo vai junto: o relatório junta os três módulos numa lista
+            // só, e a rota de detalhe é por módulo.
+            return `<tr class="rel-linha" data-id="${esc(String(s.id))}" data-modulo="${esc(s.modulo || '')}" tabindex="0">
                 <td>${esc(dataHora(s.criado_em))}</td>
                 <td><span class="badge is-info">${esc(s.moduloRotulo || '—')}</span></td>
                 <td>${esc(s.condutor || s.solicitante_nome || '—')}</td>
@@ -419,6 +438,141 @@
                 </div></td></tr>`;
             }
         }
+
+        // ------------------------------------------------------------------
+        // Detalhe de uma solicitação
+        //
+        // Reaproveita /api/modulos/:slug/solicitacoes/:id/detalhe — a mesma
+        // rota da tela de acompanhamento, que já devolve os documentos com URL
+        // assinada e já aplica as regras de quem pode ver o quê. Não há
+        // consulta nova no servidor para manter.
+        // ------------------------------------------------------------------
+        const overlay = document.getElementById('modal-detalhe');
+        const modalBody = document.getElementById('modal-body');
+
+        function formatarTamanho(bytes) {
+            const n = Number(bytes);
+            if (!n) return '';
+            if (n < 1024) return n + ' B';
+            if (n < 1024 * 1024) return Math.round(n / 1024) + ' KB';
+            return (n / 1024 / 1024).toFixed(1).replace('.', ',') + ' MB';
+        }
+
+        function fecharModal() {
+            overlay.hidden = true;
+            modalBody.innerHTML = '';
+        }
+
+        function linhaDet(rot, val) {
+            return `<div class="detalhe-linha"><span class="detalhe-rot">${rot}</span><span class="detalhe-val">${val}</span></div>`;
+        }
+
+        /** Bloco do RDO: é o motivo de existir este modal. */
+        function blocoRdoDetalhe(s, docs, modulo) {
+            const rdo = s.rdo || {};
+            if (rdo.aprovado !== false) return '';
+
+            const anexos = docs.filter((d) => String(d.tipo).toUpperCase() === 'RESULTADO RDO');
+            const quem = `${esc(rdo.por || '—')}${rdo.em ? ' · ' + dataHora(rdo.em) : ''}`;
+
+            return `<div class="rdo-bloco rdo-bloco--reprovado">
+                <div class="rdo-titulo"><span class="material-symbols-rounded">block</span> Reprovado no RDO</div>
+                <p class="rdo-ajuda">Reprovado por ${quem}.</p>
+                ${rdo.obs ? `<div class="rdo-rotulo-obs">Motivo</div><div class="rdo-obs">${esc(rdo.obs)}</div>` : ''}
+                ${anexos.length
+                    ? `<div class="rdo-rotulo-obs">Documentos anexados</div>
+                       ${anexos.map((a) => `
+                         <div class="rdo-doc">
+                           <span class="material-symbols-rounded">description</span>
+                           <span class="rdo-doc-nome">${esc(a.nome_original || a.nome_arquivo)}</span>
+                           <span class="rdo-doc-tam">${formatarTamanho(a.tamanho)}</span>
+                           <button type="button" class="rdo-ver" data-doc="${a.id}" data-modulo="${esc(modulo)}" data-solic="${esc(String(s.id))}">Visualizar</button>
+                         </div>`).join('')}`
+                    : '<p class="rdo-exigencia">Sem comprovante anexado.</p>'}
+            </div>`;
+        }
+
+        async function abrirDetalhe(modulo, id) {
+            overlay.hidden = false;
+            modalBody.innerHTML = '<p class="modal-vazio">Carregando...</p>';
+
+            let j;
+            try {
+                const r = await fetch(`/api/modulos/${encodeURIComponent(modulo)}/solicitacoes/${encodeURIComponent(id)}/detalhe`);
+                j = await r.json();
+                if (!j.ok) throw new Error(j.erro || 'Não foi possível carregar.');
+            } catch (e) {
+                modalBody.innerHTML = `<p class="modal-vazio">${esc(e.message)}</p>`;
+                return;
+            }
+
+            const s = j.solicitacao || {};
+            const docs = j.documentos || [];
+            const sit = situacaoDe(s);
+            // O comprovante do RDO tem bloco próprio logo acima; repetí-lo na
+            // lista geral faria o mesmo arquivo aparecer duas vezes.
+            const outros = docs.filter((d) => String(d.tipo).toUpperCase() !== 'RESULTADO RDO');
+
+            modalBody.innerHTML = `
+                ${blocoRdoDetalhe(s, docs, modulo)}
+                ${linhaDet('Situação', `<span class="badge ${CLASSE[sit.cor] || 'is-warning'}">${esc(sit.rotulo)}</span>`)}
+                ${linhaDet('Enviado em', esc(dataHora(s.criado_em)))}
+                ${linhaDet('Solicitante', esc(s.solicitante_nome || s.solicitante_email || '—'))}
+                ${linhaDet('Motorista', esc(s.condutor || '—'))}
+                ${linhaDet('Clientes', clientesChips(s.assunto))}
+                ${s.detalhes ? linhaDet('Detalhes', esc(s.detalhes)) : ''}
+                ${outros.length
+                    ? `<div class="rdo-rotulo-obs">Outros documentos</div>
+                       ${outros.map((d) => `
+                         <div class="rdo-doc">
+                           <span class="material-symbols-rounded">description</span>
+                           <span class="rdo-doc-nome">${esc(d.nome_original || d.nome_arquivo)}</span>
+                           <span class="rdo-doc-tam">${formatarTamanho(d.tamanho)}</span>
+                           <button type="button" class="rdo-ver" data-doc="${d.id}" data-modulo="${esc(modulo)}" data-solic="${esc(String(s.id))}">Visualizar</button>
+                         </div>`).join('')}`
+                    : ''}`;
+        }
+
+        // Abrir pela linha (clique ou Enter, já que a linha é focável).
+        corpo.addEventListener('click', (e) => {
+            const tr = e.target.closest('tr.rel-linha');
+            if (tr) abrirDetalhe(tr.dataset.modulo, tr.dataset.id);
+        });
+        corpo.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter') return;
+            const tr = e.target.closest('tr.rel-linha');
+            if (tr) abrirDetalhe(tr.dataset.modulo, tr.dataset.id);
+        });
+
+        // Abrir um documento. A URL é pedida na hora: a assinatura da listagem
+        // expira, e o modal pode ficar aberto mais tempo que ela.
+        modalBody.addEventListener('click', async (e) => {
+            const btn = e.target.closest('.rdo-ver');
+            if (!btn) return;
+
+            const antes = btn.textContent;
+            btn.textContent = 'Abrindo...';
+            btn.disabled = true;
+            // A aba abre ANTES do await: depois dele o navegador trata como
+            // popup e bloqueia.
+            const aba = window.open('', '_blank');
+            try {
+                const r = await fetch(`/api/modulos/${encodeURIComponent(btn.dataset.modulo)}/solicitacoes/${encodeURIComponent(btn.dataset.solic)}/documentos/${encodeURIComponent(btn.dataset.doc)}/url`);
+                const j = await r.json();
+                if (!j.ok || !j.url) throw new Error(j.erro || 'Não foi possível abrir o documento.');
+                aba.location = j.url;
+            } catch (err) {
+                if (aba) aba.close();
+                alert(err.message);
+            } finally {
+                btn.textContent = antes;
+                btn.disabled = false;
+            }
+        });
+
+        document.getElementById('modal-fechar').addEventListener('click', fecharModal);
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) fecharModal(); });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !overlay.hidden) fecharModal(); });
 
         for (const id of ['f-de', 'f-ate', 'f-motorista', 'f-proprietario', 'f-placa']) {
             document.getElementById(id).addEventListener('input', desenhar);

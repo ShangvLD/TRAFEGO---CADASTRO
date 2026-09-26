@@ -513,9 +513,9 @@ app.get(
     // importa: a pesquisa é conferência interna sobre ele mesmo.
     const podeRdo = papeis.podeRdo(u.papel, m.slug);
     let docs = await documentos.listar(m.slug, id);
-    const temComprovanteRdo = docs.some((d) => String(d.tipo).toUpperCase() === fluxo.DOC_RDO);
+    const temComprovanteRdo = docs.some((d) => fluxo.ehRdo(d.tipo));
     if (!podeRdo) {
-      docs = docs.filter((d) => String(d.tipo).toUpperCase() !== fluxo.DOC_RDO);
+      docs = docs.filter((d) => !fluxo.ehRdo(d.tipo));
     }
 
     res.json({
@@ -1037,7 +1037,7 @@ function documentoDaSolicitacao(d, slug, id) {
  * número na URL — justamente o documento que a regra esconde dele.
  */
 function podeVerDocumento(d, slug, usuario) {
-  if (String(d && d.tipo).toUpperCase() !== fluxo.DOC_RDO) return true;
+  if (!fluxo.ehRdo(d && d.tipo)) return true;
   return papeis.podeRdo(usuario.papel, slug);
 }
 
@@ -1166,7 +1166,7 @@ for (const m of MODULOS) {
       // conferência interna sobre ele, e sem esta linha o resultado vazaria
       // pelo nome do anexo.
       if (!papeis.podeRdo(req.session.usuario.papel, m.slug)) {
-        lista = lista.filter((d) => String(d.tipo).toUpperCase() !== fluxo.DOC_RDO);
+        lista = lista.filter((d) => !fluxo.ehRdo(d.tipo));
       }
 
       // A URL vem junto: sem ela o painel precisaria de uma requisição por
@@ -1335,6 +1335,9 @@ for (const m of MODULOS) {
           tamanho,
           provedor,
           validade,
+          // Autoria do anexo. O documento traz CPF e endereço de terceiro;
+          // "quem anexou isto aqui" precisava ter resposta.
+          criadoPor: req.session.usuario.id,
         });
       } catch (e) {
         // Caminho recusado é erro do pedido, não falha do servidor.
@@ -1938,7 +1941,7 @@ for (const m of MODULOS) {
         // usa o mesmo caminho de qualquer outro anexo, então não há um fluxo
         // especial para manter e o arquivo já nasce no histórico do cadastro.
         const docs = await documentos.listar(m.slug, id);
-        const temComprovante = docs.some((d) => String(d.tipo).toUpperCase() === fluxo.DOC_RDO);
+        const temComprovante = docs.some((d) => fluxo.ehRdo(d.tipo));
 
         const r = await dados.registrarRdo(id, {
           aprovado,
@@ -2127,7 +2130,7 @@ app.post(
     // o mesmo caminho de qualquer outro anexo, então não há um fluxo especial
     // para manter, e o arquivo já nasce visível no histórico do cadastro.
     const docs = await documentos.listar('terceiro', id);
-    const temComprovante = docs.some((d) => String(d.tipo).toUpperCase() === fluxo.DOC_RDO);
+    const temComprovante = docs.some((d) => fluxo.ehRdo(d.tipo));
 
     const r = await solicitacoes.registrarRdo(id, {
       aprovado,

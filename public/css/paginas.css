@@ -912,6 +912,12 @@ a.anexo-card:hover {
 .rdo-ver { color: var(--primary); }
 .rdo-ver:disabled { opacity: .6; cursor: default; }
 
+/* Linha do relatório: abre o detalhe. O relatório era só leitura, então nada
+   ali indicava que dava para clicar. */
+.rel-linha { cursor: pointer; }
+.rel-linha:hover { background: var(--surface-muted, #f1f5f9); }
+.rel-linha:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+
 .rdo-rotulo-obs {
     margin-top: var(--space-3);
     font-size: 0.75rem;
@@ -996,4 +1002,138 @@ a.anexo-card:hover {
     border-color: var(--warning);
     color: var(--warning);
     background: var(--warning-soft);
+}
+
+/* ---- Barra de rolagem espelhada, acima da tabela --------------------
+   A tabela é mais larga que a tela. Com a barra só embaixo, ver as colunas
+   da direita exigia descer até o fim da lista para alcançá-la. */
+.table-scroll-topo {
+    overflow-x: auto;
+    overflow-y: hidden;
+    margin-bottom: 2px;
+}
+
+.table-scroll-topo > div { height: 1px; }
+.table-scroll-topo[hidden] { display: none; }
+
+/* A barra precisa ser VISÍVEL: a de cima não tem conteúdo embaixo dela
+   sugerindo que dá para arrastar, então ela mesma tem que se anunciar. */
+.table-scroll-topo { scrollbar-width: thin; }
+.table-scroll-topo::-webkit-scrollbar { height: 10px; }
+.table-scroll-topo::-webkit-scrollbar-track {
+    background: var(--surface-muted);
+    border-radius: 5px;
+}
+.table-scroll-topo::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 5px;
+}
+.table-scroll-topo::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+
+/* ---- Botão de filtros (funil) --------------------------------------
+   Os filtros nascem fechados; este botão os revela. */
+.btn-filtros {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+
+.btn-filtros .material-symbols-rounded { font-size: 18px; }
+.btn-filtros:hover { border-color: var(--primary); color: var(--primary); }
+
+.btn-filtros.aberto {
+    background: var(--primary-soft);
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+/* Com filtro valendo, o botão fica ACESO mesmo fechado: é o único sinal na
+   tela de que a lista está recortada. */
+.btn-filtros.tem-filtro {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+}
+
+.btn-filtros__n {
+    display: inline-grid;
+    place-items: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.25);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.btn-filtros__n[hidden] { display: none; }
+
+/* ---- Coluna "Tipo" (modalidade da pesquisa) ------------------------- */
+.etiq-vazia {
+    color: var(--text-secondary);
+    opacity: 0.6;
+    cursor: help;
+}
+
+/* ---- Resultado do RDO, na tela de acompanhamento -------------------- */
+.rdo-resumo {
+    margin: var(--space-4) 0;
+    padding: var(--space-4);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--borda, var(--border));
+    background: var(--surface-muted);
+}
+
+.rdo-resumo--aprovado  { --borda: var(--success); }
+.rdo-resumo--reprovado { --borda: var(--danger); }
+
+.rdo-resumo__titulo {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.rdo-resumo__titulo .material-symbols-rounded { font-size: 20px; color: var(--borda, var(--text)); }
+
+.rdo-resumo__quem {
+    margin: 2px 0 0;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+/* O MOTIVO da reprovação é o que a pessoa veio ler: não pode sair como mais
+   uma linha cinza no meio do bloco. */
+.rdo-resumo__motivo {
+    margin-top: var(--space-3);
+    padding: var(--space-3);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+}
+
+.rdo-resumo__rot {
+    display: block;
+    margin-bottom: 3px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
 }

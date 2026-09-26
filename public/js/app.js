@@ -296,3 +296,174 @@
   window.clientesChips = clientesChips;
   window.clientesTexto = clientesTexto;
 })();
+
+/* ============================================================================
+   Barra de rolagem TAMBÉM em cima da tabela
+
+   As grades passam da largura da tela e rolam na horizontal. Com a barra só
+   embaixo, para ver as colunas da direita era preciso descer até o fim da
+   lista, arrastar, e subir de novo — e nas listas longas a barra nem estava
+   na tela.
+
+   A de cima é um espelho: um div vazio da MESMA largura da tabela, com os
+   dois scrolls sincronizados. Some sozinha quando não há o que rolar, porque
+   uma barra que não rola nada só ocupa espaço.
+
+   Fica aqui, e não em cada view, porque são quatro telas com o mesmo
+   problema — e foi a cópia por tela que já deixou uma certa e três erradas.
+   ========================================================================== */
+(function () {
+    'use strict';
+
+    function espelhar(wrap) {
+        if (wrap.dataset.barraTopo) return; // não duplica se ligar() rodar 2x
+        wrap.dataset.barraTopo = '1';
+
+        const topo = document.createElement('div');
+        topo.className = 'table-scroll-topo';
+        const regua = document.createElement('div');
+        topo.appendChild(regua);
+        wrap.parentNode.insertBefore(topo, wrap);
+
+        // A trava evita o ping-pong: cada scroll dispara o do outro, que
+        // dispararia o do primeiro de novo.
+        let ecoando = false;
+        function sincronizar(de, para) {
+            if (ecoando) return;
+            ecoando = true;
+            para.scrollLeft = de.scrollLeft;
+            ecoando = false;
+        }
+        topo.addEventListener('scroll', () => sincronizar(topo, wrap));
+        wrap.addEventListener('scroll', () => sincronizar(wrap, topo));
+
+        function ajustar() {
+            const largura = wrap.scrollWidth;
+            regua.style.width = largura + 'px';
+            // +1 absorve o arredondamento de subpixel, que faria a barra
+            // aparecer em tabela que cabe inteira na tela.
+            topo.hidden = largura <= wrap.clientWidth + 1;
+        }
+
+        ajustar();
+        window.addEventListener('resize', ajustar);
+
+        // A tabela é redesenhada a cada carregamento e a cada filtro: a
+        // largura muda junto, e a régua precisa acompanhar.
+        if (window.ResizeObserver) {
+            const ro = new ResizeObserver(ajustar);
+            ro.observe(wrap);
+            const tabela = wrap.querySelector('table');
+            if (tabela) ro.observe(tabela);
+        }
+        // Colunas que aparecem/somem (a de clientes, no painel genérico) podem
+        // trocar o conteúdo sem mudar a largura total — o ResizeObserver não
+        // veria. Observar o conteúdo cobre esse caso.
+        if (window.MutationObserver) {
+            // Seguro contra laço: ajustar() só escreve FORA de wrap.
+            new MutationObserver(ajustar).observe(wrap, { childList: true, subtree: true });
+        }
+    }
+
+    function ligar() {
+        document.querySelectorAll('.table-wrap').forEach(espelhar);
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', ligar);
+    } else {
+        ligar();
+    }
+})();
+
+/* ============================================================================
+   Filtros que só aparecem quando alguém pede
+
+   A barra de filtros ocupava um terço da tela em toda visita, mesmo sem
+   ninguém filtrar nada — e é a TABELA que as pessoas vêm ver. Agora ela nasce
+   fechada, atrás de um botão de funil.
+
+   O CONTADOR no botão não é enfeite: com os filtros escondidos, uma lista
+   recortada não tem explicação visível na tela. Alguém abriria o painel, veria
+   3 de 40 cadastros e concluiria que os outros sumiram. O botão aceso, com o
+   número, é o que responde "por que só isso aqui?".
+
+   Ligado por convenção: qualquer página com um bloco .acomp-filtros ganha o
+   comportamento, sem editar a view.
+   ========================================================================== */
+(function () {
+    'use strict';
+
+    function ligarFiltros(bloco) {
+        if (bloco.dataset.recolhivel) return;
+        bloco.dataset.recolhivel = '1';
+
+        const campos = bloco.querySelectorAll('input, select');
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn-filtros';
+        btn.setAttribute('aria-expanded', 'false');
+        btn.innerHTML =
+            '<span class="material-symbols-rounded">filter_alt</span>' +
+            '<span class="btn-filtros__txt">Filtros</span>' +
+            '<span class="btn-filtros__n" hidden></span>';
+
+        // O botão entra junto das outras ações do cartão, e não solto acima da
+        // tabela: é lá que a pessoa já procura "atualizar" e "exportar".
+        const cartao = bloco.closest('.card') || document;
+        const destino = cartao.querySelector('.acoes-painel') || cartao.querySelector('.card-header');
+        if (destino) destino.appendChild(btn);
+        else bloco.parentNode.insertBefore(btn, bloco);
+
+        bloco.hidden = true;
+
+        /** Quantos filtros estão realmente valendo agora. */
+        function ativos() {
+            let n = 0;
+            for (const c of campos) {
+                if (c.type === 'checkbox' || c.type === 'radio') {
+                    if (c.checked) n++;
+                } else if (String(c.value || '').trim()) {
+                    n++;
+                }
+            }
+            return n;
+        }
+
+        function atualizarBotao() {
+            const n = ativos();
+            const elN = btn.querySelector('.btn-filtros__n');
+            elN.textContent = n;
+            elN.hidden = n === 0;
+            btn.classList.toggle('tem-filtro', n > 0);
+        }
+
+        btn.addEventListener('click', () => {
+            bloco.hidden = !bloco.hidden;
+            btn.setAttribute('aria-expanded', String(!bloco.hidden));
+            btn.classList.toggle('aberto', !bloco.hidden);
+            // Abriu para filtrar: o cursor já vai para o primeiro campo.
+            if (!bloco.hidden && campos.length) campos[0].focus();
+        });
+
+        bloco.addEventListener('input', atualizarBotao);
+        bloco.addEventListener('change', atualizarBotao);
+        // "Limpar filtros" zera os campos por código, sem disparar input.
+        bloco.addEventListener('click', (e) => {
+            if (e.target.closest('.acomp-limpar')) setTimeout(atualizarBotao, 0);
+        });
+
+        atualizarBotao();
+    }
+
+    function ligar() {
+        document.querySelectorAll('.acomp-filtros').forEach(ligarFiltros);
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', ligar);
+    } else {
+        ligar();
+    }
+})();

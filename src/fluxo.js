@@ -71,8 +71,16 @@ const SITUACOES = {
   },
 };
 
-/** Tipo do documento que comprova a reprovação no RDO. */
-const DOC_RDO = 'RESULTADO RDO';
+/**
+ * Tipo do documento que comprova a reprovação no RDO.
+ *
+ * Era 'RESULTADO RDO', com espaço — o único código do sistema fora da
+ * convenção, e comparado com .toUpperCase() em oito lugares. Agora vem de
+ * src/tipos-documento.js, junto com os outros, e a comparação passou a ser
+ * ehRdo(): as linhas gravadas antes da migração continuam com a grafia velha,
+ * e === deixaria de reconhecê-las.
+ */
+const { RESULTADO_RDO: DOC_RDO, ehResultadoRdo: ehRdo } = require('./tipos-documento');
 
 /**
  * Em que ponto o cadastro está.
@@ -390,6 +398,7 @@ module.exports = {
   minutosEntre,
   temposDe,
   DOC_RDO,
+  ehRdo,
   situacaoDe,
   situacaoSimplesDe,
   impedimentoParaRdo,

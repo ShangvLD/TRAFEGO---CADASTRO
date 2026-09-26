@@ -18,8 +18,8 @@
 
    ESCALAR DAQUI:
      critério novo   uma entrada em SECOES. O formulário, a validação e o
-                     cálculo do desempenho acompanham sozinhos, porque todos
-                     leem esta mesma lista.
+                     cálculo da nota acompanham sozinhos, porque todos
+                     leem a mesma lista — ver src/ficha-teste.js.
      reteste         a coluna "tentativa" já existe. Hoje o sistema mexe
                      sempre na mais alta; abrir uma nova é um INSERT com
                      tentativa + 1, e historico() já devolve todas.
@@ -28,79 +28,24 @@
 const db = require('./db');
 const { acharModulo } = require('./modulos');
 
-// ---------------------------------------------------------------------------
-// A ficha de avaliação
-// ---------------------------------------------------------------------------
+// A ficha (critérios, conceitos, resultados, pontuação) vive em src/ficha-teste.js,
+// que não importa nada — é o que permite o db.js lê-la para gerar a visão de
+// leitura sem fechar ciclo com este arquivo. Reexportada abaixo para quem já
+// consome este módulo não precisar saber de onde ela vem.
+const ficha = require('./ficha-teste');
 
-/**
- * Os quatro conceitos. A "nota" não é mostrada ao avaliador: serve para
- * resumir o desempenho numa frase ("3,5 de 4") sem obrigar quem lê o painel a
- * abrir os oito critérios um a um.
- */
-const CONCEITOS = [
-  { id: 'excelente', rotulo: 'Excelente', nota: 4, cor: 'is-success' },
-  { id: 'bom', rotulo: 'Bom', nota: 3, cor: 'is-info' },
-  { id: 'regular', rotulo: 'Regular', nota: 2, cor: 'is-warning' },
-  { id: 'insatisfatorio', rotulo: 'Insatisfatório', nota: 1, cor: 'is-danger' },
-];
-
-const SECOES = [
-  {
-    id: 'direcao',
-    titulo: 'Avaliação de direção',
-    icone: 'directions_car',
-    criterios: [
-      { id: 'conducao_veiculo', rotulo: 'Condução do veículo' },
-      { id: 'controle_veiculo', rotulo: 'Controle do veículo' },
-      { id: 'regras_transito', rotulo: 'Respeito às regras de trânsito' },
-      { id: 'conducao_defensiva', rotulo: 'Condução defensiva' },
-    ],
-  },
-  {
-    id: 'manobra',
-    titulo: 'Avaliação de manobra',
-    icone: 'sync_alt',
-    criterios: [
-      { id: 'controle_manobras', rotulo: 'Controle em manobras' },
-      { id: 'baliza_re', rotulo: 'Baliza / manobra de ré' },
-      { id: 'percepcao_espaco', rotulo: 'Percepção de espaço' },
-      { id: 'controle_durante_manobras', rotulo: 'Controle do veículo durante manobras' },
-    ],
-  },
-];
-
-/**
- * Os três resultados possíveis.
- *
- * "Aprovado com ressalvas" e "Reprovado" exigem justificativa porque são os
- * dois que alguém vai questionar depois — e a resposta "não lembro por quê" é
- * o que faz o registro não valer nada.
- */
-const RESULTADOS = [
-  { id: 'aprovado', rotulo: 'Aprovado', cor: 'is-success', icone: 'check_circle', exigeJustificativa: false },
-  {
-    id: 'aprovado_ressalvas',
-    rotulo: 'Aprovado com ressalvas',
-    cor: 'is-parcial',
-    icone: 'error',
-    exigeJustificativa: true,
-  },
-  { id: 'reprovado', rotulo: 'Reprovado', cor: 'is-danger', icone: 'cancel', exigeJustificativa: true },
-];
-
-/** Todos os critérios, achatados, na ordem em que aparecem na ficha. */
-const TODOS_CRITERIOS = SECOES.flatMap((s) =>
-  s.criterios.map((c) => ({ ...c, secao: s.id, secaoTitulo: s.titulo }))
-);
-
-const acharConceito = (id) => CONCEITOS.find((c) => c.id === id) || null;
-const acharResultado = (id) => RESULTADOS.find((r) => r.id === id) || null;
-const acharCriterio = (id) => TODOS_CRITERIOS.find((c) => c.id === id) || null;
-
-/** A ficha inteira, para a tela se desenhar sem repetir a lista de critérios. */
-function configuracao() {
-  return { conceitos: CONCEITOS, secoes: SECOES, resultados: RESULTADOS };
-}
+const {
+  CONCEITOS,
+  SECOES,
+  RESULTADOS,
+  TODOS_CRITERIOS,
+  NOTA_MAXIMA,
+  acharConceito,
+  acharResultado,
+  acharCriterio,
+  configuracao,
+  pontuacaoDe,
+} = ficha;
 
 // ---------------------------------------------------------------------------
 // Quem tem teste
@@ -165,33 +110,36 @@ function estadoDe(teste) {
   };
 }
 
-/**
- * Média dos conceitos dados, de 1 a 4.
- *
- * Critério ainda em branco fica FORA da conta, em vez de valer zero: um
- * rascunho pela metade mostraria um desempenho péssimo que ninguém avaliou.
- */
-function desempenhoDe(avaliacoes) {
-  const notas = Object.entries(avaliacoes || {})
-    .filter(([id]) => acharCriterio(id))
-    .map(([, v]) => acharConceito(v))
-    .filter(Boolean)
-    .map((c) => c.nota);
-
-  if (!notas.length) return null;
-  const media = notas.reduce((a, b) => a + b, 0) / notas.length;
-  return {
-    media: Math.round(media * 100) / 100,
-    maximo: 4,
-    respondidos: notas.length,
-    total: TODOS_CRITERIOS.length,
-    texto: `${media.toFixed(1).replace('.', ',')} de 4`,
-  };
-}
-
 // ---------------------------------------------------------------------------
 // Leitura
 // ---------------------------------------------------------------------------
+
+/**
+ * A nota de uma ficha já gravada.
+ *
+ * Vale a COLUNA, não o recálculo: a nota gravada é aquela com que o candidato
+ * foi julgado, e mudar o peso de um conceito amanhã não pode reescrever o que
+ * se decidiu ontem. O recálculo só entra como reserva, para linha gravada
+ * antes de a coluna existir.
+ *
+ * O Postgres devolve numeric como texto (precisão exata), daí o Number().
+ */
+function notaDaLinha(linha, avaliacoes) {
+  const calculada = pontuacaoDe(avaliacoes);
+  if (linha.pontuacao == null) return calculada;
+
+  const nota = Number(linha.pontuacao);
+  if (!Number.isFinite(nota)) return calculada;
+
+  return {
+    nota,
+    maximo: NOTA_MAXIMA,
+    respondidos: calculada ? calculada.respondidos : 0,
+    total: TODOS_CRITERIOS.length,
+    parcial: !calculada || calculada.parcial,
+    texto: nota.toFixed(1).replace('.', ',') + ' de ' + NOTA_MAXIMA,
+  };
+}
 
 function lerJson(texto, padrao) {
   if (!texto) return padrao;
@@ -203,7 +151,7 @@ function lerJson(texto, padrao) {
   }
 }
 
-/** Acrescenta à linha o que as telas consomem: avaliações, estado, desempenho. */
+/** Acrescenta à linha o que as telas consomem: avaliações, estado, nota. */
 function hidratar(linha) {
   if (!linha) return null;
   const avaliacoes = lerJson(linha.avaliacoes, {});
@@ -211,7 +159,7 @@ function hidratar(linha) {
     ...linha,
     avaliacoes,
     estado: estadoDe(linha),
-    desempenho: desempenhoDe(avaliacoes),
+    pontuacao: notaDaLinha(linha, avaliacoes),
     // O que falta para finalizar, já resolvido aqui: a tela mostra a lista sem
     // reimplementar a regra, e o que ela mostra é o mesmo que o servidor cobra.
     pendencias: pendenciasDe({
@@ -267,8 +215,8 @@ async function resumoDeVarias(modulo, ids) {
   const linhas = await db
     .prepare(
       `SELECT DISTINCT ON (solicitacao_id)
-              solicitacao_id, tentativa, status, resultado, avaliacoes,
-              avaliador_nome, atualizado_em, finalizado_em
+              solicitacao_id, tentativa, status, resultado, avaliacoes, pontuacao,
+              candidato_nome, avaliador_nome, atualizado_em, finalizado_em
          FROM testes_praticos
         WHERE modulo = ? AND solicitacao_id = ANY(?)
         ORDER BY solicitacao_id, tentativa DESC`
@@ -281,10 +229,11 @@ async function resumoDeVarias(modulo, ids) {
       tentativa: l.tentativa,
       status: l.status,
       resultado: l.resultado,
+      candidato: l.candidato_nome,
       avaliador: l.avaliador_nome,
       em: l.finalizado_em || l.atualizado_em,
       estado: estadoDe(l),
-      desempenho: desempenhoDe(lerJson(l.avaliacoes, {})),
+      pontuacao: notaDaLinha(l, lerJson(l.avaliacoes, {})),
     };
   }
   return mapa;
@@ -400,12 +349,35 @@ async function salvar(modulo, solicitacaoId, entrada = {}, usuario = {}) {
   const status = finalizar ? 'finalizado' : 'rascunho';
   const avaliacoesJson = Object.keys(avaliacoes).length ? JSON.stringify(avaliacoes) : null;
 
+  // A NOTA vai gravada em coluna, e não só calculada na leitura.
+  //
+  // Duas razões, e a segunda é a que decide: a tabela precisa ser legível e
+  // filtrável DIRETO no Supabase ("quem tirou abaixo de 6?"), e ninguém vai
+  // recalcular média de JSON em SQL para responder isso. A outra é histórica:
+  // se o peso de um conceito mudar amanhã, as fichas antigas mantêm a nota com
+  // que foram julgadas — recalcular reescreveria o passado.
+  const nota = pontuacaoDe(avaliacoes);
+  const pontuacao = nota ? nota.nota : null;
+
+  // Nome e CPF do candidato copiados para cá, de propósito.
+  //
+  // Normalizado, o certo seria só o solicitacao_id. Mas a tabela existe também
+  // para ser LIDA no Supabase, e lá "solicitacao_id = 7" não diz de quem é a
+  // avaliação — obrigaria um join a cada consulta. Copiar o identificador de
+  // quem foi avaliado é o que torna a tabela legível sozinha.
+  const candidatoNome = texto(entrada.candidato_nome, 200);
+  const candidatoCpf = texto(entrada.candidato_cpf, 20);
+
   if (existente) {
     await db
       .prepare(
         `UPDATE testes_praticos
-            SET status = ?, avaliacoes = ?, observacoes = ?, resultado = ?,
+            SET status = ?, avaliacoes = ?, pontuacao = ?, observacoes = ?, resultado = ?,
                 justificativa = ?, veiculo = ?, data_teste = ?,
+                -- COALESCE: um salvamento que não trouxe o nome (chamada de
+                -- teste, script) não apaga o que já estava gravado.
+                candidato_nome = COALESCE(?, candidato_nome),
+                candidato_cpf  = COALESCE(?, candidato_cpf),
                 avaliador_id = ?, avaliador_nome = ?, avaliador_email = ?,
                 atualizado_em = datetime('now', 'localtime'),
                 -- Um teste que volta a rascunho perde a data de finalização:
@@ -418,11 +390,14 @@ async function salvar(modulo, solicitacaoId, entrada = {}, usuario = {}) {
       .run(
         status,
         avaliacoesJson,
+        pontuacao,
         observacoes,
         resultado,
         justificativa,
         veiculo,
         dataTeste,
+        candidatoNome,
+        candidatoCpf,
         usuario.id || null,
         usuario.nome || null,
         usuario.email || null,
@@ -433,10 +408,11 @@ async function salvar(modulo, solicitacaoId, entrada = {}, usuario = {}) {
     await db
       .prepare(
         `INSERT INTO testes_praticos
-           (modulo, solicitacao_id, tentativa, status, avaliacoes, observacoes,
+           (modulo, solicitacao_id, tentativa, status, avaliacoes, pontuacao, observacoes,
             resultado, justificativa, veiculo, data_teste,
+            candidato_nome, candidato_cpf,
             avaliador_id, avaliador_nome, avaliador_email, finalizado_em)
-         VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+         VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                  CASE WHEN ? = 'finalizado' THEN datetime('now', 'localtime') ELSE NULL END)`
       )
       .run(
@@ -444,11 +420,14 @@ async function salvar(modulo, solicitacaoId, entrada = {}, usuario = {}) {
         solicitacaoId,
         status,
         avaliacoesJson,
+        pontuacao,
         observacoes,
         resultado,
         justificativa,
         veiculo,
         dataTeste,
+        candidatoNome,
+        candidatoCpf,
         usuario.id || null,
         usuario.nome || null,
         usuario.email || null,
@@ -482,7 +461,8 @@ module.exports = {
   configuracao,
   permite,
   estadoDe,
-  desempenhoDe,
+  pontuacaoDe,
+  NOTA_MAXIMA,
   pendenciasDe,
   atual,
   historico,

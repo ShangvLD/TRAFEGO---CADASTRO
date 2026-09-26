@@ -113,6 +113,7 @@
                             <th class="col-sel"><input type="checkbox" id="sel-todos" title="Selecionar todos"></th>
                             <th>Data</th>
                             <th>Solicitante</th>
+                            <th>Tipo</th>
                             <th>Assunto</th>
                             <th>Anexo</th>
                             <th>Atendimento</th>
@@ -122,7 +123,7 @@
                     </thead>
                     <tbody id="tabela-corpo">
                         <tr>
-                            <td colspan="8">
+                            <td colspan="9">
                                 <div class="empty-state">
                                     <span class="material-symbols-rounded">hourglass_empty</span>
                                     <h4>Carregando...</h4>
@@ -160,6 +161,21 @@
     <script src="/js/exportar.js"></script>
     <script src="/js/atendimento.js"></script>
     <script>
+        /**
+         * É o resultado do RDO?
+         *
+         * Reconhece as duas grafias: "RESULTADO RDO" nas linhas gravadas antes
+         * da padronização e "RESULTADO_RDO" nas novas. Comparar com uma string
+         * só esconderia o comprovante de um cadastro que JÁ o tem — e sem ele
+         * na tela ninguém confirma a reprovação.
+         *
+         * Espelha canonico() de src/tipos-documento.js; a tela não importa
+         * módulo do servidor.
+         */
+        const ehRdo = (tipo) =>
+          String(tipo || '').toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') ===
+          'RESULTADO_RDO';
+
         const corpo = document.getElementById('tabela-corpo');
         const overlay = document.getElementById('modal-detalhe');
         const modalBody = document.getElementById('modal-body');
@@ -405,7 +421,7 @@
             // TODOS os comprovantes, não só o primeiro: o mesmo tipo enviado de
             // novo vira RESULTADO_RDO_2 em vez de sobrescrever, então a partir
             // do segundo envio existe mais de um arquivo para mostrar.
-            const comprovantes = docs.filter((d) => String(d.tipo).toUpperCase() === 'RESULTADO RDO');
+            const comprovantes = docs.filter((d) => ehRdo(d.tipo));
             // rdo.temComprovante é o SINAL de que existe anexo, usado por quem
             // não recebe a lista de arquivos (o solicitante).
             const anexado = comprovantes.length > 0 || rdo.temComprovante === true;
@@ -713,11 +729,28 @@
         }
 
 
-        /** Etiqueta da modalidade da pesquisa (vazio nos cadastros antigos). */
-        function etiquetaPesquisa(s) {
-            if (!s.pesquisa || !s.pesquisa.etiqueta) return '';
+        /**
+         * Coluna TIPO: a modalidade da pesquisa (completo, motorista, veículo,
+         * carreta, renovação).
+         *
+         * Era uma etiqueta espremida embaixo do solicitante. Como coluna, dá
+         * para varrer a lista de cima a baixo e ver o que cada linha pede — e
+         * a modalidade muda o que quem atende deve esperar: uma renovação não
+         * tem cadastro novo para conferir, uma pesquisa só de carreta não tem
+         * motorista.
+         *
+         * OS CADASTROS QUE VIERAM DO MICROSOFT FORMS NÃO TÊM ESSE DADO: o
+         * formulário do Forms não pergunta a modalidade. Eles mostram um traço,
+         * e não "completo" — presumir a modalidade seria inventar uma escolha
+         * que ninguém fez. A coluna já fica pronta para o formulário nativo,
+         * que grava tipo_pesquisa desde o envio.
+         */
+        function tipoPesquisaCel(s) {
+            if (!s.pesquisa || !s.pesquisa.etiqueta) {
+                return '<span class="etiq-vazia" title="Cadastro recebido pelo Microsoft Forms, que não pergunta a modalidade da pesquisa">—</span>';
+            }
             const classe = s.pesquisa.renovacao ? 'etiq-pesquisa etiq-pesquisa--renovacao' : 'etiq-pesquisa';
-            return '<br><span class="' + classe + '">' + esc(s.pesquisa.etiqueta) + '</span>';
+            return '<span class="' + classe + '">' + esc(s.pesquisa.etiqueta) + '</span>';
         }
 
         /**
@@ -784,7 +817,8 @@
                 <td>${s.prioridade
                         ? '<span class="prio-bolinha" title="' + esc(s.prioridade.rotulo) + '">' + s.prioridade.bolinha + '</span> '
                         : ''}${formatarData(s.criado_em)}</td>
-                <td>${solicitanteCel(s)}${etiquetaPesquisa(s)}</td>
+                <td>${solicitanteCel(s)}</td>
+                <td>${tipoPesquisaCel(s)}</td>
                 <td>${clientesChips(s.assunto)}</td>
                 <td>${anexosResumo(s.anexos, contagemAnexos[s.id])}</td>
                 <td>${Atendimento.selo(atendimentoPorId[s.id])}</td>
@@ -827,7 +861,7 @@
                 solicitacoesCache = dados.solicitacoes || [];
 
                 if (!solicitacoesCache.length) {
-                    corpo.innerHTML = `<tr><td colspan="8">
+                    corpo.innerHTML = `<tr><td colspan="9">
                         <div class="empty-state">
                             <span class="material-symbols-rounded">database</span>
                             <h4>Nenhuma solicitação ainda</h4>
@@ -839,7 +873,7 @@
                 corpo.innerHTML = naOrdemEscolhida(solicitacoesCache).map(linhaHtml).join('');
                 atualizarBotaoExportar();
             } catch (e) {
-                corpo.innerHTML = `<tr><td colspan="8">
+                corpo.innerHTML = `<tr><td colspan="9">
                     <div class="empty-state">
                         <span class="material-symbols-rounded">wifi_off</span>
                         <h4>Erro ao carregar</h4>
@@ -974,7 +1008,7 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    tipo: 'RESULTADO RDO',
+                    tipo: 'RESULTADO_RDO',
                     nomeArquivo: arquivo.name,
                     contentType: arquivo.type,
                     tamanho: arquivo.size,
@@ -994,7 +1028,7 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    tipo: 'RESULTADO RDO',
+                    tipo: 'RESULTADO_RDO',
                     caminho: prep.caminho,
                     nomeOriginal: arquivo.name,
                     contentType: arquivo.type,

@@ -14,6 +14,7 @@
 
 const db = require('./db');
 const armazenamento = require('./storage');
+const tiposDocumento = require('./tipos-documento');
 
 /**
  * Prepara o envio de um arquivo: decide o caminho e devolve a URL assinada
@@ -38,38 +39,111 @@ async function prepararEnvio({ modulo, solicitacaoId, tipo, nomeArquivo, content
     };
   }
 
-  // O id entra na pasta: é o que amarra o arquivo a ESTE cadastro, e não ao
-  // e-mail de quem o abriu (ver pastaDoCadastro).
-  const pasta = armazenamento.pastaDoCadastro(dono && dono.nome, dono && dono.cpf, solicitacaoId);
+  // Módulo e id na pasta: é o que amarra o arquivo a ESTE cadastro, e não ao
+  // e-mail de quem o abriu (ver pastaDaSolicitacao).
+  const pasta = armazenamento.pastaDaSolicitacao(modulo, solicitacaoId, dono || {});
+
+  // O tipo é canonizado ANTES de qualquer coisa: é o mesmo valor que vai
+  // nomear o arquivo e o que vai para a coluna "tipo", e os dois precisam ser
+  // idênticos — senão a contagem abaixo não acha o que já existe e o segundo
+  // envio sobrescreve o primeiro em vez de virar CNH_2.
+  const codigo = tiposDocumento.canonico(tipo);
 
   // Mesmo tipo enviado de novo: acrescenta sufixo em vez de sobrescrever, para
   // não perder o anterior sem querer (CNH e CNH_2, por exemplo).
-  const jaTem = await db
-    .prepare('SELECT count(*)::int AS n FROM documentos WHERE modulo = ? AND solicitacao_id = ? AND tipo = ?')
-    .get(modulo, solicitacaoId, tipo);
+  //
+  // A comparação passa pelo canônico dos dois lados porque a tabela ainda
+  // guarda código antigo em linha antiga ("RESULTADO RDO", com espaço): sem
+  // isso, reenviar o RDO de um cadastro migrado começaria a contagem do zero.
+  const doMesmoTipo = await db
+    .prepare('SELECT tipo FROM documentos WHERE modulo = ? AND solicitacao_id = ?')
+    .all(modulo, solicitacaoId);
+  const jaTem = doMesmoTipo.filter((d) => tiposDocumento.canonico(d.tipo) === codigo).length;
 
-  const caminho = armazenamento.caminhoDoArquivo(pasta, tipo, nomeArquivo, jaTem ? jaTem.n : 0);
+  const caminho = armazenamento.caminhoDoArquivo(pasta, codigo, nomeArquivo, jaTem);
   const { url, metodo, cabecalhos } = await prov.urlDeUpload(caminho, contentType);
 
-  return { ok: true, caminho, url, metodo, cabecalhos: cabecalhos || null, provedor: prov.nome };
+  return {
+    ok: true,
+    caminho,
+    tipo: codigo,
+    url,
+    metodo,
+    cabecalhos: cabecalhos || null,
+    provedor: prov.nome,
+    bucket: prov.bucket || null,
+  };
 }
 
 /**
  * Registra no banco um arquivo já enviado ao storage.
  * Reenvio do mesmo caminho atualiza o registro em vez de duplicar.
+ *
+ * @param criadoPor  id do usuário que anexou. Nulo só para registro de
+ *                   migração, onde não há como saber quem foi.
+ * @param origem     nativo (padrão) | forms | migrado
  */
-async function registrar({ modulo, solicitacaoId, tipo, caminho, nomeOriginal, contentType, tamanho, provedor, validade }) {
+async function registrar({
+  modulo,
+  solicitacaoId,
+  tipo,
+  caminho,
+  nomeOriginal,
+  contentType,
+  tamanho,
+  provedor,
+  bucket,
+  validade,
+  criadoPor,
+  origem,
+  escopo,
+  condutorId,
+  proprietarioId,
+  veiculoId,
+  permitirLegado = false,
+}) {
   // O caminho volta pelo navegador. Sem conferir, um caminho trocado criaria um
   // registro apontando para o arquivo de OUTRO cadastro — e o painel mostraria
   // a CNH de alguém no cadastro errado.
   caminho = armazenamento.validarCaminhoLogico(caminho);
 
+  // ...e o formato estar certo não basta: o caminho precisa ser DESTA
+  // solicitação. Sem esta linha, registrar o caminho da pasta de outro
+  // cadastro criava, no seu próprio, um documento que a rota de download
+  // entrega — ela confere "documento pertence à solicitação", e a linha
+  // recém-criada diz que sim. Era leitura da CNH alheia sabendo só o id.
+  //
+  // "permitirLegado" existe para a migração (src/migrar-storage.js), que
+  // reescreve linha por linha e não pode ser barrada pelo formato antigo —
+  // onde módulo e id não estão no caminho e a conferência é impossível.
+  if (solicitacaoId != null && !armazenamento.caminhoPertenceA(caminho, modulo, solicitacaoId)) {
+    if (!(permitirLegado && armazenamento.caminhoLegado(caminho))) {
+      throw new Error(`Caminho inválido: "${caminho}" não pertence a esta solicitação.`);
+    }
+  }
+
+  // Mesmo motivo do nome do arquivo: o que entra na coluna "tipo" é o código
+  // canônico, não o que o front mandou. É o único jeito de "RESULTADO RDO" e
+  // "RESULTADO_RDO" pararem de ser dois documentos diferentes.
+  tipo = tiposDocumento.canonico(tipo);
+
+  const prov = provedor || armazenamento.provedor().nome;
+
+  // O bucket é do provedor que REALMENTE gravou, não do provedor atual: um
+  // registro de migração pode informar os dois explicitamente.
+  const cont =
+    bucket !== undefined
+      ? bucket
+      : (armazenamento.PROVEDORES[prov] && armazenamento.PROVEDORES[prov].bucket) || null;
+
   // Os parâmetros vão em .run(), não em .prepare() — prepare() recebe só o SQL.
   const r = await db
     .prepare(
       `INSERT INTO documentos
-         (modulo, solicitacao_id, tipo, nome_arquivo, nome_original, caminho, provedor, content_type, tamanho, validade)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         (modulo, solicitacao_id, tipo, nome_arquivo, nome_original, caminho, provedor,
+          bucket, content_type, tamanho, validade, criado_por, origem, escopo,
+          condutor_id, proprietario_id, veiculo_id, atualizado_em)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
        -- O índice de "caminho" é PARCIAL (só onde não é nulo). O PostgreSQL
        -- exige que o ON CONFLICT repita o mesmo predicado, senão não reconhece
        -- qual índice usar.
@@ -79,20 +153,33 @@ async function registrar({ modulo, solicitacaoId, tipo, caminho, nomeOriginal, c
          nome_original = excluded.nome_original,
          content_type  = excluded.content_type,
          tamanho       = excluded.tamanho,
-         validade      = COALESCE(excluded.validade, documentos.validade)
+         bucket        = excluded.bucket,
+         escopo        = COALESCE(excluded.escopo, documentos.escopo),
+         -- A autoria NUNCA é apagada por um reenvio sem usuário (a migração,
+         -- por exemplo). Só troca quando alguém identificado reenvia.
+         criado_por    = COALESCE(excluded.criado_por, documentos.criado_por),
+         validade      = COALESCE(excluded.validade, documentos.validade),
+         atualizado_em = datetime('now', 'localtime')
        RETURNING id`
     )
     .run(
       modulo,
-      solicitacaoId,
+      solicitacaoId == null ? null : solicitacaoId,
       tipo,
       caminho.split('/').pop(),
       nomeOriginal || null,
       caminho,
-      provedor || armazenamento.provedor().nome,
+      prov,
+      cont,
       contentType || null,
       tamanho || null,
-      validade || null
+      validade || null,
+      criadoPor == null ? null : Number(criadoPor),
+      origem || 'nativo',
+      escopo || null,
+      condutorId == null ? null : Number(condutorId),
+      proprietarioId == null ? null : Number(proprietarioId),
+      veiculoId == null ? null : Number(veiculoId)
     );
 
   return { ok: true, id: r.lastInsertRowid };
@@ -102,8 +189,8 @@ async function registrar({ modulo, solicitacaoId, tipo, caminho, nomeOriginal, c
 async function listar(modulo, solicitacaoId) {
   return db
     .prepare(
-      `SELECT id, tipo, nome_arquivo, nome_original, caminho, provedor,
-              content_type, tamanho, validade, enviado_em
+      `SELECT id, tipo, nome_arquivo, nome_original, caminho, provedor, bucket,
+              content_type, tamanho, validade, enviado_em, origem, escopo, criado_por
          FROM documentos
         WHERE modulo = ? AND solicitacao_id = ?
         ORDER BY tipo, id`
@@ -301,14 +388,26 @@ async function contarPorSolicitacao(modulo) {
  * reprovação); o arquivo em si continua sendo só do admin.
  */
 async function idsComTipo(modulo, tipo) {
-  const linhas = await db
-    .prepare(
-      `SELECT DISTINCT solicitacao_id
-         FROM documentos WHERE modulo = ? AND upper(tipo) = upper(?)`
-    )
-    .all(modulo, tipo);
+  // A comparação passa pelo código canônico, e não por upper(tipo) = upper(?),
+  // porque a tabela guarda as duas grafias do mesmo documento: "RESULTADO RDO"
+  // nas linhas antigas e "RESULTADO_RDO" nas novas. Com upper(), o painel
+  // dizia "o comprovante não foi anexado" para cadastro que tinha o anexo —
+  // e o responsável ficava sem poder confirmar a reprovação.
+  //
+  // Filtra em SQL pelo módulo (que usa índice) e canoniza em JS: a função de
+  // normalização vive no Node, e replicar as regras dela em SQL criaria duas
+  // definições do que é o mesmo tipo — exatamente o problema que ela resolve.
+  const alvo = tiposDocumento.canonico(tipo);
 
-  return new Set(linhas.map((l) => Number(l.solicitacao_id)));
+  const linhas = await db
+    .prepare(`SELECT DISTINCT solicitacao_id, tipo FROM documentos WHERE modulo = ?`)
+    .all(modulo);
+
+  return new Set(
+    linhas
+      .filter((l) => tiposDocumento.canonico(l.tipo) === alvo)
+      .map((l) => Number(l.solicitacao_id))
+  );
 }
 
 module.exports = {

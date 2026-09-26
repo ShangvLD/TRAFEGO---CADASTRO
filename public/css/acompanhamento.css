@@ -71,6 +71,12 @@
     background: var(--surface-muted, #f1f5f9);
 }
 
+/* O bloco nasce fechado (public/js/app.js põe o atributo hidden). Esta regra
+   é OBRIGATÓRIA: o "display: grid" acima é do autor e vence o "display: none"
+   que o navegador dá ao [hidden] — sem ela o bloco continua na tela, escondido
+   só para o JavaScript. */
+.acomp-filtros[hidden] { display: none; }
+
 .acomp-filtro label {
     display: block;
     margin-bottom: 4px;

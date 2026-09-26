@@ -218,6 +218,21 @@
         const SLUG = window.location.pathname.split('/').filter(Boolean)[1] || '';
         const API = '/api/modulos/' + SLUG + '/solicitacoes';
 
+        /**
+         * É o resultado do RDO?
+         *
+         * Reconhece as duas grafias: "RESULTADO RDO" nas linhas gravadas antes
+         * da padronização e "RESULTADO_RDO" nas novas. Comparar com uma string
+         * só esconderia o comprovante de um cadastro que JÁ o tem — e sem ele
+         * na tela ninguém confirma a reprovação.
+         *
+         * Espelha canonico() de src/tipos-documento.js; a tela não importa
+         * módulo do servidor.
+         */
+        const ehRdo = (tipo) =>
+          String(tipo || '').toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') ===
+          'RESULTADO_RDO';
+
         const corpo = document.getElementById('tabela-corpo');
         const overlay = document.getElementById('modal-detalhe');
         const modalBody = document.getElementById('modal-body');
@@ -689,7 +704,7 @@
             // O ARQUIVO do comprovante é só do admin, então para o responsável
             // ele não vem na lista. O que vem é o SINAL de que existe
             // (rdo.temComprovante), suficiente para confirmar a reprovação.
-            const comprovante = docs.find((d) => String(d.tipo).toUpperCase() === 'RESULTADO RDO');
+            const comprovante = docs.find((d) => ehRdo(d.tipo));
             const anexado = !!comprovante || rdo.temComprovante === true;
 
             if (rdo.aprovado === null || rdo.aprovado === undefined) {
@@ -1061,7 +1076,7 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    tipo: 'RESULTADO RDO',
+                    tipo: 'RESULTADO_RDO',
                     nomeArquivo: arquivo.name,
                     contentType: arquivo.type,
                     tamanho: arquivo.size,
@@ -1081,7 +1096,7 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    tipo: 'RESULTADO RDO',
+                    tipo: 'RESULTADO_RDO',
                     caminho: prep.caminho,
                     nomeOriginal: arquivo.name,
                     contentType: arquivo.type,

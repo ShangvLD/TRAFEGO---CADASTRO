@@ -25,6 +25,8 @@
 
 require('dotenv').config();
 
+const tiposDocumento = require('./tipos-documento');
+
 const BUCKET = process.env.SUPABASE_BUCKET || 'cadastros';
 
 /**
@@ -80,25 +82,73 @@ function extensaoDe(nomeArquivo) {
 }
 
 /**
- * Pasta do cadastro: "CADASTROS/00377_JOAO_DA_SILVA_12345678900".
+ * Pasta de uma solicitação, no formato NOVO:
  *
- * Nome e CPF juntos porque nome sozinho repete (dois "João Silva") e CPF
- * sozinho não diz nada a quem abre a pasta.
+ *     terceiro/012000/012435_JOAO_DA_SILVA_12345678900
+ *     └ módulo  └ faixa  └ id      └ quem é, para quem navega
  *
- * O ID DA SOLICITAÇÃO NA FRENTE é o que garante que a pasta é de UM cadastro.
- * Sem ele a identificação dependia de nome e CPF estarem preenchidos — e para
- * quase todo cadastro vindo do Forms eles não estão, porque não há linha em
- * solicitacao_cadastro. O resultado era pasta nomeada pelo e-mail de quem
- * abriu o chamado, terminada em "_SEM_CPF", COMPARTILHADA por todas as
- * solicitações daquela pessoa: dois cadastros diferentes disputando o caminho
- * "…/RESULTADO_RDO.pdf", e o segundo envio apagando o primeiro (o upload usa
- * upsert). Aconteceu com três pastas em produção — só não houve perda porque
- * as extensões diferiam.
+ * A faixa é o id truncado no milhar: a solicitação 435 mora em "000000/",
+ * a 12.435 em "012000/".
  *
- * Zeros à esquerda para a listagem do bucket sair em ordem numérica.
+ * TRÊS NÍVEIS, TRÊS RAZÕES DIFERENTES.
  *
- * @param solicitacaoId  obrigatório na prática; sem ele a pasta volta ao
- *                       formato antigo, que não distingue cadastros
+ * MÓDULO na raiz porque a tabela "documentos" serve os três e cada um tem
+ * regra própria: o espelho do canal do Teams copia terceiro e agregado e
+ * deixa candidato de fora (processo de RH), e isso vira um prefixo em vez de
+ * um filtro linha a linha.
+ *
+ * FAIXA (o id dividido por mil) porque listar objeto no Supabase é por
+ * prefixo, e prefixo com cem mil entradas é lento no painel e paginado na
+ * API. Com a faixa, nenhum nível passa de mil — em qualquer volume, para
+ * sempre, sem manutenção: o número sai do próprio id.
+ *
+ * ID na frente do nome porque é o que amarra o arquivo a UM cadastro. Sem
+ * ele, a identificação dependia de nome e CPF, que quase nenhum cadastro do
+ * Forms tem — a pasta saía batizada com o e-mail de quem abriu o chamado e
+ * terminada em "_SEM_CPF", COMPARTILHADA por todas as solicitações daquela
+ * pessoa. Isso não é hipótese: três pastas em produção ficaram com o RDO de
+ * dois cadastros diferentes cada (302 e 438, 377 e 450, 426 e 435). Só não
+ * houve perda porque as extensões diferiam, e o upload usa upsert.
+ *
+ * NOME E CPF continuam no fim, e não por enfeite: esta mesma estrutura é
+ * espelhada na pasta do canal do Teams (src/sincronizar-canal.js), onde
+ * quem procura um documento procura por pessoa, não por número.
+ *
+ * Zeros à esquerda para a listagem sair em ordem numérica.
+ *
+ * @param modulo         terceiro | agregado | candidato
+ * @param solicitacaoId  obrigatório; sem ele não há pasta possível
+ * @param dono           { nome, cpf } — opcional, só melhora a leitura
+ */
+const POR_FAIXA = 1000;
+
+function pastaDaSolicitacao(modulo, solicitacaoId, dono = {}) {
+  const id = Number(solicitacaoId);
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new Error(`Solicitação inválida para montar a pasta: "${solicitacaoId}"`);
+  }
+
+  const mod = higienizar(modulo).toLowerCase() || 'terceiro';
+  const faixa = String(Math.floor(id / POR_FAIXA) * POR_FAIXA).padStart(6, '0');
+  const numero = String(id).padStart(6, '0');
+
+  // Nome e CPF são opcionais: a pasta precisa ser válida mesmo quando o
+  // cadastro veio do Forms sem nenhum dos dois. Só o id é obrigatório.
+  const n = higienizar(dono && dono.nome);
+  const d = String((dono && dono.cpf) || '').replace(/\D+/g, '');
+  const sufixo = [n, d].filter(Boolean).join('_');
+
+  return `${mod}/${faixa}/${numero}${sufixo ? '_' + sufixo : ''}`;
+}
+
+/**
+ * Pasta no formato ANTIGO: "CADASTROS/00377_JOAO_DA_SILVA_12345678900".
+ *
+ * Continua aqui porque os 12 arquivos que já estão em produção usam este
+ * formato, e a migração (src/migrar-storage.js) precisa saber montá-lo para
+ * encontrá-los. Nada novo é gravado aqui.
+ *
+ * @deprecated use pastaDaSolicitacao
  */
 function pastaDoCadastro(nome, cpf, solicitacaoId) {
   const n = higienizar(nome) || 'SEM_NOME';
@@ -115,11 +165,16 @@ function pastaDoCadastro(nome, cpf, solicitacaoId) {
  * original — é o que garante "CNH.pdf" em vez de
  * "WhatsApp Image 2026-07-29 at 08.13.12_Melissa Pontes.jpeg".
  *
+ * O tipo passa pelo código canônico (src/tipos-documento.js) antes de virar
+ * nome de arquivo: era assim que "RESULTADO RDO", com espaço, chegava aqui e
+ * saía "RESULTADO_RDO.pdf" — o nome do arquivo já estava certo, e era o
+ * código no banco que estava errado. Agora os dois vêm da mesma função.
+ *
  * @param sufixo  usado quando o mesmo tipo é enviado mais de uma vez (CNH_2)
  */
 function caminhoDoArquivo(pasta, tipo, nomeOriginal, sufixo = 0) {
   const ext = extensaoDe(nomeOriginal);
-  const base = higienizar(tipo) || 'DOCUMENTO';
+  const base = tiposDocumento.canonico(tipo) || 'DOCUMENTO';
   const numero = sufixo > 0 ? `_${sufixo + 1}` : '';
   return `${pasta}/${base}${numero}${ext ? '.' + ext : ''}`;
 }
@@ -132,12 +187,24 @@ function caminhoDoArquivo(pasta, tipo, nomeOriginal, sufixo = 0) {
  * Supabase aceita qualquer chave: sem esta conferência, um caminho trocado
  * escreve na raiz do bucket. Em disco, escreve fora da pasta do canal.
  *
- * Forma aceita, e só ela: CADASTROS/<pasta do cadastro>/<arquivo>
+ * DUAS FORMAS SÃO ACEITAS, e a segunda tem prazo:
+ *
+ *   nova     <modulo>/<faixa>/<pasta da solicitação>/<arquivo>
+ *   legada   CADASTROS/<pasta do cadastro>/<arquivo>
+ *
+ * A legada continua valendo porque os 12 arquivos em produção estão nela e o
+ * registro no banco aponta para lá. Recusá-la aqui não "limparia" nada —
+ * apenas faria o download desses documentos parar de funcionar. Ela sai no
+ * dia em que "SELECT count(*) FROM documentos WHERE caminho LIKE 'CADASTROS/%'"
+ * devolver zero.
  */
+const CAMINHO_NOVO = /^[a-z][a-z0-9_-]*\/\d{6}\/\d{6}(_[A-Z0-9_-]+)?\/[^/]+$/;
+const CAMINHO_LEGADO = /^CADASTROS\/[^/]+\/[^/]+$/;
+
 function validarCaminhoLogico(logico) {
   const limpo = String(logico == null ? '' : logico).replace(/\\/g, '/');
 
-  if (!/^CADASTROS\/[^/]+\/[^/]+$/.test(limpo)) {
+  if (!CAMINHO_NOVO.test(limpo) && !CAMINHO_LEGADO.test(limpo)) {
     throw new Error(`Caminho inválido: "${logico}"`);
   }
   // ".." nunca aparece num caminho que nós geramos (higienizar() remove ponto
@@ -146,6 +213,44 @@ function validarCaminhoLogico(logico) {
     throw new Error(`Caminho inválido: "${logico}"`);
   }
   return limpo;
+}
+
+/**
+ * Este caminho é mesmo DESTA solicitação?
+ *
+ * BURACO QUE ISTO TAPA: a rota /registrar recebe o caminho pelo navegador e
+ * só conferia o FORMATO. Quem tinha acesso ao próprio cadastro podia
+ * registrar, nele, um caminho apontando para a pasta de OUTRO — e a rota de
+ * download aprovava, porque ela pergunta "este documento é desta
+ * solicitação?" e a linha, recém-criada, dizia que sim. O resultado era ler a
+ * CNH e o comprovante de residência de terceiros sabendo só o nome da pasta.
+ *
+ * Com a estrutura nova dá para conferir de verdade, porque módulo e id estão
+ * NO caminho. No formato legado não dá: a pasta era nome+CPF, sem id. Por
+ * isso ele devolve false aqui — nada novo é gravado nele, e a migração
+ * atualiza o banco direto, sem passar por esta rota.
+ */
+function caminhoPertenceA(logico, modulo, solicitacaoId) {
+  const partes = String(logico || '').replace(/\\/g, '/').split('/');
+  if (partes.length !== 4) return false;
+
+  const id = Number(solicitacaoId);
+  if (!Number.isInteger(id) || id <= 0) return false;
+
+  const numero = String(id).padStart(6, '0');
+  const esperado = higienizar(modulo).toLowerCase();
+
+  // A pasta da solicitação é "000435" ou "000435_JOAO_...": o id sozinho ou
+  // seguido de "_". Sem a segunda condição, "000435" casaria com "0004351".
+  const alvo = partes[2];
+  const bate = alvo === numero || alvo.startsWith(numero + '_');
+
+  return partes[0] === esperado && bate;
+}
+
+/** O caminho está no formato antigo? Usado pela migração e pelo diagnóstico. */
+function caminhoLegado(logico) {
+  return CAMINHO_LEGADO.test(String(logico || '').replace(/\\/g, '/'));
 }
 
 
@@ -201,6 +306,17 @@ async function conferir(resposta, oQue) {
 
 const supabase = {
   nome: 'supabase',
+
+  /**
+   * Contêiner onde o arquivo é gravado, guardado junto com o registro.
+   *
+   * "provedor" diz o SERVIÇO; o bucket diz ONDE dentro dele. Como ele vem de
+   * SUPABASE_BUCKET, trocar a variável tornaria ilegal todo arquivo anterior
+   * — o registro apontaria para um bucket que não é mais o atual, e a leitura
+   * falharia sem dizer por quê. Gravado na linha, o arquivo antigo continua
+   * sendo procurado no bucket antigo.
+   */
+  bucket: BUCKET,
 
   disponivel() {
     return !!(URL_BASE && CHAVE);
@@ -420,6 +536,7 @@ function caminhoEmDisco(logico) {
 
 const pasta = {
   nome: 'pasta',
+  bucket: null, // grava em disco; não há contêiner a registrar
   uploadDireto: false, // o arquivo passa pelo servidor
 
   disponivel() {
@@ -474,6 +591,7 @@ const pasta = {
 // ---------------------------------------------------------------------------
 const memoria = {
   nome: 'memoria',
+  bucket: null,
   _arquivos: new Map(),
   disponivel: () => true,
   async urlDeUpload(caminho) {
@@ -560,9 +678,12 @@ module.exports = {
   TIPOS_ACEITOS,
   higienizar,
   extensaoDe,
+  pastaDaSolicitacao,
   pastaDoCadastro,
   caminhoDoArquivo,
   validarCaminhoLogico,
+  caminhoPertenceA,
+  caminhoLegado,
   URL_PROJETO: URL_BASE,
   validarArquivo,
 };

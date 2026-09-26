@@ -75,6 +75,10 @@
 
             <div class="acomp-filtros">
                 <div class="acomp-filtro">
+                    <label for="f-modulo">Formulário</label>
+                    <select id="f-modulo"><option value="">Todos</option></select>
+                </div>
+                <div class="acomp-filtro">
                     <label for="f-motorista">Motorista</label>
                     <input type="search" id="f-motorista" placeholder="Nome do condutor">
                 </div>
@@ -157,6 +161,20 @@
     <script src="/js/app.js"></script>
     <script src="/js/validacao.js"></script>
     <script>
+        /**
+         * É o resultado do RDO?
+         *
+         * Reconhece as duas grafias: "RESULTADO RDO" nas linhas gravadas
+         * antes da padronização e "RESULTADO_RDO" nas novas. Comparar com uma
+         * string só esconderia o comprovante de um cadastro que JÁ o tem.
+         *
+         * Espelha canonico() de src/tipos-documento.js; a tela não importa
+         * módulo do servidor.
+         */
+        const ehRdo = (tipo) =>
+          String(tipo || '').toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') ===
+          'RESULTADO_RDO';
+
         const corpo = document.getElementById('corpo');
         const elContagem = document.getElementById('contagem');
 
@@ -248,7 +266,13 @@
             const de = document.getElementById('f-de').value;
             const ate = document.getElementById('f-ate').value;
 
+            const mod = document.getElementById('f-modulo').value;
+
             return TUDO.filter((s) => {
+                // O formulário de origem: com terceiro, agregado e candidato
+                // na mesma lista, é o recorte mais pedido — "me mostra só os
+                // candidatos" não se resolve por nenhum dos outros campos.
+                if (mod && s.modulo !== mod) return false;
                 if (mot && !semAcento(s.condutor || s.solicitante_nome).includes(mot)) return false;
                 if (pro && !semAcento(s.proprietario).includes(pro)) return false;
                 if (pla) {
@@ -355,6 +379,17 @@
             sel.innerHTML = '<option value="">Todos</option>' +
                 [...vistos].map(([v, r]) => `<option value="${esc(v)}">${esc(r)}</option>`).join('');
             sel.value = filtroStatus;
+
+            // Só os formulários que a pessoa realmente usou: oferecer
+            // "Agregado" a quem nunca enviou um seria um filtro que só produz
+            // lista vazia.
+            const selM = document.getElementById('f-modulo');
+            const antes = selM.value;
+            const modulos = new Map();
+            for (const s of TUDO) if (s.modulo) modulos.set(s.modulo, s.moduloRotulo || s.modulo);
+            selM.innerHTML = '<option value="">Todos</option>' +
+                [...modulos].map(([v, r]) => `<option value="${esc(v)}">${esc(r)}</option>`).join('');
+            selM.value = antes;
         }
 
         async function carregar() {
@@ -380,6 +415,7 @@
             document.getElementById(id).addEventListener('input', desenhar);
         }
         document.getElementById('f-prio').addEventListener('change', desenhar);
+        document.getElementById('f-modulo').addEventListener('change', desenhar);
 
         // As opções do filtro saem da mesma lista que o formulário usa.
         (function opcoesDePrioridade() {
@@ -396,7 +432,7 @@
 
 
         document.getElementById('btn-limpar').addEventListener('click', () => {
-            for (const id of ['f-motorista', 'f-placa', 'f-proprietario', 'f-de', 'f-ate', 'f-prio']) {
+            for (const id of ['f-motorista', 'f-placa', 'f-proprietario', 'f-de', 'f-ate', 'f-prio', 'f-modulo']) {
                 document.getElementById(id).value = '';
             }
             filtroStatus = '';
@@ -476,6 +512,66 @@
             }).filter(Boolean);
         }
 
+        /**
+         * Resultado da pesquisa RDO.
+         *
+         * Quem ACOMPANHA o painel vê; para quem só preenche formulário o
+         * servidor já apaga o conteúdo e manda restrito:true — é conferência
+         * interna sobre a própria pessoa, e a SITUAÇÃO no alto do modal já
+         * diz que o cadastro está parado ou encerrado.
+         *
+         * Reprovado mostra as duas coisas que explicam a decisão: o MOTIVO
+         * que alguém escreveu à mão e o COMPROVANTE anexado. Sem eles a tela
+         * dizia só "reprovado", e a pergunta seguinte — por quê? — não tinha
+         * resposta sem procurar quem analisou.
+         *
+         * @param docs  documentos do cadastro; o comprovante sai daqui e é
+         *              retirado da lista geral para não aparecer duas vezes.
+         */
+        function blocoRdo(s, docs) {
+            const rdo = s.rdo || {};
+            if (rdo.restrito) return '';
+            if (rdo.aprovado === null || rdo.aprovado === undefined) return '';
+
+            const quem = esc(rdo.por || '—') + (rdo.em ? ' · ' + esc(dataHora(rdo.em)) : '');
+            const aprovado = rdo.aprovado === true;
+
+            const comprovante = docs.find(function (d) { return ehRdo(d.tipo); });
+
+            const partes = [
+                '<div class="rdo-resumo rdo-resumo--' + (aprovado ? 'aprovado' : 'reprovado') + '">',
+                '<div class="rdo-resumo__titulo">',
+                '<span class="material-symbols-rounded">' + (aprovado ? 'verified' : 'block') + '</span>',
+                aprovado ? 'RDO aprovado' : 'Reprovado no RDO',
+                '</div>',
+                '<p class="rdo-resumo__quem">' +
+                    (aprovado ? 'Liberado por ' : 'Reprovado por ') + quem + '</p>',
+            ];
+
+            if (rdo.obs) {
+                partes.push('<div class="rdo-resumo__motivo">' +
+                    '<span class="rdo-resumo__rot">' + (aprovado ? 'Observação' : 'Motivo da reprovação') + '</span>' +
+                    esc(rdo.obs) + '</div>');
+            } else if (!aprovado) {
+                partes.push('<div class="rdo-resumo__motivo">' +
+                    '<span class="rdo-resumo__rot">Motivo da reprovação</span>' +
+                    'Nenhum motivo foi registrado.</div>');
+            }
+
+            if (comprovante) {
+                partes.push('<div class="anexo-lista" style="margin-top:12px">' + docCard(comprovante) + '</div>');
+            } else if (!aprovado && rdo.temComprovante) {
+                // O responsável enxerga o resultado, mas o ARQUIVO é só do
+                // admin. Dizer que ele existe evita procurar um anexo que a
+                // tela nunca vai mostrar para esse perfil.
+                partes.push('<p class="rdo-resumo__quem">' +
+                    'Há um comprovante anexado — o arquivo é visível ao administrador.</p>');
+            }
+
+            partes.push('</div>');
+            return partes.join('');
+        }
+
         async function abrirDetalhe(id, modulo) {
             overlay.hidden = false;
             document.body.style.overflow = "hidden";
@@ -494,7 +590,11 @@
             const s = j.solicitacao;
             const sit = situacaoDe(s);
             const campos = camposDoDetalhe(s.detalhes);
-            const docs = j.documentos || [];
+            const todosDocs = j.documentos || [];
+
+            // O comprovante do RDO sai da lista geral: ele aparece dentro do
+            // bloco do RDO, ao lado do motivo, que é onde ele faz sentido.
+            const docs = todosDocs.filter(function (d) { return !ehRdo(d.tipo); });
 
             const hist = (j.historico || []).length
                 ? (j.historico || []).map(function (h) {
@@ -525,6 +625,10 @@
                     ? esc(s.previsao.texto) + (s.previsao.externa ? " <small>+ " + esc(s.previsao.externa.texto) + "</small>" : "")
                     : "") +
                 "</div>");
+
+            // Logo depois do resumo: a pesquisa é a etapa que decide se o
+            // cadastro segue, então é a primeira coisa a saber ao abrir.
+            partes.push(blocoRdo(s, todosDocs));
 
             partes.push('<h4 class="detalhe-secao"><span class="material-symbols-rounded" ' +
                 'style="vertical-align:-5px;color:var(--primary)">badge</span> Dados do cadastro</h4>');
