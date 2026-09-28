@@ -90,7 +90,7 @@ function exigirConfigurarFormulario(req, res, next) {
 }
 
 /**
- * Quem pode usar a Blacklist Geomed: admin, ou quem acompanha algum painel.
+ * Quem pode usar a Blacklist Jomed: admin, ou quem acompanha algum painel.
  *
  * Mesmo critério dos Relatórios, que dividem o menu da conta com ela, e pelo
  * mesmo motivo: é trabalho de quem ANALISA cadastro. O responsável pela
@@ -101,7 +101,7 @@ function exigirBlacklist(req, res, next) {
   const u = req.session && req.session.usuario;
   if (!u) return res.status(401).json({ ok: false, erro: 'Não autenticado.' });
   if (papeis.ehAdmin(u.papel) || papeis.paineisDoPapel(u.papel).length) return next();
-  return res.status(403).json({ ok: false, erro: 'Sem permissão para ver a Blacklist Geomed.' });
+  return res.status(403).json({ ok: false, erro: 'Sem permissão para ver a Blacklist Jomed.' });
 }
 
 /**
@@ -454,7 +454,7 @@ app.get('/relatorios', exigirLogin, (req, res) => {
 });
 
 // --------------------------------------------------------------------------
-// BLACKLIST GEOMED
+// BLACKLIST JOMED
 //
 // A lista de proprietários que a diretoria recusou. Quem analisa cadastro
 // registra o bloqueio aqui, e o envio de cadastro passa a bater nela.
@@ -1990,7 +1990,7 @@ for (const m of MODULOS) {
           return res.status(400).json({ ok: false, erros });
         }
 
-        // ---- Blacklist Geomed ----
+        // ---- Blacklist Jomed ----
         // Aqui os campos são criados na tela de configuração e não têm nome
         // fixo, então quem procura o documento do proprietário é a própria
         // blacklist (ver verificarRespostas): campo que fale de proprietário e
@@ -2408,7 +2408,7 @@ app.post(
       origem_id: b.origem_id,
     });
 
-    // ---- Blacklist Geomed ----
+    // ---- Blacklist Jomed ----
     // Aqui o cadastro NÃO é recusado, ao contrário do formulário do Portal, e
     // a diferença é de momento: quem responde o Forms já respondeu. Devolver
     // erro ao Power Automate faria a resposta desaparecer — nem chegaria ao
@@ -2429,10 +2429,10 @@ app.post(
         await solicitacoes.registrarDecisao(solicitacao.id, {
           status: 'reprovado',
           observacao:
-            `BLOQUEADO — Blacklist Geomed. ${blacklist.tipoDe(r.documento)} ` +
+            `BLOQUEADO — Blacklist Jomed. ${blacklist.tipoDe(r.documento)} ` +
             `${blacklist.formatar(r.documento)} bloqueado por ${r.bloqueado_por} em ${r.criado_em}. ` +
             `Motivo: ${r.motivo}`,
-          revisadoPor: 'Blacklist Geomed',
+          revisadoPor: 'Blacklist Jomed',
         });
       }
     }

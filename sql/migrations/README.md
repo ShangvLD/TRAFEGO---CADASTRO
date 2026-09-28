@@ -17,7 +17,7 @@ registro divergem, que é pior que não ter registro nenhum.
 |---|---|---|
 | 001 | colunas de rastreio em `documentos`, dono alternativo, índices, `vw_documentos` | bloco "Documentos, segunda rodada" |
 | 002 | código canônico dos tipos de documento | bloco "Código canônico dos tipos" |
-| 003 | tabela `blacklist` (proprietários bloqueados) | bloco "BLACKLIST GEOMED" |
+| 003 | tabela `blacklist` (proprietários bloqueados) | bloco "BLACKLIST JOMED" |
 
 A reorganização dos caminhos no Storage **não é migration SQL**: mover arquivo
 exige falar com o Supabase Storage, o que o Postgres não faz. Ela está em

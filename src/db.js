@@ -937,7 +937,7 @@ const SCHEMA_SQL = `
   );
 
   -- ======================================================================
-  -- BLACKLIST GEOMED — proprietários que a diretoria recusou
+  -- BLACKLIST JOMED — proprietários que a diretoria recusou
   --
   -- Tabela PRÓPRIA, e não uma coluna "bloqueado" em proprietarios: o bloqueio
   -- chega ANTES do cadastro. A diretoria manda bloquear um CPF que nunca foi

@@ -1,7 +1,7 @@
 -- ===========================================================================
--- 003 — Blacklist Geomed: proprietários que não podem ser cadastrados
+-- 003 — Blacklist Jomed: proprietários que não podem ser cadastrados
 --
--- ESPELHO de src/db.js, bloco "BLACKLIST GEOMED". O app aplica isto sozinho na
+-- ESPELHO de src/db.js, bloco "BLACKLIST JOMED". O app aplica isto sozinho na
 -- inicialização; este arquivo existe para ser lido e para poder ser rodado à
 -- mão no SQL Editor do Supabase. Ver sql/migrations/README.md.
 --

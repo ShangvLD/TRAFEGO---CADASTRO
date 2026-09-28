@@ -497,7 +497,7 @@ async function validarECriar(entrada, solicitante) {
   });
   if (!ok) return { ok: false, erros };
 
-  // ---- Blacklist Geomed --------------------------------------------------
+  // ---- Blacklist Jomed --------------------------------------------------
   // Depois da validação e ANTES de gravar: o documento precisa estar
   // normalizado (dados.proprietario_documento já saiu do validador só com
   // dígitos) para a comparação não depender de pontuação, e nada pode ter sido

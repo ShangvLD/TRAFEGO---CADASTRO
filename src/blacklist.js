@@ -1,5 +1,5 @@
 /* ============================================================================
-   Blacklist Geomed — proprietários que não podem ser cadastrados
+   Blacklist Jomed — proprietários que não podem ser cadastrados
 
    A regra de negócio existe hoje, mas mora no WhatsApp: a diretoria avisa que
    determinado proprietário não deve ser cadastrado, e a pessoa da contratação
@@ -104,7 +104,7 @@ async function verificar(documento) {
 function mensagemDeBloqueio(registro) {
   const quem = registro && registro.bloqueado_por ? ` por ${registro.bloqueado_por}` : '';
   return (
-    `Este ${tipoDe(registro.documento)} está na Blacklist Geomed (bloqueado${quem}). ` +
+    `Este ${tipoDe(registro.documento)} está na Blacklist Jomed (bloqueado${quem}). ` +
     'O cadastro não pode prosseguir — procure o setor de contratação.'
   );
 }
